@@ -20,7 +20,7 @@ Private by design · Local first · One account · Agent ready.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Outside contributions need the licence grant described there before they can be merged.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Outside contributions need the contributor agreement described there (comment `/orbynAgree` once) before they can be merged.
 
 ## Security
 

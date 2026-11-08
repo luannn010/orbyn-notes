@@ -2,15 +2,9 @@
 
 Orbyn Notes is being built. Start with an issue labelled `good first issue` or `help wanted`, and say in it that you are taking it.
 
-## Licence grant
+## Contributor agreement
 
-The code is source-available under PolyForm Strict, so every outside contribution needs a licence grant before it can be merged. The **Licence grant** check asks for it on your first pull request: post this sentence as a comment on the pull request.
-
-```text
-I grant Anh Dang a perpetual, irrevocable, worldwide licence to use, modify, sublicense and relicense this contribution under any terms.
-```
-
-A contributor licence agreement will replace this sentence once it has had legal review; one signature will then cover past contributions too.
+The code is source-available under PolyForm Strict, so every outside contribution needs the [Orbyn contributor agreement](https://github.com/orbyn-dev/.github/blob/main/CLA.md) before it can be merged. On your first pull request, comment `/orbynAgree` on a line of its own. You agree once, and it covers your earlier and later contributions in every Orbyn repository. The **CLA** check turns green right after.
 
 ## Designs
 
