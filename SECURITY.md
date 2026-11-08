@@ -1,0 +1,7 @@
+# Security policy
+
+There are no releases yet. Only `main` is maintained.
+
+Report a vulnerability privately to hello@orbyn.dev, or through [GitHub private vulnerability reporting](https://github.com/orbyn-dev/orbyn-notes/security/advisories/new). Do not open a public issue for it.
+
+Include the affected commit, the platform, a minimal reproduction with synthetic data, and what an attacker can do. Never attach real credentials, note contents or personal data. No response time is promised.

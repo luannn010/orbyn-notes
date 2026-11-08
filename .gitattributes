@@ -1,0 +1,4 @@
+# Generated wire types: every checkout gets the same bytes on every platform.
+web/src/generated/** text eol=lf
+# The module is binary: no line-ending conversion.
+web/src/generated/wasm/*.wasm binary

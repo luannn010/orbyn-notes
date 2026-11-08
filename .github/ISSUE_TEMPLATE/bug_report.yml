@@ -1,0 +1,94 @@
+name: Bug report
+description: Something in Orbyn Notes does not work as it should.
+title: "fix: "
+labels:
+  - bug
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: "Title as `fix(scope): what is wrong`. Keep it short: bullets and fragments, under about 150 words. No passwords, keys, note contents or personal data; report vulnerabilities privately, as SECURITY.md describes."
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What goes wrong, in one line.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps, with made-up content.
+      placeholder: |
+        1. Open a note
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: main at abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - iOS
+        - Android
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Web app
+        - Desktop app
+        - Phone app
+    validations:
+      required: true
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      options:
+        - Light
+        - Dark
+        - Dim
+        - Not theme related
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Only the lines that show the error, with secrets and note contents removed.
+      render: text
+  - type: dropdown
+    id: ai-used
+    attributes:
+      label: AI usage
+      options:
+        - Human only
+        - AI helped
+    validations:
+      required: true
+  - type: input
+    id: ai-details
+    attributes:
+      label: AI details
+      description: If AI helped, the harness and version, each model by exact ID and what it did, and the effort.
+      placeholder: Claude Code 2.1.150, claude-opus-5-5 (reproduced it), medium
