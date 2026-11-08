@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Notes synthetic account qualification</title>
+  <body>
+    Local account test fixture only
+    <script type="module">
+      import {
+        createAccountService,
+        subscribeLock,
+      } from "/src/account/index.ts";
+      import { openNotesStore } from "/src/data/index.ts";
+      const service = createAccountService({
+        engineUrl: "http://127.0.0.1:8089",
+      });
+      let identity;
+      let store;
+      window.fixture = {
+        checkInvite: (invite) => service.checkInvite(invite),
+        register: (input) => service.register(input),
+        async verify(input) {
+          identity = await service.verifyEmail(input);
+          return identity;
+        },
+        async signIn(input) {
+          identity = await service.signIn(input);
+          return identity;
+        },
+        current: () => service.current(),
+        async open() {
+          identity ??= await service.current();
+          store = await openNotesStore(identity);
+        },
+        create() {
+          return store.create({
+            title: "Account E2E synthetic note",
+            document: {
+              type: "doc",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Account E2E sealed body" }],
+                },
+              ],
+            },
+            tags: ["synthetic"],
+          });
+        },
+        list() {
+          return store.list();
+        },
+        signOut: () => service.signOut(),
+        pending: () => service.pendingDevice(),
+        confirm: (code) => service.confirmDevice(code),
+        secondFactor: (input) => service.completeSecondFactor(input),
+      };
+    </script>
+  </body>
+</html>

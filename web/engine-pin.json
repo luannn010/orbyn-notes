@@ -1,0 +1,14 @@
+{
+  "engineRepository": "https://github.com/orbyn-dev/orbyn-engine",
+  "engineCommit": "f61b16de7ffa23bce98aae57a6781b6e732f925b",
+  "artifactRepository": "https://github.com/orbyn-dev/orbyn-planner",
+  "artifactCommit": "c2d57f8ce673f3f9fcfcfb60ce3dde9aae1d0d16",
+  "artifactPath": "web/src/generated/wasm",
+  "license": "MIT OR Apache-2.0",
+  "sha256": {
+    "orbyn_wasm.js": "c6391fc3e3898c277615bc32d7ded270b35e78be44d69d69ecf45e6a91a3fc15",
+    "orbyn_wasm.d.ts": "deb9009a1d83d351b7a3b0c45dda37bb7c25f3689bd3e122d4bfa30c3d58e06b",
+    "orbyn_wasm_bg.wasm": "b5cf49fb1aff449a8e320fe6e8824f49532cbd29a46823219f66cdf42c0343c5",
+    "orbyn_wasm_bg.wasm.d.ts": "5a3b393bf533006638e9e4b9df120dc1c7f43d4c1720c808d39fc36ee18c8a23"
+  }
+}
