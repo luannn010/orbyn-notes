@@ -14,6 +14,31 @@ Orbyn Notes is the second Everyday app in the Orbyn family, beside [Orbyn Planne
 
 These are plans, not features you can use today. The product plan and designs are internal.
 
+## Web beta implementation
+
+The local web beta is implemented under `web/`; it is not a published release.
+Its scope is a single-browser encrypted library with a rich-text editor, local
+search, tags, Trash/restore and Markdown import/export. New accounts use shared
+Orbyn invites. Notes do not sync in this beta, and clearing browser data removes
+their local keys and content. Export a readable Markdown backup first.
+
+Use Node.js 24 and run these commands from `web/`:
+
+```sh
+npm ci
+npm run check
+npm test
+npm run build
+npm run dev
+```
+
+Set `VITE_ENGINE_URL` to a compatible local or staging engine before building to
+enable account entry. Missing account configuration fails visibly; production
+never opens a fixture library. An already-retained local library can reopen
+offline. See [the architecture](docs/architecture.md) and
+[staging preparation](docs/beta-staging.md) for the storage boundary, account
+integration, invite operations and release checks.
+
 ## Principles
 
 Private by design · Local first · One account · Agent ready.
