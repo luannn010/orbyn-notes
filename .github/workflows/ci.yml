@@ -1,0 +1,40 @@
+name: Web
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: node scripts/verify-engine.mjs
+      - name: Check foundation
+        if: hashFiles('web/index.html') == ''
+        run: npm run check:data
+      - name: Test foundation
+        if: hashFiles('web/index.html') == ''
+        run: npm run test:data
+      - name: Check application
+        if: hashFiles('web/index.html') != ''
+        run: npm run check
+      - name: Test application
+        if: hashFiles('web/index.html') != ''
+        run: npm test
+      - name: Build application
+        if: hashFiles('web/index.html') != ''
+        run: npm run build

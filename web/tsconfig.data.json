@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "ESNext.Disposable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ],
+    "rootDir": ".",
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "src/domain/**/*.ts",
+    "src/data/**/*.ts",
+    "src/account/**/*.ts",
+    "src/transfer/**/*.ts",
+    "tests/data/**/*.ts",
+    "tests/account/**/*.ts",
+    "tests/transfer/**/*.ts"
+  ]
+}
