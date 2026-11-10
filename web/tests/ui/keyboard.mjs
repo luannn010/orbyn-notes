@@ -46,7 +46,9 @@ async function activate(locator, label) {
   steps.push(label);
 }
 try {
-  await page.goto("http://127.0.0.1:5177/tests/ui/preview.html");
+  await page.goto(
+    process.env.NOTES_UI_URL ?? "http://127.0.0.1:5177/tests/ui/preview.html",
+  );
   await expect(page.locator(".note-row")).toHaveCount(2);
   await tabTo(page.getByLabel("Search notes", { exact: true }));
   await page.keyboard.type("quiet");
@@ -102,6 +104,10 @@ try {
   await activate(
     page.getByRole("button", { name: "Settings", exact: true }),
     "Reopen Settings",
+  );
+  await activate(
+    settings.getByRole("button", { name: "Data and export", exact: true }),
+    "Open data and export settings",
   );
   await activate(
     settings.getByRole("button", { name: "Export all notes", exact: true }),
