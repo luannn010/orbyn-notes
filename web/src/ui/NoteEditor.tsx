@@ -3,6 +3,8 @@ import type { Note, NotesStore, NoteDocument } from "../domain/contracts";
 import { RichEditor } from "./RichEditor";
 import { message, plainText } from "./model";
 import { Dialog } from "./primitives";
+import { Menu } from "./Menu";
+import { Copy, Download, Pencil, Trash2 } from "lucide-react";
 export function NoteEditor({
   note,
   store,
@@ -33,11 +35,11 @@ export function NoteEditor({
   const [conflict, setConflict] = useState<Note | null>(null);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [menu, setMenu] = useState(false);
   const [navigationNotice, setNavigationNotice] = useState("");
   const [discardOpen, setDiscardOpen] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
-  const menuButton = useRef<HTMLButtonElement>(null);
+  const duplicating = useRef(false);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
   useEffect(() => {
     if (note.revision <= base.current.revision) return;
     if (dirty) {
@@ -55,17 +57,6 @@ export function NoteEditor({
       setTagInput(note.tags.join(", "));
     }
   }, [note.revision, dirty]);
-  useEffect(() => {
-    if (!menu) return;
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMenu(false);
-        menuButton.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", dismiss);
-    return () => window.removeEventListener("keydown", dismiss);
-  }, [menu]);
   function change(patch: Partial<typeof draft>) {
     const next = { ...latest.current, ...patch };
     latest.current = next;
@@ -148,53 +139,19 @@ export function NoteEditor({
                 ? "Unsaved changes"
                 : "Saved in this browser"}
         </span>
-        <button
-          ref={menuButton}
-          aria-label="Note menu"
-          aria-expanded={menu}
-          onClick={() => setMenu(!menu)}
-        >
-          •••
-        </button>
-        {menu && (
-          <div className="note-menu">
-            <button
-              onClick={() => {
-                document.getElementById("note-title")?.focus();
-                setMenu(false);
-              }}
-            >
-              Rename
-            </button>
-            <button
-              disabled={dirty}
-              onClick={async () => {
-                try {
-                  onSaved(
-                    await store.create({
-                      ...draft,
-                      title: `${draft.title || "Untitled note"} (copy)`,
-                    }),
-                  );
-                  setMenu(false);
-                } catch (e) {
-                  setError(message(e));
-                }
-              }}
-            >
-              Duplicate
-            </button>
-            <button disabled={dirty} onClick={() => onExport(base.current)}>
-              Export Markdown
-            </button>
-            <button
-              className="danger"
-              onClick={() => leave(() => onTrash(base.current))}
-            >
-              Move to Trash
-            </button>
-          </div>
-        )}
+        <Menu key={note.id} label="Note menu" actions={[
+          { label: "Rename", icon: <Pencil size={14} aria-hidden="true" />, focusAfterSelect: true, onSelect: () => document.getElementById("note-title")?.focus() },
+          { label: "Duplicate", icon: <Copy size={14} aria-hidden="true" />, disabled: dirty || duplicateBusy, onSelect: () => {
+            if (duplicating.current) return;
+            duplicating.current = true;
+            setDuplicateBusy(true);
+            void store.create({ ...draft, title: `${draft.title || "Untitled note"} (copy)` })
+              .then(onSaved).catch(e => setError(message(e)))
+              .finally(() => { duplicating.current = false; setDuplicateBusy(false); });
+          } },
+          { label: "Export Markdown", icon: <Download size={14} aria-hidden="true" />, disabled: dirty, onSelect: () => onExport(base.current) },
+          { label: "Move to Trash", icon: <Trash2 size={14} aria-hidden="true" />, danger: true, onSelect: () => leave(() => onTrash(base.current)) },
+        ]} />
       </header>
       {navigationNotice && (
         <p className="banner" role="status">

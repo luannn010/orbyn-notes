@@ -127,3 +127,46 @@ it("does not reopen when a slash document replaces the current document", async 
   );
   expect(screen.queryByRole("listbox")).toBeNull();
 });
+
+it("keeps dismissal scoped to its original block across a preceding edit", async () => {
+  const change = vi.fn();
+  render(
+    <RichEditor
+      document={{
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "prefix" }] },
+          { type: "paragraph" },
+          { type: "paragraph" },
+        ],
+      }}
+      onChange={change}
+    />,
+  );
+  const editor = await screen.findByRole("textbox", { name: "Note content" });
+  const user = userEvent.setup({ skipClick: true });
+  await act(async () => editor.focus());
+  const select = async (node: Node, offset: number) => {
+    await act(async () => {
+      const range = document.createRange();
+      range.setStart(node, offset);
+      range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+  };
+  const paragraphs = editor.querySelectorAll("p");
+  await select(paragraphs[1]!, 0);
+  await user.type(editor, "/link{Escape}");
+  await select(paragraphs[2]!, 0);
+  await user.type(editor, "/link");
+  expect(screen.getByRole("option", { name: "Web link" })).toBeTruthy();
+  await select(paragraphs[0]!.firstChild!, 6);
+  await user.type(editor, "x");
+  await select(paragraphs[1]!.firstChild!, 5);
+  expect(screen.queryByRole("listbox")).toBeNull();
+  await user.type(editor, "s");
+  expect(screen.getByRole("listbox")).toBeTruthy();
+});

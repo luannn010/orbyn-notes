@@ -69,7 +69,7 @@ export function RichEditor({
   sync.current = (instance) => {
     if (composing.current || replacing.current || !instance.isFocused) return;
     const next = currentSlash(instance);
-    const visible = dismissed.current ? null : next;
+    const visible = next && dismissed.current?.from === next.from ? null : next;
     if (visible?.query !== slashRef.current?.query) setActive(0);
     if (visible) {
       setClosing(null);
