@@ -718,3 +718,122 @@ dialog p {
   justify-content: flex-start;
   background: transparent;
 }
+.settings-dialog {
+  width: min(1160px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: auto;
+}
+.settings-dialog > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.settings-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: min(500px, calc(100dvh - 34px));
+}
+.settings-nav {
+  padding: 22px 12px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav button {
+  justify-content: flex-start;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  gap: 10px;
+  background: transparent;
+  text-align: left;
+}
+.settings-nav button[aria-current="page"] {
+  background: var(--sel);
+}
+.settings-pane {
+  min-width: 0;
+  overflow: auto;
+}
+.settings-heading {
+  padding: 22px 28px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-heading h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.settings-content {
+  padding: 6px 28px 24px;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-row {
+  min-height: 52px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-row > div:first-child {
+  min-width: 0;
+}
+.settings-row b {
+  font-weight: 500;
+}
+.settings-row small {
+  display: block;
+  color: var(--t3);
+  overflow-wrap: anywhere;
+}
+.settings-segments {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--raise);
+}
+.settings-segments button {
+  background: transparent;
+  padding: 4px 9px;
+  min-height: 28px;
+}
+.settings-segments button[aria-pressed="true"] {
+  background: var(--main);
+  box-shadow: 0 1px 3px #0002;
+}
+@media (max-width: 899px) {
+  .settings-layout {
+    display: block;
+    min-height: 0;
+  }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-row {
+    flex-wrap: wrap;
+  }
+  .settings-heading {
+    padding: 18px 20px 6px;
+  }
+  .settings-content {
+    padding: 6px 20px 24px;
+  }
+}

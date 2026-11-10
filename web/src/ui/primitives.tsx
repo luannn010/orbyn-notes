@@ -28,10 +28,14 @@ export function Dialog({
   title,
   children,
   onClose,
+  className,
+  returnFocusTo,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  className?: string;
+  returnFocusTo?: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -40,12 +44,13 @@ export function Dialog({
     dialog?.showModal();
     return () => {
       dialog?.close();
-      previous?.focus();
+      (returnFocusTo ?? previous)?.focus();
     };
   }, []);
   return (
     <dialog
       aria-label={title}
+      className={className}
       ref={ref}
       onCancel={(e) => {
         e.preventDefault();

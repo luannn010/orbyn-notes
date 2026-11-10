@@ -12,7 +12,8 @@ import {
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { parseMarkdown } from "../transfer";
 import { projectNotes, plainText, message } from "./model";
-import { Dialog, usePreferences, type Theme } from "./primitives";
+import { Dialog, usePreferences } from "./primitives";
+import { SettingsView } from "./SettingsView";
 import { NoteEditor } from "./NoteEditor";
 import { buildDownload } from "./download";
 type Imported = ReturnType<typeof parseMarkdown>;
@@ -60,6 +61,7 @@ export function Workspace({
   const fileRef = useRef<HTMLInputElement>(null);
   const prefs = usePreferences();
   const menuRef = useRef<HTMLButtonElement>(null);
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const drawerWasOpen = useRef(false);
   useEffect(() => {
@@ -352,11 +354,14 @@ export function Workspace({
           </p>
           <button
             className="nav"
-            onClick={() => {
+            onClick={(event) => {
               if (editing) {
                 setNotice("Use Back to notes before opening Settings.");
                 return;
               }
+              settingsReturnFocus.current = drawer
+                ? menuRef.current
+                : event.currentTarget;
               setSettings(true);
               setDrawer(false);
             }}
@@ -565,56 +570,23 @@ export function Workspace({
         />
       </main>
       {settings && (
-        <Dialog title="Settings" onClose={() => setSettings(false)}>
-          <div className="stack">
-            <label>
-              Appearance
-              <select
-                value={prefs.theme}
-                onChange={(e) => prefs.setTheme(e.target.value as Theme)}
-              >
-                {["system", "light", "dark", "dim"].map((t) => (
-                  <option value={t} key={t}>
-                    {t[0]?.toUpperCase()}
-                    {t.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Motion
-              <select
-                value={prefs.motion}
-                onChange={(e) => prefs.setMotion(e.target.value)}
-              >
-                <option value="system">System</option>
-                <option value="on">On</option>
-                <option value="reduced">Reduced</option>
-              </select>
-            </label>
-            <h3>Data and export</h3>
-            <p>
-              Local only. Clearing browser data removes your notes. Export a
-              copy first.
-            </p>
-            <button onClick={() => requestExport(notes, true)}>
-              Export all notes
-            </button>
-            <button className="danger" onClick={() => setErase(true)}>
-              Erase this browser
-            </button>
-            <h3>Account</h3>
-            <p>{session.email}</p>
-            <button
-              onClick={() => {
-                setSignOutError("");
-                setSignOutOpen(true);
-              }}
-            >
-              Sign out
-            </button>
-            <button onClick={() => setSettings(false)}>Done</button>
-          </div>
+        <Dialog
+          title="Settings"
+          className="settings-dialog"
+          returnFocusTo={settingsReturnFocus.current}
+          onClose={() => setSettings(false)}
+        >
+          <SettingsView
+            email={session.email}
+            preferences={prefs}
+            onSignOut={() => {
+              setSignOutError("");
+              setSignOutOpen(true);
+            }}
+            onExport={() => requestExport(notes, true)}
+            onErase={() => setErase(true)}
+            onDone={() => setSettings(false)}
+          />
         </Dialog>
       )}
       {signOutOpen && (
