@@ -491,23 +491,51 @@ small {
 .tiptap input[type="checkbox"] {
   width: auto;
 }
-.note-menu {
-  position: absolute;
-  right: 20px;
-  top: 48px;
+.menu-anchor { position: relative; }
+.action-menu {
+  position: fixed;
+  width: max-content;
+  overflow: auto;
+  max-width: min(260px, calc(100vw - 16px));
   background: var(--main);
-  border: 1px solid var(--line2);
   border-radius: 12px;
   padding: 5px;
-  box-shadow: 0 8px 28px #0002;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .14), 0 0 0 1px var(--line2);
   display: flex;
   flex-direction: column;
-  z-index: 2;
+  gap: 1px;
+  z-index: 5;
+  animation: menu-in 200ms cubic-bezier(.2,.8,.2,1);
 }
-.note-menu button {
+.action-menu button {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 9px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
+  color: var(--t2);
+  font-size: 12.5px;
+  white-space: nowrap;
 }
+.action-menu button.danger { color: var(--red); }
+:root[data-theme="dark"] .action-menu, :root[data-theme="dim"] .action-menu { box-shadow: 0 10px 30px rgba(0,0,0,.6), 0 0 0 1px var(--line2); }
+.action-menu-closing { animation: menu-out 140ms cubic-bezier(.4,0,.2,1) forwards; pointer-events: none; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes menu-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes menu-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .action-menu { animation: menu-fade 150ms !important; }
+  :root:not([data-motion="on"]) .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
+}
+:root[data-motion="reduced"] .action-menu { animation: menu-fade 150ms !important; }
+:root[data-motion="reduced"] .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
+@keyframes menu-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.action-menu button:not(:disabled):hover, .action-menu button:not(:disabled):focus-visible { background: var(--sel); }
 .account-page {
   min-height: 100dvh;
   display: grid;
