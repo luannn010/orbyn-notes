@@ -45,7 +45,7 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('Email', { exact: true }).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'New note', exact: true }).first()).toBeVisible();
+  await expect(page.locator('#main').getByRole('button', { name: 'New note', exact: true }).first()).toBeVisible();
 }
 
 test('invited account can write, reopen offline, export and lock its local library', async ({ page, context, profile }, testInfo) => {
@@ -87,7 +87,7 @@ test('invited account can write, reopen offline, export and lock its local libra
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await page.getByLabel('Verification code', { exact: true }).fill(await verificationCode(email));
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.getByRole('button', { name: 'New note', exact: true }).first().click();
+  await page.locator('#main').getByRole('button', { name: 'New note', exact: true }).first().click();
   await page.getByLabel('Note title', { exact: true }).fill('Beta persistence proof');
   await page.getByRole('textbox', { name: 'Note content', exact: true }).fill('Encrypted local content survives offline reload.');
   await page.getByLabel('Note tags, separated by commas').fill('beta-proof');
