@@ -1,0 +1,174 @@
+.clips-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.clip-filters {
+  display: flex;
+  gap: 6px;
+  padding: 0 28px 16px;
+  flex-wrap: wrap;
+}
+.clip-filters button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-radius: 999px;
+  background: transparent;
+}
+.clip-filters button[aria-pressed="true"] {
+  background: var(--sel);
+}
+.clip-filters span {
+  color: var(--t3);
+  font-size: 11px;
+}
+.clip-list {
+  padding: 0 28px 28px;
+}
+.clip-row {
+  width: 100%;
+  display: flex;
+  text-align: left;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.clip-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.clip-row > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.clip-row strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.clip-row small {
+  display: block;
+  color: var(--t3);
+  font-size: 12px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.clip-row-state {
+  font-size: 11px;
+  color: var(--t3);
+  max-width: 120px;
+}
+.clip-reader {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.clip-reader > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 28px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.clip-reader-content {
+  padding: 32px 40px;
+  max-width: calc(var(--notes-editor-width, 640px) + 80px);
+  margin: 0 auto;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.clip-reader-content h2 {
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+.clip-provenance {
+  font-size: 12px;
+  color: var(--t3);
+}
+.clip-original {
+  font-size: 12px;
+  user-select: text;
+  overflow-wrap: anywhere;
+  color: var(--t2);
+}
+.clip-text {
+  white-space: pre-wrap;
+  font-size: var(--notes-editor-size, 14px);
+  line-height: 1.7;
+  margin-top: 28px;
+}
+.clip-link-only {
+  margin-top: 32px;
+  color: var(--t3);
+  line-height: 1.7;
+}
+.clip-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.clip-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.clip-form .clip-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.clip-checkbox input {
+  width: auto;
+}
+.clip-form textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+.clip-form-help {
+  font-size: 12px;
+  color: var(--t3);
+  margin: 0;
+}
+.clips-view .page-heading h1 {
+  margin-bottom: 4px;
+}
+@media (max-width: 650px) {
+  .clip-filters {
+    padding: 0 16px 14px;
+  }
+  .clip-list {
+    padding: 0 16px 20px;
+  }
+  .clip-row {
+    gap: 10px;
+  }
+  .clip-row-state {
+    max-width: 80px;
+  }
+  .clip-reader > header {
+    padding: 0 16px 14px;
+  }
+  .clip-reader-content {
+    padding: 24px 20px;
+  }
+  .clip-reader-content h2 {
+    font-size: 24px;
+  }
+  .clips-view .page-heading {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .clips-view .page-heading .actions {
+    flex-wrap: wrap;
+  }
+}
