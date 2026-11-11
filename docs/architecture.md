@@ -72,3 +72,17 @@ matching close-request acknowledgement. The WebView profile remains separate
 from browser profiles; builds do not migrate or erase it. This is an unsigned
 local build, with no installer or public release qualification. See
 [Windows build and boundaries](windows.md).
+
+## Local content domain foundation
+
+The library and collections domains add versioned, encrypted local records for
+metadata/history, Study, Clips and a separately protected Journal vault. Local
+source references and search projections validate their account/epoch ownership.
+These contracts and adapters are independent of the workspace presentation.
+
+Whole-workspace erase uses the pinned engine's reviewed local-zone purge
+adaptation to remove content keys and cached uploads before staging fresh empty
+records atomically. Account identity, device trust, approval checkpoints and
+unrelated zones remain. Failed writes preserve the prior snapshot. This is local
+erasure, not remote deletion or memory zeroization. Preserve profiles and exports
+when reverting: reverting code does not downgrade already-written versioned data.

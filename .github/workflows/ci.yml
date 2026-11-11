@@ -23,6 +23,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: node scripts/verify-engine.mjs
+      - name: Test engine build provenance
+        run: node --test scripts/engine-source.test.mjs
       - name: Check foundation
         if: hashFiles('web/index.html') == ''
         run: npm run check:data

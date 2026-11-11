@@ -232,6 +232,14 @@ export class SyncEngine {
      */
     protectionSeq(): number;
     /**
+     * Forgets whole local zones, including their keys and queued uploads.
+     * Takes a JSON array (at most 64 KiB / 1000 names); returns the sorted JSON
+     * array of names actually removed. Invalid input changes nothing. The host
+     * authorizes the names, fences late work and persists the snapshot. This
+     * performs no remote deletion and leaves identity/trust/other zones intact.
+     */
+    purgeLocalZones(zones_json: string): string;
+    /**
      * The zone's quarantined records, as `[{"record_id": ..., "reason": ...}]`
      * with the reason `missing_zone_key`, `open_failed` or `invalid_record`.
      * Never their bytes.
@@ -441,6 +449,7 @@ export interface InitOutput {
     readonly syncengine_protectionFrom: (a: number) => number;
     readonly syncengine_protectionLevel: (a: number, b: number) => void;
     readonly syncengine_protectionSeq: (a: number) => number;
+    readonly syncengine_purgeLocalZones: (a: number, b: number, c: number, d: number) => void;
     readonly syncengine_quarantined: (a: number, b: number, c: number, d: number) => void;
     readonly syncengine_record: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly syncengine_resignProtection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
