@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { registerCloseGuard } from "../desktop/closeGuard";
+import { useDesktop } from "../desktop/DesktopShell";
 import type { Note, NotesStore, NoteDocument } from "../domain/contracts";
 import { RichEditor } from "./RichEditor";
 import { message, plainText } from "./model";
@@ -31,6 +34,9 @@ export function NoteEditor({
   const generation = useRef(0);
   const saving = useRef(false);
   const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  const copyInFlight = useRef(false);
+  const desktop = useDesktop();
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState<Note | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +46,13 @@ export function NoteEditor({
   const [copyBusy, setCopyBusy] = useState(false);
   const duplicating = useRef(false);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
+  useLayoutEffect(() => registerCloseGuard(() => {
+    if (dirtyRef.current || saving.current || duplicating.current || copyInFlight.current) {
+      setNavigationNotice("Your latest changes are only in this window. Save or copy your text before leaving.");
+      return false;
+    }
+    return true;
+  }), []);
   useEffect(() => {
     if (note.revision <= base.current.revision) return;
     if (dirty) {
@@ -61,6 +74,7 @@ export function NoteEditor({
     const next = { ...latest.current, ...patch };
     latest.current = next;
     generation.current++;
+    dirtyRef.current = true;
     setDraft(next);
     setDirty(true);
     if (!conflict) setError("");
@@ -87,6 +101,7 @@ export function NoteEditor({
       base.current = updated;
       onSaved(updated);
       if (version === generation.current) {
+        dirtyRef.current = false;
         setDirty(false);
         setNavigationNotice("");
       } else setRetry((v) => v + 1);
@@ -126,9 +141,7 @@ export function NoteEditor({
       setError("Couldn’t copy text. Select your text and copy it.");
     }
   }
-  return (
-    <section className="editor-pane">
-      <header className="editor-chrome">
+  const chrome = <header className={desktop ? "desktop-editor-actions" : "editor-chrome"}>
         <button onClick={() => leave(onBack)}>← Back to notes</button>
         <span role="status">
           {error
@@ -152,7 +165,10 @@ export function NoteEditor({
           { label: "Export Markdown", icon: <Download size={14} aria-hidden="true" />, disabled: dirty, onSelect: () => onExport(base.current) },
           { label: "Move to Trash", icon: <Trash2 size={14} aria-hidden="true" />, danger: true, onSelect: () => leave(() => onTrash(base.current)) },
         ]} />
-      </header>
+      </header>;
+  return (
+    <section className="editor-pane">
+      {desktop?.toolbar ? createPortal(chrome, desktop.toolbar) : chrome}
       {navigationNotice && (
         <p className="banner" role="status">
           {navigationNotice}
@@ -179,6 +195,7 @@ export function NoteEditor({
                 disabled={copyBusy}
                 onClick={async () => {
                   setCopyBusy(true);
+                  copyInFlight.current = true;
                   const copiedGeneration = generation.current;
                   try {
                     const copyNote = await store.create({
@@ -192,11 +209,13 @@ export function NoteEditor({
                       );
                       return;
                     }
+                    dirtyRef.current = false;
                     setDirty(false);
                     onBack();
                   } catch (e) {
                     setError(message(e));
                   } finally {
+                    copyInFlight.current = false;
                     setCopyBusy(false);
                   }
                 }}
@@ -273,6 +292,7 @@ export function NoteEditor({
               base.current = conflict;
               setConflict(null);
               setError("");
+              dirtyRef.current = false;
               setDirty(false);
               setDiscardOpen(false);
               onSaved(conflict);
