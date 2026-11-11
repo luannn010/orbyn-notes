@@ -1,6 +1,9 @@
 // Test-only entry. Never imported by the production application.
 import { createRoot } from "react-dom/client";
 import { Workspace } from "../../src/ui/Workspace";
+import { DesktopShell } from "../../src/desktop/DesktopShell";
+import { AccountView } from "../../src/ui/AccountView";
+import { createAccountService } from "../../src/account";
 import { applyInitialPreferences } from "../../src/ui/primitives";
 import { openNotesStore } from "../../src/data";
 import { establish } from "../../src/account/session";
@@ -43,15 +46,38 @@ async function start() {
   }
   establish(identity);
   const notes = await openNotesStore(identity);
-  createRoot(document.getElementById("root")!).render(
+  const workspace = (
     <Workspace
       store={notes}
       library={notes.library}
+      sourceOwner={
+        new URLSearchParams(location.search).has("desktop-shell")
+          ? notes
+          : undefined
+      }
       session={identity}
       onSignOut={async () => {
         notes.close();
       }}
-    />,
+    />
+  );
+  createRoot(document.getElementById("root")!).render(
+    new URLSearchParams(location.search).has("desktop-shell") ? (
+      <DesktopShell>
+        {new URLSearchParams(location.search).get("pane") === "account" ? (
+          <AccountView
+            service={createAccountService()}
+            onSession={() => {
+              throw new Error("Preview does not submit authentication");
+            }}
+          />
+        ) : (
+          workspace
+        )}
+      </DesktopShell>
+    ) : (
+      workspace
+    ),
   );
 }
 void start().catch((error) => {
