@@ -1,8 +1,26 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Menu } from "../../src/ui/Menu";
 
 describe("action menu", () => {
+  it.each([140, 150])("keeps the inert closing surface for its rendered %ims exit", (duration) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const computed = vi.spyOn(window, "getComputedStyle").mockImplementation(() => {
+      const style = document.createElement("div").style;
+      style.animationDuration = `${duration}ms`; style.animationDelay = "0s";
+      return style;
+    });
+    try {
+      const { container } = render(<Menu label="Timed actions" actions={[{ label: "Run", onSelect: vi.fn() }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "Timed actions" }));
+      fireEvent.keyDown(screen.getByRole("menuitem", { name: "Run" }), { key: "Escape" });
+      expect(container.querySelector(".action-menu-closing")).toHaveAttribute("inert");
+      act(() => vi.advanceTimersByTime(duration - 1));
+      expect(container.querySelector(".action-menu-closing")).not.toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+      expect(container.querySelector(".action-menu")).toBeNull();
+    } finally { computed.mockRestore(); vi.useRealTimers(); }
+  });
   it("navigates enabled items and dismisses with Escape or outside pointer", async () => {
     render(<><Menu label="Note menu" actions={[
       { label: "Rename", onSelect: vi.fn() },

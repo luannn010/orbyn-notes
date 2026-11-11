@@ -1,7 +1,8 @@
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { AccountSession } from "../../src/domain/contracts";
 const control = vi.hoisted(() => ({
+  signOut: vi.fn(),
   lock: null as null | (() => void),
   session: {
     accountId: "a",
@@ -11,7 +12,7 @@ const control = vi.hoisted(() => ({
   } as AccountSession | null,
 }));
 vi.mock("../../src/account", () => ({
-  createAccountService: () => ({ current: async () => control.session }),
+  createAccountService: () => ({ current: async () => control.session, signOut: control.signOut }),
   subscribeLock: (listener: () => void) => {
     control.lock = listener;
     return () => {
@@ -23,7 +24,7 @@ vi.mock("../../src/data", () => ({
   openNotesStore: async () => ({ close: vi.fn() }),
 }));
 vi.mock("../../src/ui/Workspace", () => ({
-  Workspace: () => <p>Private library contents</p>,
+  Workspace: ({ onSignOut }: { onSignOut: () => Promise<void> }) => <><p>Private library contents</p><button onClick={() => void onSignOut().catch(() => {})}>Fixture sign out</button></>,
 }));
 vi.mock("../../src/ui/AccountView", () => ({
   AccountView: () => <p>Signed out entry</p>,
@@ -31,6 +32,7 @@ vi.mock("../../src/ui/AccountView", () => ({
 }));
 import { App } from "../../src/App";
 beforeEach(() => {
+  control.signOut.mockReset().mockResolvedValue(undefined);
   vi.stubEnv("VITE_ENGINE_URL", "http://127.0.0.1:8089");
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
@@ -45,6 +47,16 @@ beforeEach(() => {
   };
 });
 describe("session boundaries", () => {
+  it("keeps the mounted private workspace when sign-out fails before revocation", async () => {
+    control.signOut.mockRejectedValue(new Error("synthetic network failure"));
+    render(<App />);
+    await screen.findByText("Private library contents");
+    fireEvent.click(screen.getByRole("button", { name: "Fixture sign out" }));
+    await waitFor(() => expect(control.signOut).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.getByText("Private library contents")).toBeVisible();
+    expect(screen.queryByText("Notes can’t open yet")).not.toBeInTheDocument();
+  });
   it("removes decrypted UI immediately on a cross-tab lock", async () => {
     render(<App />);
     await screen.findByText("Private library contents");

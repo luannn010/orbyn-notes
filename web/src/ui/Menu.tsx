@@ -44,7 +44,13 @@ export function Menu({ label, actions }: { label: string; actions: MenuAction[] 
   }, [open]);
   useEffect(() => {
     if (phase !== "closing") return;
-    const timer = window.setTimeout(() => setPhase("closed"), 150);
+    // Match the rendered exit animation, including the opacity-only reduced mode.
+    const style = menu.current ? getComputedStyle(menu.current) : null;
+    const milliseconds = (value: string) => value.trim().endsWith("ms") ? parseFloat(value) : parseFloat(value) * 1000;
+    const durations = style?.animationDuration.split(",").map(milliseconds) ?? [];
+    const delays = style?.animationDelay.split(",").map(milliseconds) ?? [];
+    const ends = durations.map((duration, i) => duration + (delays[i % Math.max(1, delays.length)] || 0)).filter(Number.isFinite);
+    const timer = window.setTimeout(() => setPhase("closed"), ends.length ? Math.max(0, ...ends) : 140);
     return () => window.clearTimeout(timer);
   }, [phase]);
   function keyDown(event: React.KeyboardEvent<HTMLDivElement>) {
