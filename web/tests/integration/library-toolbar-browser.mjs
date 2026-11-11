@@ -88,6 +88,7 @@ async function geometry(id) {
   await expect(toolbar).toHaveCSS("gap", "6px");
   await expect(header).toHaveCSS("padding-bottom", "6px");
   await expect(header.locator("h1")).toHaveCSS("font-size", "22px");
+  await expect(header.locator("h1")).toHaveCSS("margin-bottom", "0px");
   await expect(header.locator(".notes-library-count")).toHaveCSS(
     "font-size",
     "13px",
@@ -123,6 +124,9 @@ async function geometry(id) {
   expect(report.documentWidth).toBeLessThanOrEqual(report.viewport);
   if (report.titleText === "All notes") {
     expect(report.count.x - report.title.right).toBeCloseTo(12, 1);
+  }
+  if (id.endsWith("-1280-224")) {
+    expect(report.root.height - report.title.height).toBeCloseTo(28, 1);
   }
   for (const control of report.controls) {
     expect(control.rect.x).toBeGreaterThanOrEqual(report.root.x);

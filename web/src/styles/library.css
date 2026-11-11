@@ -159,7 +159,7 @@
   line-height: 1.45;
 }
 .notes-library-heading > div:first-child { display: contents; }
-.notes-library-heading h1 {
+.page-heading.notes-library-heading h1 {
   margin: 0;
   min-width: 0;
   max-width: 100%;
