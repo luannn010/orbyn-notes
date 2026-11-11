@@ -1,0 +1,150 @@
+.library-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: auto;
+}
+.tag-table {
+  padding: 0 28px;
+}
+.tag-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+.tag-row > button:first-child {
+  flex: 1;
+  text-align: left;
+  min-width: 120px;
+}
+.tag-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 9px;
+  background: var(--t3);
+}
+.tag-colors {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag-colors button[aria-pressed="true"] {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.library-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.library-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.version-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  min-height: 280px;
+}
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.version-list button {
+  text-align: left;
+}
+.version-list button[aria-pressed="true"] {
+  background: var(--sel);
+}
+.version-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  max-height: 65vh;
+  overflow: auto;
+}
+.version-preview pre {
+  white-space: pre-wrap;
+  font: inherit;
+}
+.note-row > .library-row-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+.library-sort {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.library-sort select {
+  max-width: 110px;
+}
+.history-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+@media (max-width: 650px) {
+  .tag-table {
+    padding: 0 16px;
+  }
+  .version-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .version-list {
+    max-height: 150px;
+  }
+  .tag-row {
+    gap: 8px;
+  }
+}
+
+.note-row > .library-row-actions {
+  flex: 0 0 auto;
+}
+
+.version-preview [role="toolbar"] {
+  display: none;
+}
+
+.note-tag-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.note-tag-chips .tag {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.note-tag-chips button {
+  padding: 0 3px;
+  min-width: 22px;
+  min-height: 22px;
+  background: transparent;
+}
+.new-note-tag {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.new-note-tag label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
