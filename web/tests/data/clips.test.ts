@@ -269,9 +269,9 @@ it("checks canonical duplicates including archived clips, requires deliberate ne
   expect(again.snapshot.clips.items[1]!.id).not.toBe(item.id);
 });
 it("uses admission time for Undo after slow hashing, never resets it on replay, and refuses stale/expired undo", async () => {
-  const { clips } = await open();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-11T10:00:00Z"));
+  const { clips } = await open();
   const intent = await clips.prepare(await clips.read(), create);
   vi.setSystemTime(Date.now() + 20000);
   const saved = await clips.commit(intent);
