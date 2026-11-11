@@ -2,3 +2,5 @@
 web/src/generated/** text eol=lf
 # The module is binary: no line-ending conversion.
 web/src/generated/wasm/*.wasm binary
+# Preserve the pinned unified diff bytes, including required blank context lines.
+web/engine-patches/local-zone-purge.patch -text -whitespace

@@ -53,6 +53,7 @@ export const syncengine_pinDevice: (a: number, b: number, c: number, d: number, 
 export const syncengine_protectionFrom: (a: number) => number;
 export const syncengine_protectionLevel: (a: number, b: number) => void;
 export const syncengine_protectionSeq: (a: number) => number;
+export const syncengine_purgeLocalZones: (a: number, b: number, c: number, d: number) => void;
 export const syncengine_quarantined: (a: number, b: number, c: number, d: number) => void;
 export const syncengine_record: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const syncengine_resignProtection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
