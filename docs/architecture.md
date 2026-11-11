@@ -59,5 +59,16 @@ than replacing a running editor. IndexedDB schema changes require separate
 compatibility review; changing the shell cache does not migrate user data.
 
 Deferred: cross-device sync, attachments, Planner links, Study, Journal, Clipper,
-public sharing, native shells and billing. Their visible navigation and claims
-are omitted from the beta.
+public sharing, other native platforms and billing. Their visible navigation and
+claims are omitted from the beta.
+
+## Local Windows shell
+
+The local Windows build embeds the existing web UI in Tauri2/WebView2 with a
+44px custom caption. Native window controls and the system menu use narrowly
+scoped commands for the local main window. Remote navigation and new windows
+are denied. Normal close waits for the application draft/operation guards and a
+matching close-request acknowledgement. The WebView profile remains separate
+from browser profiles; builds do not migrate or erase it. This is an unsigned
+local build, with no installer or public release qualification. See
+[Windows build and boundaries](windows.md).
