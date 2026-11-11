@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { StudyView } from "../../src/ui/StudyView";
 import { JournalView } from "../../src/ui/JournalView";
 import { openJournalVault } from "../../src/collections/journalVault";
+import type { JournalData } from "../../src/collections/journal";
 import { applyInitialPreferences } from "../../src/ui/primitives";
 import { openCollectionsStore } from "../../src/collections/store";
 import { openNotesStore } from "../../src/data";
@@ -59,6 +60,10 @@ async function start() {
     Object.assign(window, {
       __journalFixture: {
         status: () => vault.status(),
+        create: (phrase: string) => vault.create(phrase),
+        read: () => vault.read(),
+        update: (change: (data: JournalData) => JournalData) =>
+          vault.update(change),
         lock: () => vault.lock(),
         setAway: (away: boolean) => vault.setAway(away),
       },
