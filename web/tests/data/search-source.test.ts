@@ -11,6 +11,7 @@ import {
   releaseSearchSource,
 } from "../../src/search/source";
 import type { SearchLease } from "../../src/search/contracts";
+import { SearchSourceError } from "../../src/search/contracts";
 import { noteLinkOwner, studySourceOwner } from "../../src/library/store";
 import { createDeck, saveEntry } from "../../src/study/model";
 import { replaceJournal } from "../../src/collections/store";
@@ -688,27 +689,68 @@ it("different sealed device userdata revokes instead of silently reusing admissi
   });
   expect(restore).not.toHaveBeenCalled();
 });
-it("a source-pair mutation during async proof work cannot publish an admitted stale lease", async () => {
-  const f = await fixture();
-  let entered!: () => void, release!: () => void;
-  const started = new Promise<void>((resolve) => (entered = resolve)),
-    barrier = new Promise<void>((resolve) => (release = resolve)),
-    real = crypto.subtle.sign.bind(crypto.subtle);
-  let first = true;
-  vi.spyOn(crypto.subtle, "sign").mockImplementation(async (...args) => {
-    if (first) {
-      first = false;
-      entered();
-      await barrier;
+it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+  "a source-pair mutation at proof sign %i cannot expose stale data",
+  async (pauseAt) => {
+    const f = await fixture();
+    const held = await leaseOf(f),
+      oldReader = searchSourceReader(held),
+      oldEpochs = oldReader.versions,
+      oldNode = oldReader.note(0).root;
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => (entered = resolve)),
+      barrier = new Promise<void>((resolve) => (release = resolve)),
+      real = crypto.subtle.sign.bind(crypto.subtle);
+    let calls = 0;
+    vi.spyOn(crypto.subtle, "sign").mockImplementation(async (...args) => {
+      if (++calls === pauseAt) {
+        entered();
+        await barrier;
+      }
+      return real(...args);
+    });
+    // Both captures and the final pair freshness check verify two wrapping keys.
+    // Pause each of those eight signs without depending on which owner runs first.
+    const pending = acquireSearchSource(f.notes, f.collections).then(
+      (lease) => ({ status: "fulfilled" as const, lease }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+    await started;
+    try {
+      await f.notes.erase();
+    } finally {
+      release();
     }
-    return real(...args);
-  });
-  const pending = acquireSearchSource(f.notes, f.collections);
-  await started;
-  await f.notes.erase();
-  release();
-  await expect(pending).rejects.toThrow();
-});
+    expect(() => oldReader.node(oldNode)).toThrow(SearchSourceError);
+    const result = await pending;
+    if (result.status === "rejected") {
+      expect(result.error).toBeInstanceOf(SearchSourceError);
+      expect([
+        "search_source_changed",
+        "search_source_revoked",
+        "search_source_unavailable",
+      ]).toContain((result.error as SearchSourceError).code);
+    } else {
+      // Capture may re-admit the committed new image before it creates a Part.
+      // Success is safe only if the genuine lease has no pre-erase content.
+      leased.add(result.lease);
+      await assertSearchSourceFresh(result.lease);
+      const reader = searchSourceReader(result.lease);
+      expect(reader.versions.library.epoch).not.toBe(oldEpochs.library.epoch);
+      expect(reader.versions.collections.epoch).not.toBe(
+        oldEpochs.collections.epoch,
+      );
+      expect(reader.counts).toEqual({
+        notes: 0,
+        clips: 0,
+        decks: 0,
+        entries: 0,
+        cards: 0,
+      });
+      expect(() => reader.node(oldNode)).toThrow(SearchSourceError);
+    }
+  },
+);
 it("measures scalar whitelist capture on the real maximum entity-count producer profile", async () => {
   const f = await fixture(),
     current = await f.collections.read(),
