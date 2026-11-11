@@ -162,8 +162,9 @@ h3 {
   font-size: 14px;
 }
 .app {
+  position: relative;
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 224px) minmax(0, 1fr);
   height: 100dvh;
   min-height: 400px;
   font-size: 13px;
@@ -972,3 +973,75 @@ dialog p {
 
 .link-popover-lock { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line2); }
 .link-popover-lock small { flex: 1; }
+
+/* orbyn-designs 95bd47e, sidebar-dragging / window-title-row. */
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  z-index: 7;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+.sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--t1) 60%, transparent);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after,
+.sidebar-resize.dragging::after {
+  opacity: 1;
+}
+.sidebar-width-pill {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translate(-50%, -50%);
+  z-index: 8;
+  pointer-events: none;
+  font:
+    11px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: var(--t1);
+  color: var(--main);
+  white-space: nowrap;
+}
+.sidebar .nav > svg,
+.sidebar .nav > span:not(.nav-label),
+.sidebar .search > svg,
+.sidebar .search > kbd {
+  flex-shrink: 0;
+}
+.sidebar .nav .nav-label {
+  flex: 1;
+  min-width: 0;
+  margin-left: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font-size: inherit;
+}
+.sidebar .group,
+.sidebar .search > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
