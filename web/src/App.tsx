@@ -7,10 +7,16 @@ import type {
 } from "./domain/contracts";
 import { AccountView, PendingDevice } from "./ui/AccountView";
 import { usePreferences } from "./ui/primitives";
+import { DesktopShell } from "./desktop/DesktopShell";
+import { isDesktop } from "./desktop/window";
+import { protectOperations } from "./desktop/closeGuard";
 const Workspace = lazy(() =>
   import("./ui/Workspace").then((module) => ({ default: module.Workspace })),
 );
 export function App() {
+  return <DesktopShell><AppContent /></DesktopShell>;
+}
+function AppContent() {
   usePreferences();
   const [service, setService] = useState<AccountService | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
@@ -32,7 +38,8 @@ export function App() {
     setLoading(true);
     setError("");
     try {
-      const account = createAccountService();
+      const original = createAccountService();
+      const account = isDesktop() ? protectOperations(original, Object.keys(original)) : original;
       setService(account);
       void account
         .current()
@@ -73,7 +80,9 @@ export function App() {
       .then((module) => module.openNotesStore(session))
       .then((s) => {
         opened = s;
-        if (active) setStore(s);
+        if (active) setStore(isDesktop()
+          ? protectOperations(s, ["create", "update", "trash", "restore", "erase"])
+          : s);
         else s.close();
       })
       .catch(() => {

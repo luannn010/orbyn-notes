@@ -16,6 +16,8 @@ import { Dialog, usePreferences } from "./primitives";
 import { SettingsView } from "./SettingsView";
 import { NoteEditor } from "./NoteEditor";
 import { buildDownload } from "./download";
+import { useDesktop } from "../desktop/DesktopShell";
+import { trackOperation } from "../desktop/closeGuard";
 type Imported = ReturnType<typeof parseMarkdown>;
 export function Workspace({
   store,
@@ -33,6 +35,9 @@ export function Workspace({
   const [trash, setTrash] = useState(false);
   const [grid, setGrid] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const desktop = useDesktop();
+  const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [wide, setWide] = useState(() => matchMedia("(min-width: 900px)").matches);
   const [settings, setSettings] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
@@ -64,6 +69,19 @@ export function Workspace({
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const drawerWasOpen = useRef(false);
+  useEffect(() => {
+    const query = matchMedia("(min-width: 900px)");
+    const update = () => { setWide(query.matches); if (query.matches) setDrawer(false); };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!desktop) return;
+    desktop.setNavigation({ expanded: wide ? !sidebarHidden : drawer,
+      toggle: () => { if (wide) setSidebarHidden(value => !value); else setDrawer(value => !value); } });
+    return () => desktop.setNavigation(null);
+  }, [desktop?.setNavigation, wide, sidebarHidden, drawer]);
   useEffect(() => {
     if (loaded) return;
     const timer = setTimeout(() => setShowLoadingSkeleton(true), 400);
@@ -115,7 +133,7 @@ export function Workspace({
     if (!drawer) {
       if (drawerWasOpen.current) {
         drawerWasOpen.current = false;
-        menuRef.current?.focus();
+        (desktop?.navigationRef.current ?? menuRef.current)?.focus();
       }
       return;
     }
@@ -233,6 +251,9 @@ export function Workspace({
     }
   }
   async function importAll() {
+    return trackOperation(importAllNotes);
+  }
+  async function importAllNotes() {
     if (!imports) return;
     setImporting(true);
     let done = 0;
@@ -272,7 +293,7 @@ export function Workspace({
       </main>
     );
   return (
-    <div className="app">
+    <div className={desktop && wide && sidebarHidden ? "app desktop-sidebar-hidden" : "app"}>
       <a className="skip" href="#main">
         Skip to notes
       </a>
@@ -298,6 +319,7 @@ export function Workspace({
         />
       )}
       <aside
+        id="notes-sidebar"
         ref={drawerRef}
         role={drawer ? "dialog" : undefined}
         aria-modal={drawer ? true : undefined}
@@ -360,7 +382,7 @@ export function Workspace({
                 return;
               }
               settingsReturnFocus.current = drawer
-                ? menuRef.current
+                ? (desktop?.navigationRef.current ?? menuRef.current)
                 : event.currentTarget;
               setSettings(true);
               setDrawer(false);

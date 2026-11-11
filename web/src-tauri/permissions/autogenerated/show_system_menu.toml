@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-show-system-menu"
+description = "Enables the show_system_menu command without any pre-configured scope."
+commands.allow = ["show_system_menu"]
+
+[[permission]]
+identifier = "deny-show-system-menu"
+description = "Denies the show_system_menu command without any pre-configured scope."
+commands.deny = ["show_system_menu"]

@@ -11,7 +11,9 @@
     "test:e2e": "playwright test",
     "check:data": "tsc --noEmit -p tsconfig.data.json",
     "test:data": "vitest run --config vitest.data.config.ts",
-    "verify:engine": "node scripts/verify-engine.mjs"
+    "verify:engine": "node scripts/verify-engine.mjs",
+    "desktop:build": "node scripts/desktop-build.mjs",
+    "desktop:frontend": "vite --host 127.0.0.1 --port 5179 --strictPort"
   },
   "engines": {
     "node": "^24.15.0 || >=26.0.0"
@@ -19,6 +21,7 @@
   "dependencies": {
     "@fontsource/geist": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@tauri-apps/api": "2.12.4",
     "@tiptap/extension-task-item": "^3.33.0",
     "@tiptap/extension-task-list": "^3.33.0",
     "@tiptap/pm": "^3.33.0",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
+    "@tauri-apps/cli": "2.12.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
