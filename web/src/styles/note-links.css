@@ -1,0 +1,300 @@
+.note-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  max-width: min(100%, 30em);
+  min-height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--raise);
+  color: var(--t1);
+  font: inherit;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-reference-chip:disabled {
+  color: var(--t3);
+  opacity: 1;
+  cursor: default;
+}
+.note-link-picker {
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--main);
+  color: var(--t1);
+  box-shadow:
+    0 10px 30px #0002,
+    0 0 0 1px var(--line2);
+  font-size: 12.5px;
+  overflow: auto;
+  animation: note-link-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.note-link-picker-head {
+  display: flex;
+  gap: 4px;
+}
+.note-link-picker-head input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  background: var(--raise);
+  color: var(--t1);
+  border: 0;
+  padding: 0 9px;
+  border-radius: 8px;
+}
+.note-link-picker button {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  min-height: 30px;
+  padding: 0 9px;
+  text-align: left;
+}
+.note-link-picker [role="option"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  width: 100%;
+}
+.note-link-picker [role="option"] span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-link-picker [role="option"][aria-selected="true"] {
+  background: var(--sel);
+}
+.note-link-picker small,
+.note-link-group,
+.note-link-hint {
+  color: var(--t3);
+  font-size: 11px;
+}
+.note-link-group {
+  padding: 6px 9px 3px;
+}
+.note-link-hint {
+  margin: 6px 9px;
+}
+.note-link-picker p {
+  padding: 0 9px;
+}
+.note-link-picker :focus-visible,
+.note-reference-chip:focus-visible {
+  outline: 2px solid var(--t2);
+  outline-offset: 2px;
+}
+@keyframes note-link-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 540px) {
+  .note-link-picker-head input {
+    font-size: 16px;
+  }
+  .note-link-picker {
+    border-radius: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .note-link-picker {
+    animation: note-link-fade 150ms linear !important;
+    transform: none !important;
+  }
+}
+[data-motion="reduced"] .note-link-picker {
+  animation: note-link-fade 150ms linear !important;
+  transform: none !important;
+}
+@keyframes note-link-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.note-links-panel {
+  width: 360px;
+  max-width: 100%;
+  background: var(--main);
+  border-left: 1px solid var(--line);
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+}
+.note-links-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0 10px;
+}
+.note-links-panel button {
+  color: var(--t1);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  min-height: 30px;
+  padding: 4px 9px;
+  text-align: left;
+}
+.note-links-panel h3 {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--t3);
+  padding: 12px 0 6px;
+}
+.note-links-panel .note-backlink {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.note-backlink span {
+  color: var(--t2);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note-links-panel p {
+  font-size: 12px;
+  color: var(--t2);
+}
+.note-links-panel small {
+  font-size: 11px;
+  color: var(--t3);
+}
+.note-links-panel button:hover {
+  background: var(--sel);
+}
+
+.editor-pane {
+  position: relative;
+}
+.editor-pane > .note-links-panel {
+  position: absolute;
+  right: 0;
+  top: 44px;
+  bottom: 0;
+  z-index: 25;
+  box-shadow: -8px 0 24px #0001;
+  animation: note-panel-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes note-panel-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .note-links-panel,
+  :root:not([data-motion="on"]) .note-link-picker {
+    animation: note-link-fade 150ms linear !important;
+    transform: none !important;
+  }
+}
+:root[data-motion="reduced"] .note-links-panel {
+  animation: note-link-fade 150ms linear !important;
+  transform: none !important;
+}
+
+.note-link-picker[data-exiting="true"] {
+  animation: note-link-out 140ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.note-links-panel[data-exiting="true"] {
+  animation: note-panel-out 210ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes note-link-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes note-panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+@keyframes note-link-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .note-link-picker[data-exiting="true"],
+  :root:not([data-motion="on"]) .note-links-panel[data-exiting="true"] {
+    animation: note-link-fade-out 150ms forwards !important;
+    transform: none !important;
+  }
+}
+:root[data-motion="reduced"] .note-link-picker[data-exiting="true"],
+:root[data-motion="reduced"] .note-links-panel[data-exiting="true"] {
+  animation: note-link-fade-out 150ms forwards !important;
+  transform: none !important;
+}
+dialog .note-links-panel {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  max-height: calc(100dvh - 130px);
+  animation: note-link-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.note-link-picker[data-sheet="true"] {
+  border-radius: 16px 16px 0 0;
+}
+.note-link-picker[data-sheet="true"] input {
+  font-size: 16px;
+}
+
+.note-links-panel .note-backlink {
+  align-items: flex-start;
+  text-align: left;
+}
+@media (max-width: 640px) {
+  .note-links-toggle {
+    display: none !important;
+  }
+}
+
+.note-reference-chip svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-right: 6px;
+}
+.note-reference-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

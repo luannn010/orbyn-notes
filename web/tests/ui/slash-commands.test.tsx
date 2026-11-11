@@ -51,25 +51,29 @@ it("shows no matches without an active descendant", async () => {
 
 it("keeps a canceled or invalid link query and inserts a valid link", async () => {
   const { editor, user } = await setup();
-  const prompt = vi
-    .spyOn(window, "prompt")
-    .mockReturnValueOnce(null)
-    .mockReturnValueOnce("javascript:bad")
-    .mockReturnValueOnce("https://example.com");
-  vi.spyOn(window, "alert").mockImplementation(() => {});
+  const prompt = vi.spyOn(window, "prompt");
+  const alert = vi.spyOn(window, "alert");
   await user.type(editor, "/l");
   fireEvent.mouseDown(screen.getByRole("option", { name: "Web link" }));
   fireEvent.click(screen.getByRole("option", { name: "Web link" }));
+  expect(screen.getByRole("dialog", { name: "Web link" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(editor.textContent).toBe("/l");
   await user.type(editor, "i");
   fireEvent.mouseDown(screen.getByRole("option", { name: "Web link" }));
   fireEvent.click(screen.getByRole("option", { name: "Web link" }));
+  await user.type(screen.getByLabelText("URL"), "javascript:bad");
+  await user.click(screen.getByRole("button", { name: "Apply link" }));
+  expect(screen.getByText("Enter a valid web or email link.")).toBeVisible();
   expect(editor.textContent).toBe("/li");
-  await user.type(editor, "n{Enter}");
+  await user.clear(screen.getByLabelText("URL"));
+  await user.type(screen.getByLabelText("URL"), "https://example.com{Enter}");
   expect(editor.querySelector("a")?.getAttribute("href")).toBe(
     "https://example.com",
   );
-  expect(prompt).toHaveBeenCalledTimes(3);
+  expect(editor.textContent).toBe("https://example.com");
+  expect(prompt).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
   vi.restoreAllMocks();
 });
 
