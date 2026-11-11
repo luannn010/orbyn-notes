@@ -69,11 +69,12 @@ describe("desktop window", () => {
     vi.mocked(connectWindow).mockResolvedValue(window);
     render(<DesktopShell>Content</DesktopShell>);
     await screen.findByText("Content");
-    fireEvent.mouseDown(screen.getByText("Orbyn Notes"), { button: 0, detail: 1 });
+    const toolbar = screen.getByRole("banner", { name: "Window toolbar" });
+    fireEvent.mouseDown(toolbar, { button: 0, detail: 1 });
     expect(window.startDragging).toHaveBeenCalledOnce();
     fireEvent.mouseDown(screen.getByRole("button", { name: "Close window" }), { button: 0, detail: 1 });
     expect(window.startDragging).toHaveBeenCalledOnce();
-    fireEvent.mouseDown(screen.getByText("Orbyn Notes"), { button: 0, detail: 2 });
+    fireEvent.mouseDown(toolbar, { button: 0, detail: 2 });
     expect(window.toggleMaximize).toHaveBeenCalledOnce();
   });
   it("blocks guarded and pending work without replaying the close", async () => {
