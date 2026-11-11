@@ -157,6 +157,16 @@ No browser restart recovery of these uncommitted forms is promised. JavaScript
 strings cannot be guaranteed to have been physically erased from process memory.
 Exports are deliberate readable files with manual-recovery limits.
 
+The preparatory Journal habit-detail selector derives streak scalars from validated
+civil completion dates without persisting a streak or retaining source objects.
+A checked selected day ends its consecutive run there; an unchecked day may retain
+the run ending exactly one day earlier. Creation/archive bounds are inclusive,
+and missing or undone dates stop the run. UTC calendar ordinals avoid daylight-
+saving arithmetic across supported years 1000..9999. It indexes completion history
+once and returns fresh scalar projections. The dependent Journal control slice
+owns its unlocked-view lifecycle and visible feedback; this helper alone changes
+no application screen, key, envelope or storage format.
+
 Clips stores validated HTTP(S) links and optional actual pasted text. It does not
 fetch a page as part of local Save link. Duplicate comparison uses a separate
 canonical URL; the validated original URL is retained. Read/read-later/archive
