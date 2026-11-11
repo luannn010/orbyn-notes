@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
 import { flushSync } from "react-dom";
 import { onLock, lockVersion } from "../account/session";
 import {
@@ -105,6 +106,7 @@ function intervalText(due: string, at: Date) {
 
 export function StudyView({
   store,
+  heading,
   onOpenNote,
   onOpenSource,
   openEntry,
@@ -115,6 +117,7 @@ export function StudyView({
   covered = false,
   onReopen,
 }: {
+  heading?: HeadingPresentation;
   onReopen?: () => void;
   covered?: boolean;
   store: CollectionsStore;
@@ -126,6 +129,9 @@ export function StudyView({
   onReturnToSearch?: () => void;
   accountId?: string;
 }) {
+  const headingLive = useRef(heading);
+  headingLive.current = heading;
+  const headingOwner = useRef({ store, accountId });
   const [cardPreview, setCardPreview] = useState<{
     request: CardSearchOpenRequest;
     input: CardContentInput;
@@ -232,7 +238,8 @@ export function StudyView({
       entry?.revision === item.entryRevision
     );
   }
-  function clearPrivate(closed: boolean, synchronous = true) {
+  function clearPrivate(closed: boolean, synchronous = true, retireHeading = true) {
+    if (retireHeading) headingLive.current?.controller.invalidate("study");
     ownerGeneration.current++;
     sequence.current++;
     cardAdmission.current++;
@@ -318,6 +325,7 @@ export function StudyView({
   function accept(value: CollectionsState) {
     if (revoked.current) return;
     if (current.current && current.current.epoch !== value.epoch) {
+      headingLive.current?.controller.invalidate("study");
       motion.invalidate();
       setCardPreview(null);
       cardAdmission.current++;
@@ -398,6 +406,7 @@ export function StudyView({
       const value = await store.read();
       if (!ownerCurrent(ownerTicket) || request !== sequence.current) return;
       accept(value);
+      if (current.current === value) headingLive.current?.controller.admit("study");
       setReadError("");
       if (resetConflict) {
         if (pendingReview.current?.epoch === value.epoch)
@@ -413,7 +422,11 @@ export function StudyView({
   useLayoutEffect(() => {
     mounted.current = true;
     ownerLockVersion.current = lockVersion();
-    clearPrivate(false, false);
+    if (headingOwner.current.store !== store || headingOwner.current.accountId !== accountId) {
+      headingLive.current?.controller.invalidate("study");
+      headingOwner.current = { store, accountId };
+    }
+    clearPrivate(false, false, false);
     let stopClose: (() => void) | undefined,
       stopEpoch: (() => void) | undefined,
       stopLock: (() => void) | undefined,
@@ -892,6 +905,12 @@ export function StudyView({
       snapshot ? reviewQueue(snapshot.study, now, deckId ?? undefined) : [],
     [snapshot?.study, now, deckId],
   );
+  const headingRef = useRouteHeading(
+    heading && { ...heading, active: heading.active && !covered && !form },
+    "study",
+    unavailable || readError ? "absent" : !snapshot ? "pending" : session || cardPreview ? "absent" : "target",
+    coldLoading.entering,
+  );
   if (unavailable)
     return (
       <section className="study-view" aria-label="Study">
@@ -1281,7 +1300,7 @@ export function StudyView({
         <>
           <header className="study-heading">
             <div>
-              <h1>
+              <h1 ref={headingRef}>
                 {page === "progress" ? "Progress" : (deck?.title ?? "Study")}
               </h1>
               <span>

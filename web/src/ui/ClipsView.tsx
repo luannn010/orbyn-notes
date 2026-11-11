@@ -1,3 +1,4 @@
+import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { zipSync, strToU8 } from "fflate";
@@ -60,6 +61,7 @@ const isConflict = (error: unknown) => {
 };
 export function ClipsView({
   store,
+  heading,
   onOpenExternal,
   openClip,
   onSearchReaderResult,
@@ -67,6 +69,7 @@ export function ClipsView({
   holdSearchOrigin = false,
   restoreSearchOrigin = 0,
 }: {
+  heading?: HeadingPresentation;
   store: ClipsStore;
   onOpenExternal?: (url: string) => Promise<void>;
   openClip?: ClipSearchOpenRequest | null;
@@ -75,6 +78,9 @@ export function ClipsView({
   holdSearchOrigin?: boolean;
   restoreSearchOrigin?: number;
 }) {
+  const headingLive = useRef(heading);
+  headingLive.current = heading;
+  const headingOwner = useRef(store);
   useEditorPreferences();
   const [snapshot, setSnapshot] = useState<ClipSnapshot | null>(null),
     [error, setError] = useState(""),
@@ -225,12 +231,20 @@ export function ClipsView({
     const value = await store.read();
     if (!alive.current || invocation !== generation.current)
       throw new Error("Clips is no longer available.");
-    if (sequence === readSequence.current) adopt(value);
+    if (sequence === readSequence.current) {
+      adopt(value);
+      headingLive.current?.controller.admit("clips");
+    }
     return value;
   }
   useLayoutEffect(() => {
+    if (headingOwner.current !== store) {
+      headingLive.current?.controller.invalidate("clips");
+      headingOwner.current = store;
+    }
     alive.current = true;
     const stopInvalidation = store.onInvalidate((reason) => {
+      headingLive.current?.controller.invalidate("clips");
       heldSearchOrigin.current = null;
       generation.current++;
       readSequence.current++;
@@ -721,6 +735,10 @@ export function ClipsView({
       )}
     </>
   );
+  const headingRef = useRouteHeading(
+    heading && { ...heading, active: heading.active && !form && !exportOpen && !discard },
+    "clips", closed || error && !snapshot ? "absent" : !snapshot ? "pending" : "target",
+  );
   if (closed)
     return (
       <section className="empty" aria-label="Clips">
@@ -756,7 +774,7 @@ export function ClipsView({
     <section className="clips-view" aria-label="Clips">
       <header className="page-heading">
         <div>
-          <h1>Clips</h1>
+          <h1 ref={headingRef}>Clips</h1>
           <span>{unread} unread</span>
         </div>
         <div className="actions">

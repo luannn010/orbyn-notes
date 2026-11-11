@@ -6,6 +6,7 @@ import type {
 import type { AccountSession } from "../domain/contracts";
 import type { CollectionsStore } from "../collections/contracts";
 import { trackOperation } from "../desktop/closeGuard";
+import type { HeadingPresentation } from "./routeHeadingMotion";
 import { StudyView } from "./StudyView";
 import { JournalView } from "./JournalView";
 import { ClipsView } from "./ClipsView";
@@ -22,6 +23,7 @@ import type {
 /** Opens real account-scoped collections only when their route is selected. */
 export function CollectionsHost({
   session,
+  heading,
   onOpenNote,
   onEpochChange,
   view = "study",
@@ -37,6 +39,7 @@ export function CollectionsHost({
   covered = false,
   onReopen,
 }: {
+  heading?: HeadingPresentation;
   onReopen?: () => void;
   covered?: boolean;
   openClip?: ClipSearchOpenRequest | null;
@@ -53,6 +56,8 @@ export function CollectionsHost({
   onEpochChange?: () => void;
   view?: "study" | "journal" | "clips";
 }) {
+  const headingLive = useRef(heading);
+  headingLive.current = heading;
   const [clips, setClips] = useState<ClipsStore | null>(null);
   const [clipsError, setClipsError] = useState(false);
   const [clipsAttempt, setClipsAttempt] = useState(0);
@@ -130,8 +135,10 @@ export function CollectionsHost({
     })
       .then((value) => {
         opened = value;
-        if (active) setVault(value);
-        else value.close();
+        if (active) {
+          if (value.status().phase === "locked") headingLive.current?.controller.admit("journal");
+          setVault(value);
+        } else value.close();
       })
       .catch(() => {
         if (active) setVaultError(true);
@@ -214,6 +221,7 @@ export function CollectionsHost({
       );
     return (
       <ClipsView
+        heading={heading}
         store={clips}
         accountId={session.accountId}
         openClip={openClip}
@@ -247,6 +255,7 @@ export function CollectionsHost({
       );
     return (
       <JournalView
+        heading={heading}
         vault={vault}
         onReopen={() => setVaultAttempt((value) => value + 1)}
       />
@@ -254,6 +263,7 @@ export function CollectionsHost({
   }
   return (
     <StudyView
+      heading={heading}
       store={store}
       covered={covered}
       onReopen={

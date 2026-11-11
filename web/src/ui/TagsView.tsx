@@ -7,6 +7,7 @@ import type {
   TagColor,
 } from "../library/contracts";
 import { registerCloseGuard } from "../desktop/closeGuard";
+import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
 import { LibraryActionFeedback, useLibraryAction } from "./libraryAction";
@@ -27,12 +28,14 @@ type Form = {
 };
 export function TagsView({
   library,
+  heading,
   snapshot,
   onResult,
   reload,
   onOpenTag,
   readOnly = false,
 }: {
+  heading?: HeadingPresentation;
   readOnly?: boolean;
   library: NotesLibrary;
   snapshot: LibrarySnapshot;
@@ -42,6 +45,9 @@ export function TagsView({
 }) {
   const [form, setForm] = useState<Form | null>(null);
   const [discard, setDiscard] = useState(false);
+  const headingRef = useRouteHeading(
+    heading && { ...heading, active: heading.active && !form && !discard }, "tags", "target",
+  );
   const dirty = useRef(false);
   const action = useLibraryAction();
   const readOnlyRef = useRef(readOnly);
@@ -114,7 +120,7 @@ export function TagsView({
     <section className="library-view" aria-label="Tags">
       <header className="page-heading">
         <div>
-          <h1>Tags</h1>
+          <h1 ref={headingRef}>Tags</h1>
           <span>{active.length} tags</span>
         </div>
         <button

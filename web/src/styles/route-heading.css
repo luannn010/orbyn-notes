@@ -1,0 +1,20 @@
+/* Motionaed675f3 #sidenav: current authorized title only. */
+[data-route-heading-motion="enter"] {
+  animation: route-heading-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes route-heading-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) [data-route-heading-motion="enter"] {
+    animation: route-heading-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both !important;
+  }
+}
+:root[data-motion="reduced"] [data-route-heading-motion="enter"] {
+  animation: route-heading-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both !important;
+}
