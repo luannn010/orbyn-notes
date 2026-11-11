@@ -80,3 +80,7 @@ Versioned library and Collections owners capture account/epoch authority for eve
 ## Delivery boundary: journal-vault
 
 Journal uses a separately protected envelope and private-form recovery. Account, epoch and genuine borrowed-owner closure revoke access before any late read or crypto result can publish. This clears live references and views, without claiming allocator zeroization or remote deletion. The Journal view is wired in a later slice.
+
+## Delivery boundary: native-link-transport
+
+The local main window alone may acknowledge bounded note intents or request validated HTTP(S) source opening. Commands independently verify the current injected caller URL. External URLs receive a fixed OS open verb with no argument expansion; arbitrary navigation and filesystem commands are unavailable.

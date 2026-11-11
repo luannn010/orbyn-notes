@@ -3,6 +3,9 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, WebviewWindow, WindowEvent};
 
+mod external_url;
+mod native_note_link;
+
 const MAX_REQUEST_ID: u64 = 9_007_199_254_740_991;
 
 #[derive(Default)]
@@ -122,20 +125,18 @@ async fn show_system_menu(window: WebviewWindow) -> Result<(), String> {
                         hwnd,
                         std::ptr::null(),
                     );
-                    if command != 0 {
-                        if PostMessageW(hwnd, WM_SYSCOMMAND, command as usize, 0) == 0 {
-                            let _ = sender.send(Err("System command is unavailable.".to_string()));
-                            return;
-                        }
+                    if command != 0 && PostMessageW(hwnd, WM_SYSCOMMAND, command as usize, 0) == 0 {
+                        let _ = sender.send(Err("System command is unavailable.".to_string()));
+                        return;
                     }
                     let _ = sender.send(Ok(()));
                 }
             })
             .map_err(|e| e.to_string())?;
-        return tauri::async_runtime::spawn_blocking(move || receiver.recv())
+        tauri::async_runtime::spawn_blocking(move || receiver.recv())
             .await
             .map_err(|e| e.to_string())?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     Ok(())
@@ -143,8 +144,19 @@ async fn show_system_menu(window: WebviewWindow) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .manage(Mutex::new(native_note_link::initial_broker()))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            native_note_link::activate(app, args);
+        }))
         .manage(Mutex::new(CloseRequests::default()))
-        .invoke_handler(tauri::generate_handler![finish_close, show_system_menu])
+        .invoke_handler(tauri::generate_handler![
+            finish_close,
+            show_system_menu,
+            external_url::open_external_url,
+            native_note_link::note_link_snapshot,
+            native_note_link::note_link_ack,
+            native_note_link::note_link_retire
+        ])
         .setup(|app| {
             tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                 .on_navigation(local_url)

@@ -105,8 +105,8 @@ function NativeShell({ children }: { children: ReactNode }) {
         </div>
         <div className="desktop-editor-toolbar" ref={setToolbar} />
         <div className="desktop-caption-controls">
-          <button aria-label="Minimize window" title="Minimize" disabled={!ready} onClick={() => run(window => window.minimize())}><Minus size={12} /></button>
-          <button aria-label={maximized ? "Restore window" : "Maximize window"} title={maximized ? "Restore" : "Maximize"} disabled={!ready} onClick={() => run(window => window.toggleMaximize())}>{maximized ? <Copy size={11} /> : <Square size={10} />}</button>
+          <button data-preserves-editor-draft="true" aria-label="Minimize window" title="Minimize" disabled={!ready} onClick={() => run(window => window.minimize())}><Minus size={12} /></button>
+          <button data-preserves-editor-draft="true" aria-label={maximized ? "Restore window" : "Maximize window"} title={maximized ? "Restore" : "Maximize"} disabled={!ready} onClick={() => run(window => window.toggleMaximize())}>{maximized ? <Copy size={11} /> : <Square size={10} />}</button>
           <button className="desktop-close" aria-label="Close window" title="Close" disabled={!ready} onClick={() => run(window => window.close())}><X size={13} /></button>
         </div>
       </header>

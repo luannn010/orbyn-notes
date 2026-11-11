@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-note-link-retire"
+description = "Enables the note_link_retire command without any pre-configured scope."
+commands.allow = ["note_link_retire"]
+
+[[permission]]
+identifier = "deny-note-link-retire"
+description = "Denies the note_link_retire command without any pre-configured scope."
+commands.deny = ["note_link_retire"]
