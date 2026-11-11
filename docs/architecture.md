@@ -84,3 +84,7 @@ Journal uses a separately protected envelope and private-form recovery. Account,
 ## Delivery boundary: native-link-transport
 
 The local main window alone may acknowledge bounded note intents or request validated HTTP(S) source opening. Commands independently verify the current injected caller URL. External URLs receive a fixed OS open verb with no argument expansion; arbitrary navigation and filesystem commands are unavailable.
+
+## Delivery boundary: journal-interface
+
+Journal removes unlocked content and populated credential forms synchronously on terminal owner revocation. Replaced or unmounted subscriptions cannot read dead owners or republish late crypto results. Stored writing remains encrypted and can reopen through a fresh eligible owner.
