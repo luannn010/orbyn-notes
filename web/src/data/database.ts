@@ -58,8 +58,12 @@ export type LocalAccessGrant = {
 export function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let failed = false;
-    const request = indexedDB.open("orbyn-notes-local-v1", 2);
+    const request = indexedDB.open("orbyn-notes-local-v1", 3);
     request.onupgradeneeded = () => {
+      if (failed) {
+        request.transaction?.abort();
+        return;
+      }
       for (const store of ["devices", "signups", "access"])
         if (!request.result.objectStoreNames.contains(store))
           request.result.createObjectStore(store);
@@ -105,10 +109,12 @@ export async function readRecord<T>(
   }
 }
 // Callback must be synchronous: WebCrypto/WASM preparation happens before this atomic CAS.
+// Explicitly skip a put without changing the existing in-place callback contract.
+export const UNCHANGED_RECORD: unique symbol = Symbol("unchanged-record");
 export async function mutateRecord<T>(
   store: string,
   key: string,
-  change: (current: T | undefined) => T | undefined,
+  change: (current: T | undefined) => T | undefined | typeof UNCHANGED_RECORD,
 ): Promise<void> {
   const db = await openDatabase();
   try {
@@ -119,7 +125,15 @@ export async function mutateRecord<T>(
       let failure: unknown;
       req.onsuccess = () => {
         try {
-          const next = change(req.result as T | undefined);
+          const current = req.result as T | undefined;
+          const next = change(current);
+          if (next && typeof (next as { then?: unknown }).then === "function") {
+            void Promise.resolve(next).catch(() => {});
+            throw new Error(
+              "storage_failed: Transaction callbacks must be synchronous.",
+            );
+          }
+          if (next === UNCHANGED_RECORD) return;
           if (next === undefined) objectStore.delete(key);
           else objectStore.put(next, key);
         } catch (error) {

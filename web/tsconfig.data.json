@@ -20,6 +20,7 @@
   },
   "include": [
     "src/domain/**/*.ts",
+    "src/collections/**/*.ts",
     "src/data/**/*.ts",
     "src/account/**/*.ts",
     "src/transfer/**/*.ts",
