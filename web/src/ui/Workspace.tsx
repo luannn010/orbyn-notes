@@ -1,5 +1,6 @@
 import {
   lazy,
+  type CSSProperties,
   Suspense,
   useEffect,
   useLayoutEffect,
@@ -29,6 +30,7 @@ import {
 import { projectNotes, plainText, message } from "./model";
 import { Dialog, usePreferences } from "./primitives";
 import { SettingsView } from "./SettingsView";
+import { SidebarResize, useSidebarWidth } from "./SidebarResize";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
 import { buildDownload } from "./download";
@@ -396,6 +398,7 @@ export function Workspace({
   const [drawer, setDrawer] = useState(false);
   const desktop = useDesktop();
   const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const [wide, setWide] = useState(
     () => matchMedia("(min-width: 900px)").matches,
   );
@@ -1517,6 +1520,7 @@ export function Workspace({
       className={
         desktop && wide && sidebarHidden ? "app desktop-sidebar-hidden" : "app"
       }
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <a className="skip" href="#main">
         Skip to notes
@@ -1594,7 +1598,8 @@ export function Workspace({
             onClick={() => navigate()}
           >
             <FileText size={15} />
-            All notes <span>{notes.filter((n) => !n.trashedAt).length}</span>
+            <span className="nav-label">All notes</span>{" "}
+            <span>{notes.filter((n) => !n.trashedAt).length}</span>
           </button>
           <button
             className={module === "journal" ? "nav active" : "nav"}
@@ -1619,7 +1624,7 @@ export function Workspace({
               <circle cx="12" cy="12" r="3.8" />
               <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" />
             </svg>
-            Journal
+            <span className="nav-label">Journal</span>
           </button>
           <button
             className={module === "study" ? "nav active" : "nav"}
@@ -1644,7 +1649,7 @@ export function Workspace({
               <rect x="6.5" y="3.5" width="12" height="15" rx="2" />
               <path d="M4 7v12a2 2 0 0 0 2 2h9" />
             </svg>
-            Study
+            <span className="nav-label">Study</span>
           </button>
           <button
             className={module === "clips" ? "nav active" : "nav"}
@@ -1656,7 +1661,7 @@ export function Workspace({
             }}
           >
             <Paperclip size={15} />
-            Clips
+            <span className="nav-label">Clips</span>
           </button>
           {library && (
             <>
@@ -1677,7 +1682,7 @@ export function Workspace({
                 }}
               >
                 <Pin size={15} />
-                Pinned
+                <span className="nav-label">Pinned</span>
                 <span>
                   {snapshot?.metadata.filter(
                     (meta) =>
@@ -1705,7 +1710,7 @@ export function Workspace({
                     setDrawer(false);
                   }}
                 >
-                  Linked
+                  <span className="nav-label">Linked</span>
                 </button>
               )}
               <button
@@ -1719,7 +1724,7 @@ export function Workspace({
                 }}
               >
                 <Tags size={15} />
-                Manage tags
+                <span className="nav-label">Manage tags</span>
               </button>
             </>
           )}
@@ -1753,7 +1758,9 @@ export function Workspace({
                       : undefined
                   }
                 />
-                {t}
+                <span className="nav-label" title={t}>
+                  {t}
+                </span>
                 <span>{count}</span>
               </button>
             );
@@ -1763,7 +1770,8 @@ export function Workspace({
             onClick={() => navigate(true)}
           >
             <Trash2 size={15} />
-            Trash<span>{notes.filter((n) => n.trashedAt).length}</span>
+            <span className="nav-label">Trash</span>
+            <span>{notes.filter((n) => n.trashedAt).length}</span>
           </button>
         </nav>
         <footer>
@@ -1782,10 +1790,16 @@ export function Workspace({
             }}
           >
             <Settings size={15} />
-            Settings
+            <span className="nav-label">Settings</span>
           </button>
         </footer>
       </aside>
+      <SidebarResize
+        value={sidebarWidth}
+        onChange={setSidebarWidth}
+        controls="notes-sidebar"
+        disabled={!wide || !!(desktop && sidebarHidden)}
+      />
       <main id="main" className="sheet" inert={drawer}>
         <SearchSurface
           active={searchActive}
