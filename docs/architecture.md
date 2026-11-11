@@ -249,3 +249,22 @@ the window. Back/Forward history and the account-avatar sidebar header remain
 separate work; no decorative history controls are added.
 Reference: design revision 95bd47e899600c0f038a7d4622a40cfc61d063e2,
 Components `window-title-row` and Notes `layout-desktop`/`layout-narrow`.
+
+
+## Sidebar account header
+
+The sidebar shows the actual account email beside a 24px initial avatar, followed
+by the existing New note action. The initial uses the first Unicode grapheme of
+the email; it is decorative and the full email remains accessible when visually
+ellipsized. There is no profile photo, account menu or invented display name.
+The single 29px row and 28px create button follow Notes `layout-desktop` from
+design revision f610ced1da443b04699137333c1309925092fffa (Notes blob unchanged
+from 95bd47e). Avatar C1 is #3b82f6 in Light and #60a5fa in Dark/Dim. Beta and
+Local only remain explicit in the sidebar footer.
+
+Every New note entry point shares one synchronous in-flight gate and tracked
+write. Failure preserves the current route. A successful current-owner result
+is deduplicated into the library, then navigation guards are checked again before
+opening it. If new work blocks navigation, the created note remains in the
+library with a truthful notice; it is not automatically opened later. Account,
+store, unmount and observed epoch invalidations retire result/focus tickets.

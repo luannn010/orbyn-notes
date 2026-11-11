@@ -164,7 +164,7 @@ try {
       .click();
     await expect(dialog).toHaveCount(0);
     await page.getByRole("button", { name: /^All notes/ }).click();
-    await page
+    await page.locator('#main')
       .getByRole("button", { name: "New note", exact: true })
       .first()
       .click();

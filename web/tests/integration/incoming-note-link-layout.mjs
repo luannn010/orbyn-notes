@@ -71,7 +71,7 @@ try {
   await page.setViewportSize({ width: 1160, height: 850 });
   const base = `${process.env.NOTES_PREVIEW_URL ?? "http://127.0.0.1:5179"}/tests/integration/note-link-entry-browser.html`;
   await page.goto(base);
-  await page.getByRole("button", { name: "New note", exact: true }).click();
+  await page.locator('#main').getByRole("button", { name: "New note", exact: true }).first().click();
   await page.getByLabel("Note title").fill("Layout target");
   await page
     .getByLabel("Note content", { exact: true })

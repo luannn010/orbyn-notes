@@ -20,7 +20,7 @@ try {
   await setup.getByRole("button", { name: "Skip", exact: true }).click();
   await expect(setup).not.toBeVisible();
   for (const title of ["Entry target", "Entry other"]) {
-    await page.getByRole("button", { name: "New note", exact: true }).first().click();
+    await page.locator('#main').getByRole("button", { name: "New note", exact: true }).first().click();
     await page.getByLabel("Note title").fill(title);
     await page
       .getByLabel("Note content", { exact: true })
@@ -68,7 +68,7 @@ try {
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
   // The existing unsaved-note boundary must also guard external hash entry.
   await page.getByRole("button", { name: "Back to notes" }).click();
-  await page.getByRole("button", { name: "New note", exact: true }).click();
+  await page.locator('#main').getByRole("button", { name: "New note", exact: true }).first().click();
   // New note itself is already committed. Make an actual unsaved title edit.
   await page.getByLabel("Note title").fill("Keep this draft");
   await page.evaluate((value) => {
