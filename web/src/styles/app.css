@@ -94,8 +94,10 @@ button {
   gap: 6px;
   align-items: center;
   justify-content: center;
-  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+button:not(:disabled):active { transform: scale(.97); }
+.desktop-caption-controls button:not(:disabled):active { transform: none; }
 button:hover {
   background: var(--sel);
 }
@@ -423,7 +425,7 @@ small {
 }
 .editor-page {
   width: 100%;
-  max-width: 800px;
+  max-width: var(--notes-editor-width, 640px);
   margin: 0 auto;
   padding: 36px 44px 80px;
   overflow: auto;
@@ -465,10 +467,18 @@ small {
   min-height: 30px;
   padding: 4px 8px;
 }
+.format[inert] { opacity: .5; }
+.link-popover { position: fixed; z-index: 110; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--main); color: var(--t1); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 10px 30px #0002; font-size: 13px; }
+.link-popover small { color: var(--t3); }
+.link-popover p { margin: 0; }
+.link-popover-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.settings-row input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--t1); }
+.settings-toggle { flex-direction: row; cursor: pointer; }
+.settings-toggle > span { display: flex; flex-direction: column; gap: 4px; }
 .tiptap {
   min-height: 320px;
   line-height: 1.75;
-  font-size: 15px;
+  font-size: var(--notes-editor-size, 14px);
   overflow-wrap: anywhere;
 }
 .tiptap p {
@@ -528,12 +538,6 @@ small {
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes menu-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
 @keyframes menu-fade { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="on"]) .action-menu { animation: menu-fade 150ms !important; }
-  :root:not([data-motion="on"]) .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
-}
-:root[data-motion="reduced"] .action-menu { animation: menu-fade 150ms !important; }
-:root[data-motion="reduced"] .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
 @keyframes menu-fade-out { from { opacity: 1; } to { opacity: 0; } }
 .action-menu button:not(:disabled):hover, .action-menu button:not(:disabled):focus-visible { background: var(--sel); }
 .account-page {
@@ -721,11 +725,22 @@ dialog p {
     animation: none !important;
     transition: none !important;
   }
+  :root:not([data-motion="on"]) button { transition: background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important; }
+  :root:not([data-motion="on"]) button:active { transform: none !important; }
 }
 :root[data-motion="reduced"] * {
   animation: none !important;
   transition: none !important;
 }
+:root[data-motion="reduced"] button:active { transform: none !important; }
+:root[data-motion="reduced"] button { transition: background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important; }
+/* Menus retain opacity feedback under the reduced-motion reset. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .action-menu { animation: menu-fade 150ms !important; }
+  :root:not([data-motion="on"]) .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
+}
+:root[data-motion="reduced"] .action-menu { animation: menu-fade 150ms !important; }
+:root[data-motion="reduced"] .action-menu-closing { animation: menu-fade-out 150ms forwards !important; }
 .slash-menu {
   z-index: 100;
   box-sizing: border-box;
@@ -954,3 +969,6 @@ dialog p {
     padding: 6px 20px 24px;
   }
 }
+
+.link-popover-lock { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line2); }
+.link-popover-lock small { flex: 1; }

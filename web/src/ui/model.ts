@@ -1,4 +1,5 @@
 import type { Note, RichNode } from "../domain/contracts";
+import { safeHref } from "../domain/validation";
 export function plainText(node: RichNode): string {
   return [node.text ?? "", ...(node.content ?? []).map(plainText)].join(" ");
 }
@@ -27,6 +28,7 @@ export function projectNotes(
     );
 }
 export function safeLink(value: string): boolean {
+  if (!safeHref(value)) return false;
   try {
     return ["https:", "http:", "mailto:"].includes(new URL(value).protocol);
   } catch {
