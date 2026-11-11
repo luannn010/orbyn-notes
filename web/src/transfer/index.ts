@@ -8,7 +8,9 @@ const parser = new MarkdownIt({
   typographer: false,
 });
 type Token = ReturnType<typeof parser.parse>[number];
-const MAX_FILE_BYTES = 2_000_000;
+export const MAX_MARKDOWN_FILE_BYTES = 2_000_000;
+export const MAX_MARKDOWN_BATCH_BYTES = 10_000_000;
+export const MAX_MARKDOWN_FILES = 100;
 function inline(tokens: Token[]): RichNode[] {
   const nodes: RichNode[] = [];
   let marks: NonNullable<RichNode["marks"]> = [];
@@ -53,6 +55,10 @@ function inline(tokens: Token[]): RichNode[] {
   return nodes;
 }
 function document(tokens: Token[]): NoteDocument {
+  if (tokens.some((token) => token.type === "table_open"))
+    throw new Error(
+      "unsupported_table: Markdown tables are not supported yet. Convert the table to text before importing. Nothing was imported.",
+    );
   const root: NoteDocument = { type: "doc", content: [] };
   const stack: RichNode[] = [root];
   const kinds: Record<string, string> = {
@@ -87,25 +93,31 @@ function document(tokens: Token[]): NoteDocument {
     else if (token.type === "hr")
       parent.content!.push({ type: "horizontalRule" });
   }
-  function tasks(node: RichNode) {
-    node.content?.forEach(tasks);
-    if (
-      node.type === "bulletList" &&
-      node.content?.some((item) =>
-        /^\[[ xX]\] /.test(item.content?.[0]?.content?.[0]?.text ?? ""),
-      )
-    ) {
-      node.type = "taskList";
+  function tasks(nodes: RichNode[]): RichNode[] {
+    return nodes.flatMap((node) => {
+      if (node.content) node.content = tasks(node.content);
+      if (node.type !== "bulletList") return [node];
+      const groups: RichNode[] = [];
       for (const item of node.content ?? []) {
-        item.type = "taskItem";
         const text = item.content?.[0]?.content?.[0];
         const match = /^\[([ xX])\] /.exec(text?.text ?? "");
-        item.attrs = { checked: !!match && match[1] !== " " };
-        if (match && text?.text) text.text = text.text.slice(match[0].length);
+        const type = match ? "taskList" : "bulletList";
+        if (match) {
+          item.type = "taskItem";
+          item.attrs = { checked: match[1] !== " " };
+          text!.text = text!.text!.slice(match[0].length);
+        }
+        let group = groups[groups.length - 1];
+        if (group?.type !== type) {
+          group = { type, content: [] };
+          groups.push(group);
+        }
+        group.content!.push(item);
       }
-    }
+      return groups;
+    });
   }
-  root.content.forEach(tasks);
+  root.content = tasks(root.content);
   return root.content.length
     ? root
     : { type: "doc", content: [{ type: "paragraph", content: [] }] };
@@ -157,7 +169,7 @@ function frontmatter(source: string): {
 export function parseMarkdown(
   files: Array<{ name: string; content: string }>,
 ): Array<{ title: string; document: NoteDocument; tags: string[] }> {
-  if (files.length > 100)
+  if (files.length > MAX_MARKDOWN_FILES)
     throw new Error("too_many_files: Import at most 100 files at once.");
   let total = 0;
   return files.map((file) => {
@@ -169,7 +181,7 @@ export function parseMarkdown(
       throw new Error("invalid_file: Choose Markdown files.");
     const size = new TextEncoder().encode(file.content).length;
     total += size;
-    if (size > MAX_FILE_BYTES || total > 10_000_000)
+    if (size > MAX_MARKDOWN_FILE_BYTES || total > MAX_MARKDOWN_BATCH_BYTES)
       throw new Error(
         "file_too_large: Import files up to 2 MB and batches up to 10 MB.",
       );
@@ -190,7 +202,7 @@ export function parseMarkdown(
     });
   });
 }
-function escape(text: string): string {
+export function escapeMarkdownText(text: string): string {
   return (
     text
       .replace(/&/g, "&amp;")
@@ -207,23 +219,126 @@ function escape(text: string): string {
       .replace(/\n/g, "&#10;")
   );
 }
-function renderInline(nodes: RichNode[] = []): string {
+export function markdownCodeSpan(text: string): string {
+  let longest = 0;
+  for (const match of text.matchAll(/`+/g))
+    longest = Math.max(longest, match[0].length);
+  const fence = "`".repeat(longest + 1);
+  return `${fence} ${text} ${fence}`;
+}
+type MarkdownExtent = { bytes: number; newlines: number };
+export type MarkdownAdmission = {
+  admit: (upperUtf8Bytes: number) => void;
+  referenceBound: (node: RichNode) => number;
+  startIndex?: number;
+};
+const lineCount = (text: string) => {
+  let count = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) count++;
+  return count;
+};
+function inlineExtent(
+  nodes: RichNode[],
+  reference: (node: RichNode) => number,
+): MarkdownExtent {
+  let bytes = 0,
+    newlines = 0;
+  for (const node of nodes) {
+    if (node.type === "hardBreak") {
+      bytes += 3;
+      newlines++;
+      continue;
+    }
+    if (node.type === "noteLink") {
+      bytes += reference(node);
+      continue;
+    }
+    const text = node.text ?? "";
+    bytes += text.length * 6 + 4;
+    if (node.marks?.some((mark) => mark.type === "code"))
+      newlines += lineCount(text);
+    for (const mark of node.marks ?? [])
+      bytes +=
+        4 +
+        (mark.type === "link" ? String(mark.attrs?.href ?? "").length * 3 : 0);
+  }
+  return { bytes, newlines };
+}
+/** An upper output bound is computed before any escaped/fenced output exists.
+ * Newline counts stay separate: indentation does not multiply line counts. */
+function blockExtent(
+  nodes: RichNode[],
+  reference: (node: RichNode) => number,
+): MarkdownExtent {
+  let bytes = Math.max(0, nodes.length - 1) * 2;
+  let newlines = bytes;
+  for (const node of nodes) {
+    const children = node.content ?? [];
+    let value: MarkdownExtent;
+    if (node.type === "paragraph" || node.type === "heading") {
+      value = inlineExtent(children, reference);
+      if (node.type === "heading") value.bytes += 7;
+    } else if (node.type === "horizontalRule")
+      value = { bytes: 3, newlines: 0 };
+    else if (node.type === "codeBlock") {
+      let size = 0,
+        lines = 2;
+      for (const child of children) {
+        size += (child.text ?? "").length;
+        lines += lineCount(child.text ?? "");
+      }
+      value = {
+        bytes: size * 5 + 8 + String(node.attrs?.language ?? "").length * 3,
+        newlines: lines,
+      };
+    } else if (["bulletList", "orderedList", "taskList"].includes(node.type)) {
+      value = {
+        bytes: Math.max(0, children.length - 1),
+        newlines: Math.max(0, children.length - 1),
+      };
+      for (let i = 0; i < children.length; i++) {
+        const child = blockExtent(children[i]!.content ?? [], reference);
+        const prefix =
+          node.type === "orderedList"
+            ? `${(Number(node.attrs?.start) || 1) + i}. `.length
+            : node.type === "taskList"
+              ? 6
+              : 2;
+        value.bytes += child.bytes + prefix * (child.newlines + 1);
+        value.newlines += child.newlines;
+      }
+    } else {
+      value = blockExtent(children, reference);
+      if (node.type === "blockquote") value.bytes += 2 * (value.newlines + 1);
+    }
+    bytes += value.bytes;
+    newlines += value.newlines;
+  }
+  return { bytes, newlines };
+}
+function renderInline(
+  nodes: RichNode[] = [],
+  reference?: (node: RichNode) => string,
+): string {
   return nodes
     .map((n) => {
       if (n.type === "hardBreak") return "  \n";
-      let text = escape(n.text ?? "");
+      if (n.type === "noteLink") {
+        if (!reference)
+          throw new Error(
+            "invalid_document: A note reference needs an authorized export projection.",
+          );
+        return reference(n);
+      }
+      let text = escapeMarkdownText(n.text ?? "");
+      let code: string | undefined;
       for (const mark of n.marks ?? []) {
         if (mark.type === "bold") text = `**${text}**`;
         else if (mark.type === "italic") text = `*${text}*`;
         else if (mark.type === "strike") text = `~~${text}~~`;
         else if (mark.type === "code") {
-          const fence = "`".repeat(
-            Math.max(
-              0,
-              ...((n.text ?? "").match(/`+/g) ?? []).map((x) => x.length),
-            ) + 1,
-          );
-          text = `${fence} ${n.text ?? ""} ${fence}`;
+          code ??= markdownCodeSpan(n.text ?? "");
+          text = code;
         } else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
@@ -234,27 +349,31 @@ function renderInline(nodes: RichNode[] = []): string {
     })
     .join("");
 }
-function renderBlocks(nodes: RichNode[] = []): string {
+function renderBlocks(
+  nodes: RichNode[] = [],
+  reference?: (node: RichNode) => string,
+): string {
   return nodes
     .map((n) => {
       const children = n.content ?? [];
       switch (n.type) {
         case "paragraph":
-          return renderInline(children);
+          return renderInline(children, reference);
         case "heading":
-          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children)}`;
+          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children, reference)}`;
         case "horizontalRule":
           return "---";
         case "blockquote":
-          return renderBlocks(children)
+          return renderBlocks(children, reference)
             .split("\n")
             .map((l) => `> ${l}`)
             .join("\n");
         case "codeBlock": {
           const text = children.map((c) => c.text ?? "").join("");
-          const fence = "`".repeat(
-            Math.max(2, ...(text.match(/`+/g) ?? []).map((s) => s.length)) + 1,
-          );
+          let longest = 2;
+          for (const match of text.matchAll(/`+/g))
+            longest = Math.max(longest, match[0].length);
+          const fence = "`".repeat(longest + 1);
           const language = String(n.attrs?.language ?? "").replace(
             /[^a-zA-Z0-9_+-]/g,
             "",
@@ -272,7 +391,7 @@ function renderBlocks(nodes: RichNode[] = []): string {
                   : n.type === "taskList"
                     ? `- [${item.attrs?.checked ? "x" : " "}] `
                     : "- ";
-              return renderBlocks(item.content)
+              return renderBlocks(item.content, reference)
                 .split("\n")
                 .map((line, i) =>
                   i === 0 ? prefix + line : " ".repeat(prefix.length) + line,
@@ -281,7 +400,7 @@ function renderBlocks(nodes: RichNode[] = []): string {
             })
             .join("\n");
         default:
-          return renderBlocks(children);
+          return renderBlocks(children, reference);
       }
     })
     .join("\n\n");
@@ -289,16 +408,30 @@ function renderBlocks(nodes: RichNode[] = []): string {
 export function exportMarkdown(
   notes: Note[],
 ): Array<{ filename: string; content: string }> {
+  for (const note of notes) validateInput(note);
+  return renderMarkdownSnapshot(notes);
+}
+/** Pure formatter only. Callers must validate and authorize their own snapshot. */
+export function renderMarkdownSnapshot(
+  notes: readonly Note[],
+  reference?: (node: RichNode) => string,
+  admission?: MarkdownAdmission,
+): Array<{ filename: string; content: string }> {
   return notes.map((note, index) => {
-    validateInput(note);
+    admission?.admit(
+      blockExtent(note.document.content, admission.referenceBound).bytes +
+        note.title.length * 6 +
+        note.tags.reduce((sum, tag) => sum + tag.length * 6 + 4, 0) +
+        128,
+    );
     const name =
       (note.title || "Untitled")
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
         .replace(/[. ]+$/g, "")
         .slice(0, 100) || "Untitled";
     return {
-      filename: `${name}-${index + 1}.md`,
-      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content)}\n`,
+      filename: `${name}-${index + (admission?.startIndex ?? 0) + 1}.md`,
+      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference)}\n`,
     };
   });
 }

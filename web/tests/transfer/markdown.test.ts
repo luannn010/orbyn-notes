@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { exportMarkdown, parseMarkdown } from "../../src/transfer";
 import type { Note } from "../../src/domain/contracts";
 describe("Markdown transfer boundary", () => {
+  it("keeps formatting and text when paragraphs start or end with a mark", () => {
+    const result = parseMarkdown([{ name: "marks.md", content: "**Bold** and *italic* then ~~strike~~" }])[0]!;
+    const nodes = result.document.content[0]!.content!;
+    expect(nodes.map(n => n.text ?? "").join("")).toBe("Bold and italic then strike");
+    expect(nodes.filter(n => n.text).map(n => [n.text, n.marks?.map(m => m.type) ?? []])).toEqual([
+      ["Bold", ["bold"]], [" and ", []], ["italic", ["italic"]], [" then ", []], ["strike", ["strike"]],
+    ]);
+  });
+  it("rejects unsupported tables with a useful error before any import", () => {
+    expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
+  });
+  it("preserves ordinary list items alongside tasks without turning them into checkboxes", () => {
+    const result = parseMarkdown([{ name: "mixed.md", content: "- Plain\n- [x] Done\n- Other\n- [ ] Next" }])[0]!;
+    expect(result.document.content.map(n => n.type)).toEqual(["bulletList", "taskList", "bulletList", "taskList"]);
+    expect(result.document.content.map(n => n.content?.[0]?.attrs?.checked ?? null)).toEqual([null, true, null, false]);
+  });
   it("round trips title, tags, paragraphs, headings, ordered lists, tasks and links", () => {
     const source =
       '---\ntitle: "A safe title"\ntags: ["work", "a:b"]\n---\n\n# Heading\n\nA **bold** paragraph and [link](https://example.test).\n\n3. Third\n4. Fourth\n\n- [x] Done\n- [ ] Next\n';

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "valid": [
+    {
+      "name": "empty",
+      "target": {
+        "kind": "note",
+        "accountId": "12345678-1234-4234-8234-123456789abc",
+        "libraryEpoch": "abcdef12-3456-4789-abcd-123456789abc",
+        "noteId": ""
+      },
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiIn0"
+    },
+    {
+      "name": "opaque",
+      "target": {
+        "kind": "note",
+        "accountId": "12345678-1234-4234-8234-123456789abc",
+        "libraryEpoch": "abcdef12-3456-4789-abcd-123456789abc",
+        "noteId": "Note /?## %"
+      },
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiVG05MFpTQXZQeU1qSUNVIn0"
+    },
+    {
+      "name": "unicode",
+      "target": {
+        "kind": "note",
+        "accountId": "12345678-1234-4234-8234-123456789abc",
+        "libraryEpoch": "abcdef12-3456-4789-abcd-123456789abc",
+        "noteId": "📝é"
+      },
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiOEotVG5XWE1nUSJ9"
+    },
+    {
+      "name": "scope-case",
+      "target": {
+        "kind": "note",
+        "accountId": "12345678-1234-4234-8234-123456789ABC",
+        "libraryEpoch": "abcdef12-3456-4789-abcd-123456789abc",
+        "noteId": "A"
+      },
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OUFCQyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiUVEifQ"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "upper-scheme",
+      "uri": "ORBYN-NOTES://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiVG05MFpTQXZQeU1qSUNVIn0"
+    },
+    {
+      "name": "padding",
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiVG05MFpTQXZQeU1qSUNVIn0="
+    },
+    {
+      "name": "fragment",
+      "uri": "orbyn-notes://note/v1/eyJ2IjoxLCJraW5kIjoibm90ZSIsImFjY291bnRJZCI6IjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsImxpYnJhcnlFcG9jaCI6ImFiY2RlZjEyLTM0NTYtNDc4OS1hYmNkLTEyMzQ1Njc4OWFiYyIsIm5vdGVJZDY0IjoiVG05MFpTQXZQeU1qSUNVIn0#x"
+    },
+    {
+      "name": "invalid-utf8",
+      "uri": "orbyn-notes://note/v1/_w"
+    },
+    {
+      "name": "invalid-mod4",
+      "uri": "orbyn-notes://note/v1/A"
+    }
+  ],
+  "unencodable": [
+    {
+      "utf16": [55296]
+    },
+    {
+      "utf16": [56320]
+    },
+    {
+      "utf16": [120, 55296, 121]
+    }
+  ]
+}
