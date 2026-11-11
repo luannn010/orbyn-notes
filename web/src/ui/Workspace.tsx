@@ -32,6 +32,11 @@ import { projectNotes, plainText, message } from "./model";
 import { Dialog, usePreferences } from "./primitives";
 import { SettingsView } from "./SettingsView";
 import { SidebarResize, useSidebarWidth } from "./SidebarResize";
+import {
+  SidebarSelection,
+  useSidebarSelection,
+  type SidebarSelectionKey,
+} from "./SidebarSelection";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
 import { buildDownload } from "./download";
@@ -125,6 +130,31 @@ export function Workspace({
   session: AccountSession;
   onSignOut: () => Promise<void>;
 }) {
+  const sidebarSelection = useSidebarSelection();
+  const [sidebarPrivacy, setSidebarPrivacy] = useState(0);
+  const fallbackSidebarTags = useRef<symbol[]>([]);
+  const sidebarLayout = useRef<{
+    keys: SidebarSelectionKey[];
+    shape: string;
+    version: number;
+  }>({ keys: [], shape: "", version: 0 });
+  function invalidateSidebarSelection() {
+    sidebarSelection.invalidate();
+    readSequence.current++;
+    fallbackSidebarTags.current = [];
+    sidebarLayout.current.keys = [];
+    sidebarLayout.current.version++;
+    setSidebarPrivacy((value) => value + 1);
+  }
+  useLayoutEffect(
+    () => () => {
+      sidebarSelection.invalidate();
+      fallbackSidebarTags.current = [];
+      sidebarLayout.current.keys = [];
+      readSequence.current++;
+    },
+    [sidebarSelection, store, sourceOwner, session.accountId, session.deviceId],
+  );
   const [creatingNote, setCreatingNote] = useState(false);
   const createGeneration = useRef(0);
   const createInFlight = useRef<number | null>(null);
@@ -191,6 +221,7 @@ export function Workspace({
     null,
   );
   const links = useNoteLinkOwner(sourceOwner, (reason) => {
+    invalidateSidebarSelection();
     retireCreate();
     try {
       onNoteLinkScopeRevoked?.();
@@ -281,6 +312,7 @@ export function Workspace({
     setSourceUnavailable(null);
   }
   const sourceOwners = useStudySourceOwners(sourceOwner, session, () => {
+    invalidateSidebarSelection();
     retireCreate();
     revokeSearchScope();
     sourceRequest.current++;
@@ -326,6 +358,7 @@ export function Workspace({
     if (result.mode === "ready") {
       const nextEpoch = result.snapshot.token.epoch;
       if (adoptedEpoch.current && adoptedEpoch.current !== nextEpoch) {
+        invalidateSidebarSelection();
         retireCreate();
         selectedSnapshot.current = undefined;
         setSelected(null);
@@ -476,6 +509,14 @@ export function Workspace({
   const menuRef = useRef<HTMLButtonElement>(null);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const drawerRef = useRef<HTMLElement>(null);
+  const selectionRootRef = sidebarSelection.rootRef;
+  const sidebarRootRef = useMemo(
+    () => (node: HTMLElement | null) => {
+      drawerRef.current = node;
+      selectionRootRef(node);
+    },
+    [selectionRootRef],
+  );
   const drawerWasOpen = useRef(false);
   useEffect(() => {
     const input = fileRef.current;
@@ -543,10 +584,16 @@ export function Workspace({
     const sequence = ++readSequence.current;
     if (library) {
       const value = await library.read();
-      if (sequence === readSequence.current) adoptLibrary(value);
+      if (sequence === readSequence.current) {
+        adoptLibrary(value);
+        sidebarSelection.admit();
+      }
     } else {
       const value = await store.list();
-      if (sequence === readSequence.current) setNotes(value);
+      if (sequence === readSequence.current) {
+        sidebarSelection.admit();
+        setNotes(value);
+      }
     }
   }
   async function refresh() {
@@ -556,9 +603,11 @@ export function Workspace({
         const result = await library.read();
         if (sequence !== readSequence.current) return;
         adoptLibrary(result);
+        sidebarSelection.admit();
       } else {
         const result = await store.list();
         if (sequence !== readSequence.current) return;
+        sidebarSelection.admit();
         setNotes(result);
       }
       setLoaded(true);
@@ -578,8 +627,13 @@ export function Workspace({
             : result.notes
           : await store.list();
         if (active && sequence === readSequence.current) {
-          if (result) adoptLibrary(result);
-          else setNotes(list);
+          if (result) {
+            adoptLibrary(result);
+            sidebarSelection.admit();
+          } else {
+            sidebarSelection.admit();
+            setNotes(list);
+          }
           setLoaded(true);
         }
       } catch (e) {
@@ -687,6 +741,35 @@ export function Workspace({
     : [
         ...new Set(notes.filter((n) => !n.trashedAt).flatMap((n) => n.tags)),
       ].sort();
+  fallbackSidebarTags.current.length = tags.length;
+  const sidebarTagKeys: SidebarSelectionKey[] = tags.map((name, index) => {
+    const id = snapshot?.tags.find(
+      (value) => value.state === "active" && value.name === name,
+    )?.id;
+    return id ? `tag:${id}` : (fallbackSidebarTags.current[index] ??= Symbol());
+  });
+  const sidebarKeys: SidebarSelectionKey[] = [
+    "notes", "journal", "study", "clips",
+    ...(library ? ["pinned", ...(links.service ? ["linked"] : []), "tags"] : []),
+    ...sidebarTagKeys, "trash",
+  ];
+  const sidebarShape = `${sidebarWidth}:${wide}:${drawer}:${sidebarHidden}`;
+  if (
+    sidebarLayout.current.shape !== sidebarShape ||
+    sidebarLayout.current.keys.length !== sidebarKeys.length ||
+    sidebarKeys.some((key, index) => key !== sidebarLayout.current.keys[index])
+  ) {
+    sidebarLayout.current = {
+      keys: sidebarKeys,
+      shape: sidebarShape,
+      version: sidebarLayout.current.version + 1,
+    };
+  }
+  const sidebarActiveKey: SidebarSelectionKey | null = module !== "notes"
+    ? module
+    : trash ? "trash"
+      : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
+        : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = selected !== null && current;
   const noteActors = Array.from(
     new Set(
@@ -1631,12 +1714,19 @@ export function Workspace({
       )}
       <aside
         id="notes-sidebar"
-        ref={drawerRef}
+        ref={sidebarRootRef}
         role={drawer ? "dialog" : undefined}
         aria-modal={drawer ? true : undefined}
         className={drawer ? "sidebar open" : "sidebar"}
         aria-label="Notes navigation"
       >
+        <SidebarSelection
+          controller={sidebarSelection}
+          activeKey={sidebarActiveKey}
+          layoutVersion={sidebarLayout.current.version}
+          privacyRevision={sidebarPrivacy}
+          visible={loaded && (wide ? !(desktop && sidebarHidden) : drawer)}
+        />
         <div className="sidebar-account" role="group" aria-label="Account">
           <span className="sidebar-account-avatar" aria-hidden="true">
             {accountInitial}
@@ -1685,6 +1775,7 @@ export function Workspace({
         )}
         <nav>
           <button
+            ref={sidebarSelection.rowRef("notes")}
             className={
               module === "notes" && !trash && !tag && !pinnedOnly && !linkedOnly
                 ? "nav active"
@@ -1697,6 +1788,7 @@ export function Workspace({
             <span>{notes.filter((n) => !n.trashedAt).length}</span>
           </button>
           <button
+            ref={sidebarSelection.rowRef("journal")}
             className={module === "journal" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
@@ -1722,6 +1814,7 @@ export function Workspace({
             <span className="nav-label">Journal</span>
           </button>
           <button
+            ref={sidebarSelection.rowRef("study")}
             className={module === "study" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
@@ -1747,6 +1840,7 @@ export function Workspace({
             <span className="nav-label">Study</span>
           </button>
           <button
+            ref={sidebarSelection.rowRef("clips")}
             className={module === "clips" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
@@ -1761,6 +1855,7 @@ export function Workspace({
           {library && (
             <>
               <button
+                ref={sidebarSelection.rowRef("pinned")}
                 className={
                   module === "notes" && pinnedOnly ? "nav active" : "nav"
                 }
@@ -1790,6 +1885,7 @@ export function Workspace({
               </button>
               {links.service && (
                 <button
+                  ref={sidebarSelection.rowRef("linked")}
                   className={
                     module === "notes" && linkedOnly ? "nav active" : "nav"
                   }
@@ -1809,6 +1905,7 @@ export function Workspace({
                 </button>
               )}
               <button
+                ref={sidebarSelection.rowRef("tags")}
                 className={module === "tags" ? "nav active" : "nav"}
                 disabled={readOnly}
                 onClick={() => {
@@ -1824,13 +1921,14 @@ export function Workspace({
             </>
           )}
           <p className="group">Tags</p>
-          {tags.map((t) => {
+          {tags.map((t, index) => {
             const count = notes.filter(
               (note) => !note.trashedAt && note.tags.includes(t),
             ).length;
             return (
               <button
                 key={t}
+                ref={sidebarSelection.rowRef(sidebarTagKeys[index]!)}
                 aria-label={`${t}, ${count} ${count === 1 ? "note" : "notes"}`}
                 className={
                   module === "notes" && tag === t ? "nav active" : "nav"
@@ -1861,6 +1959,7 @@ export function Workspace({
             );
           })}
           <button
+            ref={sidebarSelection.rowRef("trash")}
             className={module === "notes" && trash ? "nav active" : "nav"}
             onClick={() => navigate(true)}
           >
@@ -2125,6 +2224,7 @@ export function Workspace({
                     onSearchReaderResult={searchReaderResult}
                     view={view}
                     onEpochChange={() => {
+                      invalidateSidebarSelection();
                       retireCreate();
                       selectedSnapshot.current = undefined;
                       setSelected(null);
