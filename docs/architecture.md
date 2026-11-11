@@ -268,3 +268,25 @@ is deduplicated into the library, then navigation guards are checked again befor
 opening it. If new work blocks navigation, the created note remains in the
 library with a truthful notice; it is not automatically opened later. Account,
 store, unmount and observed epoch invalidations retire result/focus tickets.
+
+
+## Sidebar selection presentation
+
+Notes sidebar rows use 29px boxes with 1px gaps. A single pointer-inert,
+aria-hidden highlight follows the actual admitted route row, using checked
+untransformed layout offsets rather than a row index or the pressed button's
+scaled rectangle. Same-layout selection moves 200ms; label color changes 150ms.
+Reduced motion jumps the highlight while retaining the label-color fade.
+Geometry/order/width/scroll/show changes settle immediately.
+
+Workspace registers concrete buttons with content-free route keys or opaque
+catalog IDs/current-only symbols. The controller retains DOM handles and scalar
+geometry only. Owner invalidation synchronously hides and latches the controller,
+clears handles/previous geometry and retires callbacks before projection clearing.
+Only a successful current-owner library/list read admits a fresh ref generation;
+a generic rerender cannot revive the old target. Ordinary same-scope reads do not
+reset movement. ResizeObserver initial delivery does not cancel an unchanged move.
+No route admission depends on motion completion and no heading/label snapshot is
+cloned. Current-heading opacity remains a separately owned qualification gap.
+Design revision f610ced1da443b04699137333c1309925092fffa: Notes `layout-desktop`
+and Motion `sidenav` (Notes/Motion blobs unchanged from 95bd47e).
