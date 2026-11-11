@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import userEvent from "@testing-library/user-event";
 import {
   act,
   fireEvent,
@@ -17,6 +18,7 @@ import {
   emptyJournal,
   journalToday,
   saveHabit,
+  setHabitCompletion,
   validateJournalData,
 } from "../../src/collections/journal";
 import type { NoteDocument } from "../../src/domain/contracts";
@@ -294,6 +296,160 @@ async function journalMenu(item: string) {
 }
 
 describe("protected Journal UI", () => {
+  function useNovemberClock() {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+  }
+  function offsetDay(day: string, offset: number) {
+    const date = new Date(`${day}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  }
+  function history(
+    count: number,
+    first: string,
+    done: (habit: number) => string[],
+  ) {
+    let data = emptyJournal();
+    for (let i = 0; i < count; i++) {
+      data = saveHabit(
+        data,
+        count === 1 ? "Reading" : `Habit ${i + 1}`,
+        new Date(`${first}T12:00:00Z`),
+      );
+      const habit = data.habits.at(-1)!;
+      habit.createdOn = first;
+      for (const day of done(i))
+        data = setHabitCompletion(data, day, habit.id, true, new Date());
+    }
+    return data;
+  }
+  it("keeps selected-day streaks, keyboard toggles and failed-save drafts truthful", async () => {
+    useNovemberClock();
+    const today = journalToday(),
+      yesterday = offsetDay(today, -1);
+    const fixture = testVault();
+    await fixture.vault.update(() =>
+      history(1, offsetDay(today, -5), () =>
+        Array.from({ length: 5 }, (_, i) => offsetDay(today, i - 5)),
+      ),
+    );
+    render(<JournalView vault={fixture.vault} />);
+    const user = userEvent.setup(),
+      button = screen.getByRole("button", { name: "Reading" });
+    const through = new Date(`${yesterday}T12:00:00`).toLocaleDateString(
+      undefined,
+      { weekday: "long", day: "numeric", month: "long", year: "numeric" },
+    );
+    expect(button).toHaveAccessibleDescription(
+      `5 consecutive days through ${through}.`,
+    );
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(button).toHaveAccessibleDescription(/6 consecutive days/);
+    await user.keyboard(" ");
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(button).toHaveAccessibleDescription(
+      `5 consecutive days through ${through}.`,
+    );
+    await user.keyboard("{Enter}");
+    expect(button).toHaveAccessibleDescription(/6 consecutive days/);
+    fixture.failNext();
+    await user.click(button);
+    expect(fixture.vault.status().dirty).toBe(true);
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(button).toHaveAccessibleDescription(/5 consecutive days/);
+    expect(
+      screen.getByText(/Your Journal draft is still in this window/),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Try again" }),
+    );
+    expect(fixture.vault.retry).toHaveBeenCalledTimes(1);
+    expect(fixture.vault.status().dirty).toBe(false);
+    expect(button).toHaveAccessibleDescription(/5 consecutive days/);
+    expect(fixture.vault.update).toHaveBeenCalledTimes(5);
+  });
+  it("shades actual calendar counts and retains the numeric overflow legend", async () => {
+    useNovemberClock();
+    const month = journalToday().slice(0, 7),
+      fixture = testVault();
+    await fixture.vault.update(() =>
+      history(5, `${month}-01`, (i) =>
+        Array.from(
+          { length: 5 - i },
+          (_, offset) => `${month}-${String(i + offset + 1).padStart(2, "0")}`,
+        ),
+      ),
+    );
+    const { container } = render(<JournalView vault={fixture.vault} />);
+    const calendar = container.querySelector(".journal-calendar-days")!;
+    for (const [day, level, count] of [
+      [1, 1, 1],
+      [2, 1, 2],
+      [3, 2, 3],
+      [4, 3, 4],
+      [5, 3, 5],
+      [6, 0, 0],
+    ]) {
+      const button = Array.from(calendar.querySelectorAll("button")).find(
+        (item) => item.textContent?.trim() === String(day),
+      )!;
+      expect(button).toHaveAttribute("data-level", String(level));
+      expect(button).toHaveAccessibleName(new RegExp(`${count} of 5 habits`));
+    }
+    const legend = screen.getByRole("group", { name: "Habits done legend" });
+    expect(within(legend).getByText("4+")).toBeInTheDocument();
+    expect(legend).toHaveTextContent("4 or more");
+    expect(legend).not.toHaveTextContent(/some|most|all/);
+  });
+  it("does not infer overflow or darkest color from a large eligible denominator", async () => {
+    useNovemberClock();
+    const today = journalToday(),
+      fixture = testVault();
+    await fixture.vault.update(() =>
+      history(100, `${today.slice(0, 7)}-01`, (i) => (i < 3 ? [today] : [])),
+    );
+    const { container } = render(<JournalView vault={fixture.vault} />);
+    const selected = container.querySelector(
+      '.journal-calendar-days button[aria-current="date"]',
+    )!;
+    expect(selected).toHaveAttribute("data-level", "2");
+    expect(selected).toHaveAccessibleName(/3 of 100 habits/);
+    const legend = screen.getByRole("group", { name: "Habits done legend" });
+    expect(legend).toHaveTextContent("0, 1 to 2, 3, 4");
+    expect(within(legend).queryByText("4+")).not.toBeInTheDocument();
+  });
+  it("removes the current and outgoing streak presentation in the same close turn", async () => {
+    useNovemberClock();
+    const today = journalToday(),
+      fixture = testVault();
+    await fixture.vault.update(() =>
+      history(1, offsetDay(today, -1), () => [offsetDay(today, -1)]),
+    );
+    const { container } = render(
+      <StrictMode>
+        <JournalView vault={fixture.vault} />
+      </StrictMode>,
+    );
+    const button = screen.getByRole("button", { name: "Reading" });
+    const description = button.getAttribute("aria-describedby")!;
+    fireEvent.click(button);
+    expect(container.querySelectorAll(".journal-habit-count")).toHaveLength(2);
+    let concealed = false;
+    act(() => {
+      fixture.vault.close();
+      concealed =
+        !container.querySelector(".journal-habit-count") &&
+        !document.getElementById(description);
+    });
+    expect(concealed).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Reading" }),
+    ).not.toBeInTheDocument();
+    expect(fixture.vault.update).toHaveBeenCalledTimes(2);
+  });
   it("exports a never-checked habit even when there are no dated entries", async () => {
     const OriginalURL = URL;
     const create = vi.fn(() => "blob:habit-only");

@@ -157,15 +157,20 @@ No browser restart recovery of these uncommitted forms is promised. JavaScript
 strings cannot be guaranteed to have been physically erased from process memory.
 Exports are deliberate readable files with manual-recovery limits.
 
-The preparatory Journal habit-detail selector derives streak scalars from validated
-civil completion dates without persisting a streak or retaining source objects.
-A checked selected day ends its consecutive run there; an unchecked day may retain
-the run ending exactly one day earlier. Creation/archive bounds are inclusive,
-and missing or undone dates stop the run. UTC calendar ordinals avoid daylight-
-saving arithmetic across supported years 1000..9999. It indexes completion history
-once and returns fresh scalar projections. The dependent Journal control slice
-owns its unlocked-view lifecycle and visible feedback; this helper alone changes
-no application screen, key, envelope or storage format.
+Habit streak details are derived inside the unlocked Journal view from real civil
+completion dates. A checked selected day ends its run there; an unchecked day may
+retain the consecutive run ending exactly one day earlier. Creation and archival
+bounds apply, and a missing or undone date breaks the run. UTC calendar ordinals
+avoid daylight-saving arithmetic; no streak is persisted or shared with Study's
+day-start preference. Descriptions identify the actual through-date. Count feedback
+retains only outgoing numeric scalars within the unlocked subtree and disappears
+synchronously when that private owner closes.
+
+The calendar shades absolute completed counts: zero, one or two, three, and four
+or more. It retains exact historical completed/eligible totals. The last legend
+label becomes `4+` only when a displayed actual count exceeds four. Feedback uses
+the vault's protected draft, including a retained draft after a failed write;
+durable Saved status still requires the existing encrypted commit acknowledgement.
 
 Clips stores validated HTTP(S) links and optional actual pasted text. It does not
 fetch a page as part of local Save link. Duplicate comparison uses a separate
