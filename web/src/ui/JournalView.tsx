@@ -32,6 +32,8 @@ import { Dialog } from "./primitives";
 import { RichEditor, type EditorLinkControl } from "./RichEditor";
 import { Menu } from "./Menu";
 import { plainText } from "./model";
+import { journalHabitDetails } from "./journalHabitDetails";
+import { JournalHabitFeedback } from "./JournalHabitFeedback";
 import "../styles/journal.css";
 
 const EMPTY_DOCUMENT: NoteDocument = {
@@ -436,6 +438,18 @@ function JournalWorkspace({
     () => (data ? journalMonth(data, month.year, month.month) : []),
     [data, month.year, month.month],
   );
+  const habitDetails = useMemo(
+    () => (data ? journalHabitDetails(data, selectedDay) : null),
+    [data, selectedDay],
+  );
+  const streakThroughLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const detail of habitDetails?.values() ?? []) {
+      if (detail.through && !labels.has(detail.through))
+        labels.set(detail.through, dayTitle(detail.through));
+    }
+    return labels;
+  }, [habitDetails]);
   if (!data) return null;
   const today = journalToday();
   const entry = data.entries.find((item) => item.date === selectedDay);
@@ -832,37 +846,41 @@ function JournalWorkspace({
               {activeHabits.length === 0 ? (
                 <p>No habits yet</p>
               ) : (
-                activeHabits.map((habit) => (
-                  <button
-                    key={habit.id}
-                    aria-pressed={completed.has(habit.id)}
-                    disabled={!canEdit}
-                    onClick={() => {
-                      const at = new Date();
-                      void operation(() =>
-                        vault.update((current) =>
-                          setHabitCompletion(
-                            current,
-                            selectedDay,
-                            habit.id,
-                            !current.completions.some(
-                              (item) =>
-                                item.date === selectedDay &&
-                                item.habitId === habit.id &&
-                                item.done,
+                activeHabits.map((habit) => {
+                  const detail = habitDetails!.get(habit.id)!;
+                  return (
+                    <JournalHabitFeedback
+                      key={`${selectedDay}:${habit.id}`}
+                      name={habit.name}
+                      detail={detail}
+                      throughLabel={
+                        detail.through
+                          ? streakThroughLabels.get(detail.through)!
+                          : null
+                      }
+                      disabled={!canEdit}
+                      onToggle={() => {
+                        const at = new Date();
+                        void operation(() =>
+                          vault.update((current) =>
+                            setHabitCompletion(
+                              current,
+                              selectedDay,
+                              habit.id,
+                              !current.completions.some(
+                                (item) =>
+                                  item.date === selectedDay &&
+                                  item.habitId === habit.id &&
+                                  item.done,
+                              ),
+                              at,
                             ),
-                            at,
                           ),
-                        ),
-                      );
-                    }}
-                  >
-                    <span className="journal-check" aria-hidden="true">
-                      {completed.has(habit.id) ? "✓" : ""}
-                    </span>
-                    {habit.name}
-                  </button>
-                ))
+                        );
+                      }}
+                    />
+                  );
+                })
               )}
             </div>
           </div>
@@ -1063,6 +1081,7 @@ function Calendar({
   onMove: (delta: number) => void;
 }) {
   const offset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+  const overflow = days.some((day) => day.habitsCompleted > 4);
   return (
     <div className="journal-calendar">
       <header>
@@ -1102,11 +1121,11 @@ function Calendar({
             data-level={
               day.habitsCompleted === 0
                 ? 0
-                : day.habitTotal && day.habitsCompleted >= day.habitTotal
-                  ? 3
-                  : day.habitsCompleted / Math.max(1, day.habitTotal) >= 0.5
+                : day.habitsCompleted <= 2
+                  ? 1
+                  : day.habitsCompleted === 3
                     ? 2
-                    : 1
+                    : 3
             }
             aria-label={`${dayTitle(day.date)} · ${day.habitsCompleted} of ${day.habitTotal} habits${day.written ? " · written" : ""}`}
             aria-pressed={day.date === selected}
@@ -1117,7 +1136,30 @@ function Calendar({
           </button>
         ))}
       </div>
-      <p className="journal-caption">Habits done · 0, some, most, all</p>
+      <div
+        className="journal-caption journal-legend"
+        role="group"
+        aria-label="Habits done legend"
+      >
+        <span>Habits done</span>
+        <span className="journal-legend-swatches" aria-hidden="true">
+          <i />
+          <i data-level="1" />
+          <i data-level="2" />
+          <i data-level="3" />
+        </span>
+        <span>
+          0, 1 to 2, 3,{" "}
+          {overflow ? (
+            <>
+              <span aria-hidden="true">4+</span>
+              <span className="journal-sr-only">4 or more</span>
+            </>
+          ) : (
+            "4"
+          )}
+        </span>
+      </div>
       <p className="journal-caption">
         Days written · {days.filter((day) => day.written).length}
       </p>
