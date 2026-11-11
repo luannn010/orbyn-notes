@@ -1,0 +1,13 @@
+{
+  "version": "17.0.0",
+  "kind": "default full case folding, C+F; no Turkic override",
+  "source": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+  "sourceSha256": "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183",
+  "license": "Unicode-3.0",
+  "licenseSource": "https://www.unicode.org/license.txt",
+  "licenseSha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+  "notice": "public/licenses/Unicode-3.0.txt",
+  "generatedMappings": 1585,
+  "generatedSha256": "2e86da64e7bcc39af1e147d185fcbece97298367ddff23e4ded77e8d2aff3ba5",
+  "generator": "scripts/generate-search-folding.mjs"
+}
