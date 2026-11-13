@@ -46,9 +46,16 @@ describe("desktop window", () => {
   it("uses native controls and updates maximize state from the window", async () => {
     vi.mocked(isDesktop).mockReturnValue(true);
     const window = windowMock(); let resized!: () => void;
-    vi.mocked(connectWindow).mockImplementation(async (_close, resize) => { resized = resize; return window; });
+    const pending = deferred<DesktopWindow>();
+    vi.mocked(connectWindow).mockImplementation((_close, resize) => { resized = resize; return pending.promise; });
     render(<DesktopShell>Content</DesktopShell>);
-    fireEvent.click(await screen.findByRole("button", { name: "Minimize window" }));
+    const minimize = screen.getByRole("button", { name: "Minimize window" });
+    expect(minimize).toBeDisabled();
+    fireEvent.click(minimize);
+    expect(window.minimize).not.toHaveBeenCalled();
+    await act(async () => pending.resolve(window));
+    await waitFor(() => expect(minimize).toBeEnabled());
+    fireEvent.click(minimize);
     fireEvent.click(screen.getByRole("button", { name: "Maximize window" }));
     fireEvent.click(screen.getByRole("button", { name: "Close window" }));
     expect(window.minimize).toHaveBeenCalledOnce(); expect(window.toggleMaximize).toHaveBeenCalledOnce(); expect(window.close).toHaveBeenCalledOnce();
