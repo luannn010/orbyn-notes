@@ -215,3 +215,17 @@ agent integrations, public sharing, other native platforms and billing. The
 local module slices above do not qualify every approved design frame. Unsupported
 integration states must remain explicit; fixtures and generated API types do not
 count as working services.
+
+
+## Sidebar width
+
+Wide browser and native layouts (at least 900px) share a live sidebar resize
+separator. Width is 180–420px, default 224px, stored under `notes.sidebar-width`
+in device-local storage; storage denial keeps an in-memory preference usable.
+Narrow drawers remain 224px and have no resize rail. Hiding/showing the wide
+sidebar retains its width. Pointer capture is retired on cancellation, lost
+capture, blur, disable and unmount without changing document/body styles.
+The separator supports 16px Left/Right steps; double-click or Enter resets 224px.
+This is a layout preference and does not navigate, save content or remount actors.
+The design source is revision 95bd47e899600c0f038a7d4622a40cfc61d063e2,
+Notes `sidebar-dragging` and Components `window-title-row`.
