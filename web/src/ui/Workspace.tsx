@@ -486,8 +486,16 @@ export function Workspace({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  useEffect(() => {
-    if (!desktop) return;
+  useLayoutEffect(() => {
+    if (!desktop || !loaded) return;
+    desktop.setLayout({
+      sidebarWidth,
+      sidebarVisible: wide && !sidebarHidden,
+    });
+    return () => desktop.setLayout(null);
+  }, [desktop?.setLayout, loaded, sidebarWidth, wide, sidebarHidden]);
+  useLayoutEffect(() => {
+    if (!desktop || !loaded) return;
     desktop.setNavigation({
       expanded: wide ? !sidebarHidden : drawer,
       toggle: () => {
@@ -496,7 +504,7 @@ export function Workspace({
       },
     });
     return () => desktop.setNavigation(null);
-  }, [desktop?.setNavigation, wide, sidebarHidden, drawer]);
+  }, [desktop?.setNavigation, loaded, wide, sidebarHidden, drawer]);
   useEffect(() => {
     if (loaded) return;
     const timer = setTimeout(() => setShowLoadingSkeleton(true), 400);
@@ -1801,6 +1809,7 @@ export function Workspace({
         disabled={!wide || !!(desktop && sidebarHidden)}
       />
       <main id="main" className="sheet" inert={drawer}>
+        <div className="desktop-sheet-content">
         <SearchSurface
           active={searchActive}
           privacyVersion={searchPrivacyVersion}
@@ -2506,6 +2515,7 @@ export function Workspace({
           accept=".md,.markdown,.mdown,text/markdown"
           onChange={(e) => void readFiles(e.target.files)}
         />
+        </div>
       </main>
       {linkRecoveryOpen && links.service && (
         <Dialog

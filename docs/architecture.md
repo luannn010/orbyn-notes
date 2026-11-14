@@ -229,3 +229,23 @@ The separator supports 16px Left/Right steps; double-click or Enter resets 224px
 This is a layout preference and does not navigate, save content or remount actors.
 The design source is revision 95bd47e899600c0f038a7d4622a40cfc61d063e2,
 Notes `sidebar-dragging` and Components `window-title-row`.
+
+
+## Native title-row surfaces
+
+The native 44px caption row is transparent over full-height sidebar/content
+surfaces and carries no centered window title. Windows caption buttons retain
+46x44px hit areas and the existing readiness, drag, system-menu and close guards.
+The first sidebar control starts 56px from the window top; sheet surface reaches
+the top while interactive sheet content begins below the 44px caption area.
+Workspace publishes only `DesktopLayout {sidebarWidth, sidebarVisible}` through
+the shell context in a layout effect after its initial load. A null layout is a
+single-pane account/loading window with no sidebar toggle. Width metadata has
+no account identity or content and does not remount editors or module actors.
+The existing editor action portal remains mounted in the row. Its bounded area
+scrolls horizontally when actions cannot fit, keeping the protected caption
+buttons outside that scroll area. Buttons and scrollbar interaction do not drag
+the window. Back/Forward history and the account-avatar sidebar header remain
+separate work; no decorative history controls are added.
+Reference: design revision 95bd47e899600c0f038a7d4622a40cfc61d063e2,
+Components `window-title-row` and Notes `layout-desktop`/`layout-narrow`.
