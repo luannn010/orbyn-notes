@@ -72,3 +72,7 @@ matching close-request acknowledgement. The WebView profile remains separate
 from browser profiles; builds do not migrate or erase it. This is an unsigned
 local build, with no installer or public release qualification. See
 [Windows build and boundaries](windows.md).
+
+## Delivery boundary: encrypted-owners
+
+Versioned library and Collections owners capture account/epoch authority for every commit. Migration and workspace erase use the pinned engine adaptation and preserve the previous encrypted snapshot on failure. Account identity, trust, approval checkpoints and unrelated zones are retained. These domain adapters precede workspace wiring in this delivery stack.
