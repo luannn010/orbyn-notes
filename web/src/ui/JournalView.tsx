@@ -6,7 +6,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { MutableRefObject } from "react";
+import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
+import type { MutableRefObject, RefCallback } from "react";
 import { flushSync } from "react-dom";
 import { strToU8, zipSync } from "fflate";
 import type {
@@ -91,7 +92,9 @@ function readHabitDraft(vault: JournalVault) {
   }
 }
 
-function useVaultStatus(vault: JournalVault) {
+function useVaultStatus(vault: JournalVault, onHide: () => void) {
+  const hide = useRef(onHide);
+  hide.current = onHide;
   const active = useRef<JournalVault | null>(null);
   useLayoutEffect(() => {
     active.current = vault;
@@ -115,6 +118,7 @@ function useVaultStatus(vault: JournalVault) {
             (cached.phase === "unlocked" && next.phase !== "unlocked") ||
             (cached.phase !== next.phase &&
               (next.phase === "closed" || next.phase === "revoked"));
+          if (hiding) hide.current();
           cached = next;
           if (hiding) flushSync(notify);
           else notify();
@@ -133,12 +137,33 @@ function useVaultStatus(vault: JournalVault) {
 /** Metadata is the only state retained while Journal is locked. */
 export function JournalView({
   vault,
+  heading,
   onReopen,
 }: {
   vault: JournalVault;
+  heading?: HeadingPresentation;
   onReopen?: () => void;
 }) {
-  const status = useVaultStatus(vault);
+  const headingLive = useRef(heading);
+  headingLive.current = heading;
+  const headingOwner = useRef(vault);
+  const status = useVaultStatus(vault, () => headingLive.current?.controller.invalidate("journal"));
+  useLayoutEffect(() => {
+    if (headingOwner.current !== vault) {
+      headingLive.current?.controller.invalidate("journal");
+      headingOwner.current = vault;
+    }
+    try {
+      const metadata = vault.status();
+      if (metadata.phase === "locked") headingLive.current?.controller.admit("journal");
+      else if (metadata.phase === "closed" || metadata.phase === "revoked")
+        headingLive.current?.controller.invalidate("journal");
+    } catch {
+      // The existing Journal view owns read/recovery feedback. Failed title
+      // admission only disables its cosmetic effect; it never retries a read.
+      headingLive.current?.controller.invalidate("journal");
+    }
+  }, [vault, heading?.controller]);
   const formDirty = useRef(false);
   const [authPending, setAuthPending] = useState(false);
   const [navigation, setNavigation] = useState(initialNavigation);
@@ -174,6 +199,8 @@ export function JournalView({
     if (status.phase === "revoked" || status.phase === "closed")
       setNavigation(initialNavigation());
   }, [status.phase]);
+  const headingRef = useRouteHeading(heading, "journal",
+    status.phase === "locked" || status.phase === "unlocked" && !authPending ? "target" : "absent");
   return (
     <section className="journal-view" aria-label="Journal">
       {closeNotice && (
@@ -185,6 +212,8 @@ export function JournalView({
         <JournalWorkspace
           key={owner}
           vault={vault}
+          headingRef={headingRef}
+          heading={heading}
           status={status}
           formDirty={formDirty}
           navigation={navigation}
@@ -203,6 +232,7 @@ export function JournalView({
         <Credentials
           key={owner}
           vault={vault}
+          headingRef={headingRef}
           status={status}
           formDirty={formDirty}
           pending={authPending}
@@ -215,12 +245,14 @@ export function JournalView({
 
 function Credentials({
   vault,
+  headingRef,
   status,
   formDirty,
   pending,
   onPending,
 }: {
   vault: JournalVault;
+  headingRef?: RefCallback<HTMLHeadingElement>;
   status: JournalVaultStatus;
   formDirty: MutableRefObject<boolean>;
   pending: boolean;
@@ -297,7 +329,7 @@ function Credentials({
           <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
         </svg>
       </span>
-      <h1>{creating ? "Set a Journal passphrase" : "Journal is locked"}</h1>
+      <h1 ref={headingRef}>{creating ? "Set a Journal passphrase" : "Journal is locked"}</h1>
       <p>
         {creating
           ? "If you forget it, Orbyn can’t unlock your Journal."
@@ -378,12 +410,16 @@ function Credentials({
 
 function JournalWorkspace({
   vault,
+  headingRef,
+  heading,
   status,
   formDirty,
   navigation,
   onNavigate,
 }: {
   vault: JournalVault;
+  headingRef?: RefCallback<HTMLHeadingElement>;
+  heading?: HeadingPresentation;
   status: JournalVaultStatus;
   formDirty: MutableRefObject<boolean>;
   navigation: JournalNavigation;
@@ -399,6 +435,9 @@ function JournalWorkspace({
   );
   const [cancelHabitOpen, setCancelHabitOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  useLayoutEffect(() => {
+    if (heading?.active && (form || cancelHabitOpen || discardOpen)) heading.controller.retire();
+  }, [heading?.controller, heading?.active, form, cancelHabitOpen, discardOpen]);
   const [busy, setBusy] = useState(false);
   const lockRequested = useRef(false);
   const [savingShown, setSavingShown] = useState(false);
@@ -426,6 +465,9 @@ function JournalWorkspace({
       return null;
     }
   }, [vault, status]);
+  useLayoutEffect(() => {
+    if (data && vault.status().phase === "unlocked") heading?.controller.admit("journal");
+  }, [data, vault, heading?.controller]);
   const habitDraft = useMemo(() => readHabitDraft(vault), [vault, status]);
   const linkDraft = useMemo(() => {
     try {
@@ -700,7 +742,7 @@ function JournalWorkspace({
     <>
       <header className="journal-heading">
         <div>
-          <h1>Journal</h1>
+          <h1 ref={headingRef}>Journal</h1>
           <span>
             {history
               ? monthTitle(month.year, month.month)

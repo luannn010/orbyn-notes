@@ -31,6 +31,7 @@ import {
 import { projectNotes, plainText, message } from "./model";
 import { Dialog, usePreferences } from "./primitives";
 import { SettingsView } from "./SettingsView";
+import { useRouteHeadings, useRouteHeading, type HeadingRoute, type HeadingCue } from "./routeHeadingMotion";
 import { SidebarResize, useSidebarWidth } from "./SidebarResize";
 import {
   SidebarSelection,
@@ -130,6 +131,8 @@ export function Workspace({
   session: AccountSession;
   onSignOut: () => Promise<void>;
 }) {
+  const routeHeadings = useRouteHeadings();
+  const [headingCue, setHeadingCue] = useState<HeadingCue | null>(null);
   const sidebarSelection = useSidebarSelection();
   const [sidebarPrivacy, setSidebarPrivacy] = useState(0);
   const fallbackSidebarTags = useRef<symbol[]>([]);
@@ -139,6 +142,7 @@ export function Workspace({
     version: number;
   }>({ keys: [], shape: "", version: 0 });
   function invalidateSidebarSelection() {
+    routeHeadings.invalidate();
     sidebarSelection.invalidate();
     readSequence.current++;
     fallbackSidebarTags.current = [];
@@ -148,6 +152,7 @@ export function Workspace({
   }
   useLayoutEffect(
     () => () => {
+      routeHeadings.invalidate();
       sidebarSelection.invalidate();
       fallbackSidebarTags.current = [];
       sidebarLayout.current.keys = [];
@@ -587,11 +592,15 @@ export function Workspace({
       if (sequence === readSequence.current) {
         adoptLibrary(value);
         sidebarSelection.admit();
+        routeHeadings.admit("notes");
+        routeHeadings.admit("tags");
       }
     } else {
       const value = await store.list();
       if (sequence === readSequence.current) {
         sidebarSelection.admit();
+        routeHeadings.admit("notes");
+        routeHeadings.admit("tags");
         setNotes(value);
       }
     }
@@ -604,10 +613,14 @@ export function Workspace({
         if (sequence !== readSequence.current) return;
         adoptLibrary(result);
         sidebarSelection.admit();
+        routeHeadings.admit("notes");
+        routeHeadings.admit("tags");
       } else {
         const result = await store.list();
         if (sequence !== readSequence.current) return;
         sidebarSelection.admit();
+        routeHeadings.admit("notes");
+        routeHeadings.admit("tags");
         setNotes(result);
       }
       setLoaded(true);
@@ -630,8 +643,12 @@ export function Workspace({
           if (result) {
             adoptLibrary(result);
             sidebarSelection.admit();
+            routeHeadings.admit("notes");
+            routeHeadings.admit("tags");
           } else {
             sidebarSelection.admit();
+            routeHeadings.admit("notes");
+            routeHeadings.admit("tags");
             setNotes(list);
           }
           setLoaded(true);
@@ -783,6 +800,10 @@ export function Workspace({
     )
     .filter((note): note is Note => !!note);
 
+  function requestHeading(route: HeadingRoute, key: SidebarSelectionKey | null) {
+    if (module === route && !searchActive && !editing && sidebarActiveKey === key) return;
+    setHeadingCue(routeHeadings.request(route));
+  }
   function canNavigate() {
     const state = checkClose();
     if (state === "working" || state === "draft") {
@@ -1378,6 +1399,7 @@ export function Workspace({
   }
   function navigate(isTrash = false, nextTag = "") {
     if (!canNavigate()) return;
+    requestHeading("notes", isTrash ? "trash" : nextTag ? sidebarTagKeys[tags.indexOf(nextTag)] ?? null : "notes");
     clearSourceRoute();
     setModule("notes");
     setSelected(null);
@@ -1675,6 +1697,16 @@ export function Workspace({
       exportWorking.current = false;
     }
   }
+  const headingCovered = drawer || searchActive || setupOpen || settings || signOutOpen || !!imports ||
+    exportNotes !== null || erase || historyNote !== null || emptyConfirm !== null || incomingNoteIntentActive;
+  const headingFor = (route: HeadingRoute) => ({
+    controller: routeHeadings, cue: headingCue,
+    active: module === route && !editing && !headingCovered,
+  });
+  const notesHeadingRef = useRouteHeading(headingFor("notes"), "notes", !loaded ? "pending" : editing ? "absent" : "target");
+  useLayoutEffect(() => {
+    if (headingCue && (module !== headingCue.route || !!editing || headingCovered)) routeHeadings.retire();
+  }, [routeHeadings, headingCue, module, !!editing, headingCovered]);
   if (!loaded && !error)
     return (
       <main className="loading" aria-label="Loading notes" aria-busy="true">
@@ -1792,6 +1824,7 @@ export function Workspace({
             className={module === "journal" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
+              requestHeading("journal", "journal");
               setModule("journal");
               setSelected(null);
               setDrawer(false);
@@ -1818,6 +1851,7 @@ export function Workspace({
             className={module === "study" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
+              requestHeading("study", "study");
               setModule("study");
               setSelected(null);
               setDrawer(false);
@@ -1844,6 +1878,7 @@ export function Workspace({
             className={module === "clips" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
+              requestHeading("clips", "clips");
               setModule("clips");
               setSelected(null);
               setDrawer(false);
@@ -1862,6 +1897,7 @@ export function Workspace({
                 disabled={readOnly}
                 onClick={() => {
                   if (!canNavigate()) return;
+                  requestHeading("notes", "pinned");
                   setModule("notes");
                   setSelected(null);
                   setTrash(false);
@@ -1891,6 +1927,7 @@ export function Workspace({
                   }
                   onClick={() => {
                     if (!canNavigate()) return;
+                    requestHeading("notes", "linked");
                     clearSourceRoute();
                     setModule("notes");
                     setSelected(null);
@@ -1910,6 +1947,7 @@ export function Workspace({
                 disabled={readOnly}
                 onClick={() => {
                   if (!canNavigate()) return;
+                  requestHeading("tags", "tags");
                   setModule("tags");
                   setSelected(null);
                   setDrawer(false);
@@ -2185,6 +2223,7 @@ export function Workspace({
                   }
                 >
                   <CollectionsHost
+                    heading={headingFor(view)}
                     session={session}
                     onReopen={
                       sourceOwner
@@ -2298,6 +2337,7 @@ export function Workspace({
           )}
           {module === "tags" && library && snapshot && (
             <TagsView
+              heading={headingFor("tags")}
               readOnly={readOnly}
               key={snapshot.token.epoch}
               library={library}
@@ -2399,7 +2439,7 @@ export function Workspace({
             <>
               <header className="page-heading">
                 <div>
-                  <h1>
+                  <h1 ref={notesHeadingRef}>
                     {linkedOnly
                       ? "Linked"
                       : trash

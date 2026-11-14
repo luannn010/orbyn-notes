@@ -290,3 +290,28 @@ No route admission depends on motion completion and no heading/label snapshot is
 cloned. Current-heading opacity remains a separately owned qualification gap.
 Design revision f610ced1da443b04699137333c1309925092fffa: Notes `layout-desktop`
 and Motion `sidenav` (Notes/Motion blobs unchanged from 95bd47e).
+
+
+## Current route headings
+
+Notes, Study, Journal, Clips and Tags share a content-free heading cue issued
+only after a changed visible route is admitted by existing navigation guards.
+The cue crosses CollectionsHost as presentation metadata; actual owners register
+the current h1. A single CSS opacity animation lasts 150ms with no travel, both
+in normal and reduced motion. It does not clone text, remount actors or delay
+navigation. Initial load, same-row actions and ordinary content/count updates
+stay static. Real cover/leave retires a cue; hidden actors cannot replay it later.
+
+Current owner reads admit each route's presentation latch. Owner/epoch/account
+invalidation synchronously cancels and clears registered effects before private
+projection clearing. Admission rotates DOM registration separately from cue scope,
+so a legitimate cold-route request after invalidation survives its fresh read.
+CSS completion stays at opacity 1 without event/timer-driven route or focus work.
+
+Journal's actual public locked/setup title may consume the entry cue, with
+credential fields untouched. Unlocking does not replay it on the protected title.
+Study consumes its existing 150ms content fade rather than adding a nested fade.
+Search 240/170ms surface motion, review/Done, errors, Settings sections and the
+absent native caption title remain separate contracts. The source is design
+revision f610ced1da443b04699137333c1309925092fffa, Motion `sidenav`, Notes
+`layout-desktop` and `lock`.
