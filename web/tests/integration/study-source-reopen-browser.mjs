@@ -74,7 +74,7 @@ try {
     .click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole("button", { name: /^All notes/ }).click();
-  await page.getByRole("button", { name: "New note", exact: true }).click();
+  await page.locator('#main').getByRole("button", { name: "New note", exact: true }).first().click();
   await page.getByLabel("Note title").fill("Reload source note");
   const editor = page.getByLabel("Note content", { exact: true });
   await editor.click();

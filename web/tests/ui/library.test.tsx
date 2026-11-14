@@ -354,6 +354,7 @@ it("keeps legacy read/export available but rejects editing without a fabricated 
   workspace(api);
   await screen.findByText(/Library metadata exceeds/);
   expect(screen.getByText("New note")).toBeDisabled();
+  expect(within(screen.getByRole("complementary", { name: "Notes navigation" })).getByRole("button", { name: "New note" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Manage tags" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: /A note/ }));
   expect(screen.getByLabelText("Note title")).toHaveAttribute("readonly");

@@ -98,7 +98,7 @@ try {
       await expect(rail).toHaveAttribute("aria-valuenow", String(width));
       const title = await geometry(".desktop-titlebar"),
         sheet = await geometry(".sheet"),
-        identity = await geometry(".identity"),
+        identity = await geometry(".sidebar-account"),
         scroll = await geometry(".desktop-sheet-content");
       expect(title.height).toBe(44);
       expect(title.bg).toBe("rgba(0, 0, 0, 0)");
@@ -120,7 +120,7 @@ try {
   expect((await geometry(".sheet")).x).toBe(420);
   await rail.focus();
   await page.keyboard.press("Enter");
-  await page
+  await page.locator('#main')
     .getByRole("button", { name: "New note", exact: true })
     .first()
     .click();

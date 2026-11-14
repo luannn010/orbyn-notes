@@ -6,7 +6,7 @@ const page=await browser.newPage({viewport:{width:1160,height:800}});const error
 try {
 await page.goto('http://127.0.0.1:5179/tests/integration/library-browser.html');
 await expect(page.getByRole('heading',{name:'All notes',exact:true})).toBeVisible();
-await page.getByRole('button',{name:'New note',exact:true}).click();
+await page.locator('#main').getByRole('button',{name:'New note',exact:true}).first().click();
 await page.getByLabel('Note title',{exact:true}).fill('Encrypted library journey');
 await page.getByLabel('Note content',{exact:true}).fill('First retained writing');
 await expect(page.getByText('Saved in this browser',{exact:true})).toBeVisible();

@@ -33,7 +33,7 @@ try {
     page.getByRole("heading", { name: "All notes", exact: true }),
   ).toBeVisible();
   await width(224);
-  await page
+  await page.locator('#main')
     .getByRole("button", { name: "New note", exact: true })
     .first()
     .click();

@@ -4,6 +4,7 @@ import {
   Suspense,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -124,6 +125,29 @@ export function Workspace({
   session: AccountSession;
   onSignOut: () => Promise<void>;
 }) {
+  const [creatingNote, setCreatingNote] = useState(false);
+  const createGeneration = useRef(0);
+  const createInFlight = useRef<number | null>(null);
+  const createFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accountInitial = useMemo(() => {
+    const first = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+      .segment(session.email.trim())
+      [Symbol.iterator]()
+      .next().value;
+    return first?.segment.toLocaleUpperCase() || "?";
+  }, [session.email]);
+  function retireCreate() {
+    createGeneration.current++;
+    createInFlight.current = null;
+    if (createFocusTimer.current !== null)
+      clearTimeout(createFocusTimer.current);
+    createFocusTimer.current = null;
+    setCreatingNote(false);
+  }
+  useLayoutEffect(
+    () => () => retireCreate(),
+    [store, sourceOwner, session.accountId, session.deviceId],
+  );
   const [sourceTarget, setSourceTarget] = useState<EditorSourceTarget | null>(
       null,
     ),
@@ -167,6 +191,7 @@ export function Workspace({
     null,
   );
   const links = useNoteLinkOwner(sourceOwner, (reason) => {
+    retireCreate();
     try {
       onNoteLinkScopeRevoked?.();
     } catch {
@@ -256,6 +281,7 @@ export function Workspace({
     setSourceUnavailable(null);
   }
   const sourceOwners = useStudySourceOwners(sourceOwner, session, () => {
+    retireCreate();
     revokeSearchScope();
     sourceRequest.current++;
     sourceWorking.current = false;
@@ -300,6 +326,7 @@ export function Workspace({
     if (result.mode === "ready") {
       const nextEpoch = result.snapshot.token.epoch;
       if (adoptedEpoch.current && adoptedEpoch.current !== nextEpoch) {
+        retireCreate();
         selectedSnapshot.current = undefined;
         setSelected(null);
         setHistoryNote(null);
@@ -319,6 +346,8 @@ export function Workspace({
   }
   const [notes, setNotes] = useState<Note[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const selectedForCreateFocus = useRef(selected);
+  selectedForCreateFocus.current = selected;
   const [module, setModuleState] = useState<WorkspaceModule>("notes");
   const [searchActive, setSearchActive] = useState(false),
     [searchQuery, setSearchQuery] = useState(""),
@@ -1276,19 +1305,65 @@ export function Workspace({
     setDrawer(false);
   }
   async function create() {
-    if (readOnly || !canNavigate()) return;
-    clearSourceRoute();
+    if (
+      createInFlight.current !== null ||
+      readOnlyRef.current ||
+      !canNavigate()
+    )
+      return;
+    const ticket = ++createGeneration.current;
+    createInFlight.current = ticket;
+    setCreatingNote(true);
+    const current = () =>
+      createGeneration.current === ticket && createInFlight.current === ticket;
     try {
-      const note = await store.create({
-        title: "",
-        document: { type: "doc", content: [{ type: "paragraph" }] },
-        tags: [],
-      });
-      setNotes((v) => [note, ...v]);
+      const note = await trackOperation(() =>
+        store.create({
+          title: "",
+          document: { type: "doc", content: [{ type: "paragraph" }] },
+          tags: [],
+        }),
+      );
+      if (!current()) return;
+      setNotes((values) => [
+        note,
+        ...values.filter((value) => value.id !== note.id),
+      ]);
+      if (readOnlyRef.current || !canNavigate()) {
+        const value = readOnlyRef.current
+          ? "Note created. Editing is currently unavailable."
+          : checkClose() === "draft"
+            ? "Note created. Finish or discard your unsaved changes before opening it."
+            : "Note created. Wait for the current work to finish before opening it.";
+        navigationGuardNotice.current = value;
+        setNotice(value);
+        return;
+      }
+      clearSourceRoute();
+      setModule("notes");
+      setTrash(false);
+      setTag("");
+      setPinnedOnly(false);
+      setLinkedOnly(false);
+      setQuery("");
+      setDrawer(false);
       setSelected(note.id);
-      setTimeout(() => document.getElementById("note-title")?.focus(), 0);
+      createFocusTimer.current = setTimeout(() => {
+        createFocusTimer.current = null;
+        if (
+          createGeneration.current === ticket &&
+          !readOnlyRef.current &&
+          selectedForCreateFocus.current === note.id
+        )
+          document.getElementById("note-title")?.focus();
+      }, 0);
     } catch (e) {
-      setError(`Couldn’t create note. ${message(e)}`);
+      if (current()) setError(`Couldn’t create note. ${message(e)}`);
+    } finally {
+      if (current()) {
+        createInFlight.current = null;
+        setCreatingNote(false);
+      }
     }
   }
   async function move(note: Note) {
@@ -1562,11 +1637,23 @@ export function Workspace({
         className={drawer ? "sidebar open" : "sidebar"}
         aria-label="Notes navigation"
       >
-        <div className="identity">
-          <b>
-            Orbyn Notes <small>Beta</small>
-          </b>
-          <span title={session.email}>{session.email}</span>
+        <div className="sidebar-account" role="group" aria-label="Account">
+          <span className="sidebar-account-avatar" aria-hidden="true">
+            {accountInitial}
+          </span>
+          <span className="sidebar-account-email" title={session.email}>
+            <bdi>{session.email}</bdi>
+          </span>
+          <button
+            className="sidebar-account-create"
+            type="button"
+            aria-label="New note"
+            title="New note"
+            disabled={readOnly || creatingNote}
+            onClick={() => void create()}
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
         </div>
         {sourceOwner ? (
           <button
@@ -1784,7 +1871,7 @@ export function Workspace({
         </nav>
         <footer>
           <p title="Notes stay encrypted in this browser. This beta does not sync.">
-            ◉ Local only
+            ◉ Beta · Local only
           </p>
           <button
             className="nav"
@@ -2038,6 +2125,7 @@ export function Workspace({
                     onSearchReaderResult={searchReaderResult}
                     view={view}
                     onEpochChange={() => {
+                      retireCreate();
                       selectedSnapshot.current = undefined;
                       setSelected(null);
                     }}
@@ -2304,7 +2392,7 @@ export function Workspace({
                       </button>
                       <button
                         className="primary"
-                        disabled={readOnly}
+                        disabled={readOnly || creatingNote}
                         onClick={() => void create()}
                       >
                         <Plus size={15} />
@@ -2404,7 +2492,7 @@ export function Workspace({
                         <div className="library-empty-actions">
                           <button
                             className="primary"
-                            disabled={readOnly}
+                            disabled={readOnly || creatingNote}
                             onClick={() => void create()}
                           >
                             New note
