@@ -1,0 +1,217 @@
+.study-selection-toolbar {
+  z-index: 9;
+  background: var(--main);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px #0002;
+}
+.study-source-annotation {
+  border-bottom: 1.5px dotted var(--t3);
+}
+.study-source-highlight {
+  background: var(--sel);
+  color: var(--t1);
+  border-radius: 3px;
+  padding: 0 2px;
+  box-shadow: inset 0 -2px 0 var(--t3);
+}
+.source-card-popover {
+  z-index: 40;
+  background: var(--main);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow:
+    0 16px 48px #0003,
+    0 0 0 1px var(--line2);
+  font-size: 12.5px;
+  overflow: auto;
+  animation: source-pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.source-card-popover h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+.source-card-popover > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.source-card-popover textarea {
+  min-height: 68px;
+  resize: vertical;
+}
+.source-card-types {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.source-card-types button {
+  flex: 1;
+  font-size: 12px;
+  padding: 7px;
+}
+.source-card-types button[aria-pressed="true"] {
+  background: var(--sel);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+.source-card-preview {
+  background: var(--raise);
+  border-radius: 12px;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow: auto;
+}
+.source-card-preview p {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.source-card-preview small {
+  color: var(--t3);
+}
+.source-card-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  background: var(--main);
+  color: var(--t1);
+  border-radius: 12px;
+  box-shadow:
+    0 10px 30px #0003,
+    0 0 0 1px var(--line2);
+  padding: 10px 12px 10px 14px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  max-width: calc(100vw - 32px);
+  animation: source-toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes source-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes source-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes source-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 499px) {
+  .source-card-popover {
+    border-radius: 16px 16px 0 0;
+  }
+  .source-card-notice {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    gap: 8px;
+  }
+}
+:root[data-motion="reduced"] .source-card-popover,
+:root[data-motion="reduced"] .source-card-notice {
+  animation: source-fade 150ms linear !important;
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .source-card-popover,
+  :root:not([data-motion="on"]) .source-card-notice {
+    animation: source-fade 150ms linear !important;
+    transform: none !important;
+  }
+}
+
+.study-source-annotation {
+  animation: source-mark-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.source-card-popover.source-closing {
+  animation: source-pop-out 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.source-card-notice.source-closing {
+  animation: source-toast-out 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+@keyframes source-mark-in {
+  from {
+    border-bottom-color: transparent;
+  }
+  to {
+    border-bottom-color: var(--t3);
+  }
+}
+@keyframes source-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes source-toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes source-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+:root[data-motion="reduced"] .study-source-annotation {
+  animation: none !important;
+}
+:root[data-motion="reduced"] .source-card-popover.source-closing,
+:root[data-motion="reduced"] .source-card-notice.source-closing {
+  animation: source-fade-out 150ms linear !important;
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="on"]) .study-source-annotation {
+    animation: none !important;
+  }
+  :root:not([data-motion="on"]) .source-card-popover.source-closing,
+  :root:not([data-motion="on"]) .source-card-notice.source-closing {
+    animation: source-fade-out 150ms linear !important;
+    transform: none !important;
+  }
+}
+
+.source-card-popover.source-card-sheet {
+  border-radius: 16px 16px 0 0;
+}
