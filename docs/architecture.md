@@ -76,3 +76,7 @@ local build, with no installer or public release qualification. See
 ## Delivery boundary: encrypted-owners
 
 Versioned library and Collections owners capture account/epoch authority for every commit. Migration and workspace erase use the pinned engine adaptation and preserve the previous encrypted snapshot on failure. Account identity, trust, approval checkpoints and unrelated zones are retained. These domain adapters precede workspace wiring in this delivery stack.
+
+## Delivery boundary: journal-vault
+
+Journal uses a separately protected envelope and private-form recovery. Account, epoch and genuine borrowed-owner closure revoke access before any late read or crypto result can publish. This clears live references and views, without claiming allocator zeroization or remote deletion. The Journal view is wired in a later slice.
