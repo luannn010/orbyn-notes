@@ -15,8 +15,6 @@ import {
   Settings,
   Plus,
   Menu,
-  Grid2X2,
-  List,
   Pin,
   Paperclip,
   Tags,
@@ -2437,7 +2435,7 @@ export function Workspace({
           </div>
           {(module === "notes" || editing) && !editing && (
             <>
-              <header className="page-heading">
+              <header className="page-heading notes-library-heading">
                 <div>
                   <h1 ref={notesHeadingRef}>
                     {linkedOnly
@@ -2452,22 +2450,33 @@ export function Workspace({
                               ? "Search results"
                               : "All notes"}
                   </h1>
-                  <span>
+                  <span className="notes-library-count">
                     {linkedOnly && linkedQuery?.status !== "ready"
                       ? "Checking links"
-                      : `${visible.length} ${visible.length === 1 ? "note" : "notes"}`}{" "}
-                    ·
-                    {sort === "created"
-                      ? "Created"
-                      : sort === "title"
-                        ? "Title"
-                        : "Edited"}
+                      : `${visible.length} ${visible.length === 1 ? "note" : "notes"}`}
                   </span>
                 </div>
-                <div className="actions">
+                <div className="actions notes-library-toolbar">
+                  {!trash && (
+                    <div className="notes-library-view" role="group" aria-label="View">
+                      <button
+                        aria-label="List view"
+                        aria-pressed={!grid}
+                        onClick={() => setGrid(false)}
+                      >
+                        List
+                      </button>
+                      <button
+                        aria-label="Grid view"
+                        aria-pressed={grid}
+                        onClick={() => setGrid(true)}
+                      >
+                        Grid
+                      </button>
+                    </div>
+                  )}
                   {library && snapshot && (
-                    <label className="library-sort">
-                      Sort
+                    <div className="library-sort">
                       <select
                         aria-label="Sort notes"
                         value={sort}
@@ -2490,7 +2499,7 @@ export function Workspace({
                         <option value="created">Created</option>
                         <option value="title">Title</option>
                       </select>
-                    </label>
+                    </div>
                   )}
                   {trash && library && snapshot && (
                     <button
@@ -2511,20 +2520,6 @@ export function Workspace({
                   {!trash && (
                     <>
                       <button
-                        aria-label="List view"
-                        aria-pressed={!grid}
-                        onClick={() => setGrid(false)}
-                      >
-                        <List size={16} />
-                      </button>
-                      <button
-                        aria-label="Grid view"
-                        aria-pressed={grid}
-                        onClick={() => setGrid(true)}
-                      >
-                        <Grid2X2 size={16} />
-                      </button>
-                      <button
                         disabled={importing || readOnly}
                         onClick={() => chooseMarkdown()}
                       >
@@ -2535,7 +2530,7 @@ export function Workspace({
                         disabled={readOnly || creatingNote}
                         onClick={() => void create()}
                       >
-                        <Plus size={15} />
+                        <Plus size={13} />
                         New note
                       </button>
                     </>

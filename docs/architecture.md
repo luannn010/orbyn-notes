@@ -315,3 +315,20 @@ Search 240/170ms surface motion, review/Done, errors, Settings sections and the
 absent native caption title remain separate contracts. The source is design
 revision f610ced1da443b04699137333c1309925092fffa, Motion `sidenav`, Notes
 `layout-desktop` and `lock`.
+
+
+## Notes library toolbar geometry
+
+The Notes list/grid/filter/Trash header uses a dedicated scoped toolbar. View
+choices form a 28px segmented group with 24px buttons; the real sort select is a
+single 28px control; Import Markdown/New note and Empty Trash use 30px controls.
+The sort select retains its accessible name and existing CAS/disable behavior.
+Explicit centered cross-axis alignment prevents a stacked form label from
+stretching every action to the tallest control. Header title/count are inline;
+the current h1 node and heading-motion ref are retained. Narrow/long-title layouts
+wrap the actual actions without a fixed total header height. Import Markdown is
+an existing beta action retained alongside the source main-toolbar controls.
+All CSS is scoped to Notes library classes; other action groups, dialogs and the
+native caption/editor toolbar retain their own geometry. Design reference:
+f610ced1da443b04699137333c1309925092fffa, Notes `library-list`, `library-grid`
+and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
