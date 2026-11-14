@@ -12,12 +12,14 @@ jobs:
   title:
     name: Pull request title
     if: github.event.pull_request.user.login != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    # Local runner only when the repository variable CI_RUNNER is 'local', the pull request is not from a fork and the actor is not Dependabot. A pull request can still edit this expression for its own run: the real controls are the runner group's repository access and the fork approval policy.
+    runs-on: ${{ (vars.CI_RUNNER == 'local' && github.event.pull_request.head.repo.fork != true && github.actor != 'dependabot[bot]') && fromJSON('["self-hosted","orbyn-local"]') || 'ubuntu-24.04' }}
     timeout-minutes: 2
     steps:
       # Check out `scripts/` from the pull request to test and run its checker.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           sparse-checkout: scripts
       - name: Check the title checker
         run: python3 scripts/test_check_title.py
