@@ -1,0 +1,122 @@
+.study-settings {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.study-settings form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.study-settings-help {
+  margin: 0;
+  color: var(--t3);
+  font-size: 12px;
+}
+.study-settings-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.study-settings-row > label,
+.study-settings-row > div,
+.study-settings-row > span:first-child {
+  min-width: 0;
+  flex: 1;
+}
+.study-settings-row b {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t1);
+}
+.study-settings-row small {
+  display: block;
+  color: var(--t3);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.study-settings-row small.error {
+  color: var(--red);
+}
+.study-settings-row > input[type="text"],
+.study-settings-row > select {
+  width: 100px;
+  height: 32px;
+  flex: none;
+  padding: 0 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--main);
+  color: var(--t1);
+  font-size: 12.5px;
+}
+.study-settings-row > input[type="checkbox"] {
+  appearance: none;
+  width: 30px;
+  height: 18px;
+  flex: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--main) 7px, transparent 7px) 2px
+    2px / 14px 14px no-repeat var(--line2);
+  cursor: pointer;
+}
+.study-settings-row > input[type="checkbox"]:checked {
+  background-position: 14px 2px;
+  background-color: var(--t1);
+}
+.study-settings-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 12px;
+}
+.study-settings-footer > span {
+  flex: 1;
+  color: var(--t3);
+  font-size: 12px;
+}
+.study-settings-notice {
+  margin: 0;
+  color: var(--t2);
+}
+.study-settings-planned {
+  margin-top: 20px;
+}
+.study-planned-label {
+  flex: none;
+  color: var(--t3);
+  font-size: 11px;
+}
+.study-settings-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.settings-study-pane .settings-content {
+  padding-top: 8px;
+}
+.settings-study-pane .settings-heading h3 {
+  font-size: 22px;
+  letter-spacing: -0.015em;
+}
+@media (max-width: 600px) {
+  .study-settings-row {
+    flex-wrap: wrap;
+  }
+  .study-settings-row > label {
+    flex-basis: calc(100% - 116px);
+  }
+  .study-settings-footer > span {
+    flex-basis: 100%;
+  }
+}
