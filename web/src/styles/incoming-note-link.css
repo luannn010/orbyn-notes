@@ -1,0 +1,65 @@
+.incoming-note-link {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 50;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(160px, calc(100dvh - 32px));
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--main);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  color: var(--t1);
+}
+.incoming-note-link > p {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.incoming-note-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+.incoming-note-link-actions button {
+  min-height: 30px;
+  padding: 4px 10px;
+}
+.incoming-note-link-actions button:focus-visible {
+  outline: 2px solid var(--t2);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .incoming-note-link {
+    margin: 0;
+  }
+}
+
+.notes-entry-layout {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.notes-entry-layout > .incoming-note-link {
+  flex: none;
+}
+.notes-entry-layout > .app,
+.notes-entry-layout > .loading {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.desktop-content > .notes-entry-layout {
+  height: 100%;
+}

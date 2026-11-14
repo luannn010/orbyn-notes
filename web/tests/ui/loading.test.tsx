@@ -49,5 +49,5 @@ it("does not paint provisional zero counts or empty tag navigation while initial
     ]),
   );
   expect(screen.getByRole("button", { name: "All notes 1" })).toBeVisible();
-  expect(screen.getByRole("button", { name: /^# Work\s*1$/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Work, 1 note" })).toBeVisible();
 });
