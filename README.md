@@ -2,7 +2,7 @@
 
 Encrypted notes and pages that work offline and link to Orbyn Planner tasks.
 
-**Status: being built. Nothing has launched, and there is nothing to install yet.**
+**Status: being built. No public release is available.**
 
 Orbyn Notes is the second Everyday app in the Orbyn family, beside [Orbyn Planner](https://github.com/orbyn-dev/orbyn-planner). It runs on the open [orbyn-engine](https://github.com/orbyn-dev/orbyn-engine), so notes are encrypted on your device before they sync, and one Orbyn account signs in to every app.
 
@@ -10,17 +10,44 @@ Orbyn Notes is the second Everyday app in the Orbyn family, beside [Orbyn Planne
 
 - Notes and pages, offline first, encrypted before upload.
 - Links between notes and Orbyn Planner tasks and events.
-- Study, Clip and Journal inside the same app (Planned).
+- Study, Clips and Journal in the same app, with connected features planned.
 
-These are plans, not features you can use today. The product plan and designs are internal.
+These are product goals. The local beta below implements part of them; the
+product plan and designs are internal.
 
 ## Web beta implementation
 
 The local web beta is implemented under `web/`; it is not a published release.
-Its scope is a single-browser encrypted library with a rich-text editor, local
-search, tags, Trash/restore and Markdown import/export. New accounts use shared
-Orbyn invites. Notes do not sync in this beta, and clearing browser data removes
-their local keys and content. Export a readable Markdown backup first.
+The local implementation has a rich-text library, tags, pins, version history,
+Trash/restore, Markdown transfer and encrypted Study, Journal and Clips data.
+Study supports local reviews, CSV transfer and cards made from selected saved
+note passages, with verified source jumps. Journal has its own passphrase,
+entries, habits and readable export. Clips saves links and text you paste; page
+fetching, browser capture and highlights remain unfinished. A local Windows shell
+is built from the same UI; see [Windows instructions](docs/windows.md).
+
+The local setup/search work adds optional Markdown setup and search across active
+Notes, saved Clips (including archived items), and actual Study card directions.
+Journal, Trash, review history and captured source quotes are excluded from search.
+Large searches can pause for an explicit Continue; result pages keep exact totals.
+These changes are still undergoing integration and native qualification.
+
+Settings → Study edits the five existing local review preferences with explicit
+Save and Cancel. Daily limits affect the next normal session; already queued
+cards, repeat reviews and Study more can exceed them. Changing the study-day
+start regroups totals without rescheduling cards. Reminders, Planner tasks,
+card suggestions and agent setup remain planned.
+
+Study reviews use two-dimensional card swaps, toast exits and delayed loading
+feedback, with reduced-motion support. Grading waits for the answer entrance to
+finish; presentation timers never record reviews or change scheduling.
+
+New accounts use shared Orbyn invites. This beta does not sync, and clearing a
+browser or WebView profile removes its local keys and content. Export each module
+separately before removing data: Notes Markdown excludes Study, Journal and Clips.
+Study CSV preserves rendered card text and tags; it does not restore scheduling,
+card types or passage links. These exports are not a complete workspace backup.
+Local implementation does not mean all design frames or release checks are done.
 
 Use Node.js 24 and run these commands from `web/`:
 
