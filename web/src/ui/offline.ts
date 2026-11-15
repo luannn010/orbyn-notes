@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+
 export function serviceWorkerSource(
   cacheName: string,
   assets: string[],
@@ -10,7 +12,7 @@ self.addEventListener('fetch',event=>{const request=event.request;const url=new 
 `;
 }
 export function registerOfflineShell() {
-  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  if (import.meta.env.PROD && !isTauri() && "serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       void navigator.serviceWorker
         .register(`${import.meta.env.BASE_URL}sw.js`, {

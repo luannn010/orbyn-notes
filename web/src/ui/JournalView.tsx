@@ -29,6 +29,8 @@ import type {
 } from "../collections/journalViewDraft";
 import type { NoteDocument } from "../domain/contracts";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
+import { isDesktop } from "../desktop/window";
+import { saveDesktopFile } from "../desktop/files";
 import { Dialog } from "./primitives";
 import { RichEditor, type EditorLinkControl } from "./RichEditor";
 import { Menu } from "./Menu";
@@ -1263,17 +1265,28 @@ function JournalExport({
   onCancel: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const active = useRef(true);
+  const vaultGeneration = useRef(0);
   const download = useRef<string | null>(null);
   const [error, setError] = useState("");
-  useLayoutEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    active.current = true;
+    const unsubscribe = vault.subscribe(() => { vaultGeneration.current++; });
+    return () => {
+      active.current = false;
+      vaultGeneration.current++;
+      unsubscribe();
       if (download.current) URL.revokeObjectURL(download.current);
       download.current = null;
-    },
-    [],
-  );
-  function prepare() {
-    if (download.current) return;
+    };
+  }, [vault]);
+  async function prepare() {
+    if (download.current || saving || saved) return;
+    setSaving(true);
+    setError("");
+    const generation = vaultGeneration.current;
     try {
       const output = exportJournalFiles(vault.read());
       if (!output.length) {
@@ -1285,13 +1298,21 @@ function JournalExport({
       const files: Record<string, Uint8Array> = {};
       for (const file of output) files[file.filename] = strToU8(file.content);
       if (vault.status().phase !== "unlocked") return;
-      const generated = URL.createObjectURL(
-        new Blob([zipSync(files) as BlobPart], { type: "application/zip" }),
-      );
+      const blob = new Blob([zipSync(files) as BlobPart], { type: "application/zip" });
+      if (isDesktop()) {
+        const result = await trackOperation(() => saveDesktopFile("orbyn-journal.zip", blob, () => {
+          if (!active.current || vaultGeneration.current !== generation || vault.status().phase !== "unlocked") throw new Error("Export is no longer current.");
+        }));
+        if (active.current && vaultGeneration.current === generation && vault.status().phase === "unlocked" && result) setSaved(true);
+        return;
+      }
+      const generated = URL.createObjectURL(blob);
       download.current = generated;
       setUrl(generated);
     } catch {
-      setError("Couldn’t export Journal. Your entries were not changed.");
+      if (active.current && vault.status().phase === "unlocked") setError("Couldn’t export Journal. Your entries were not changed.");
+    } finally {
+      if (active.current) setSaving(false);
     }
   }
   return (
@@ -1311,14 +1332,14 @@ function JournalExport({
         </p>
       )}
       <div className="journal-actions">
-        <button onClick={onCancel}>{url ? "Done" : "Cancel"}</button>
+        <button disabled={saving} onClick={onCancel}>{url || saved ? "Done" : "Cancel"}</button>
         {url ? (
           <a href={url} download="orbyn-journal.zip">
             Download Journal
           </a>
         ) : (
-          <button className="primary" onClick={prepare}>
-            Export Journal
+          <button className="primary" disabled={saving || saved} onClick={() => void prepare()}>
+            {saving ? "Saving…" : saved ? "Saved" : "Export Journal"}
           </button>
         )}
       </div>

@@ -723,3 +723,20 @@ describe("encrypted library metadata owner", () => {
     expect(await ready(await open())).toEqual(before);
   });
 });
+
+
+it("replays caller-identified creation after reopen without duplicating or adopting competing content", async () => {
+  let store = await open();
+  const id = crypto.randomUUID();
+  const first = await store.create(input, id);
+  expect(first.id).toBe(id);
+  store.close();
+  store = await open();
+  const retry = await store.create(input, id);
+  expect(retry).toEqual(first);
+  expect((await store.list()).filter(note => note.id === id)).toHaveLength(1);
+  await expect(store.create({ ...input, title: "Competing" }, id)).rejects.toMatchObject({ code: "revision_conflict" });
+  await store.update(id, { title: "Later revision" }, 1);
+  await expect(store.create(input, id)).rejects.toMatchObject({ code: "revision_conflict" });
+  expect((await store.get(id))?.title).toBe("Later revision");
+});

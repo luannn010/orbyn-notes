@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { Dialog } from "./primitives";
+import { isLocalSession } from "../data/local";
 import "../styles/setup.css";
 export type SetupImportState =
   | "idle"
@@ -58,8 +59,8 @@ export function FirstRunSetup({
       <div className="setup-choice">
         <Check size={18} aria-hidden="true" />
         <div>
-          <b>Signed in as {email}</b>
-          <small>Your Orbyn account</small>
+          <b>{isLocalSession({ email }) ? "Local workspace" : <>Signed in as {email}</>}</b>
+          <small>{isLocalSession({ email }) ? "No account needed" : "Your Orbyn account"}</small>
         </div>
         <span className="setup-status">Done</span>
       </div>

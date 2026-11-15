@@ -18,6 +18,7 @@ import {
   Pin,
   Paperclip,
   Tags,
+  Link2,
 } from "lucide-react";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
@@ -28,8 +29,11 @@ import {
   MAX_MARKDOWN_FILES,
 } from "../transfer";
 import { projectNotes, plainText, message } from "./model";
-import { Dialog, usePreferences } from "./primitives";
+import { Dialog, usePreferences, readPreference } from "./primitives";
 import { SettingsView } from "./SettingsView";
+import { SettingsSurface } from "./SettingsSurface";
+import { useWorkspaceHistory } from "./useWorkspaceHistory";
+import "../styles/desktop-navigation.css";
 import { useRouteHeadings, useRouteHeading, type HeadingRoute, type HeadingCue } from "./routeHeadingMotion";
 import { SidebarResize, useSidebarWidth } from "./SidebarResize";
 import {
@@ -39,9 +43,14 @@ import {
 } from "./SidebarSelection";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
+import { NewNote } from "./NewNote";
+import { isDesktop } from "../desktop/window";
+import { openQuickNote, listenHandoff, replyHandoff } from "../desktop/capture";
 import { NotesMark } from "./NotesMark";
 import { buildDownload } from "./download";
 import { useDesktop } from "../desktop/DesktopShell";
+import { saveDesktopFile } from "../desktop/files";
+import { isLocalSession } from "../data/local";
 import {
   checkClose,
   trackOperation,
@@ -113,6 +122,7 @@ export function Workspace({
   store,
   session,
   onSignOut,
+  onUseLocal,
   library,
   sourceOwner,
   onNoteLinkNavigatorReady,
@@ -131,6 +141,7 @@ export function Workspace({
   sourceOwner?: NotesLibraryStore;
   session: AccountSession;
   onSignOut: () => Promise<void>;
+  onUseLocal?: () => void;
 }) {
   const routeHeadings = useRouteHeadings();
   const [headingCue, setHeadingCue] = useState<HeadingCue | null>(null);
@@ -162,17 +173,22 @@ export function Workspace({
     [sidebarSelection, store, sourceOwner, session.accountId, session.deviceId],
   );
   const [creatingNote, setCreatingNote] = useState(false);
+  const [browserQuick, setBrowserQuick] = useState(false);
+  const [newDraft, setNewDraft] = useState<{ key: string; tags: string[]; savedId?: string } | null>(null);
   const createGeneration = useRef(0);
   const createInFlight = useRef<number | null>(null);
   const createFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localSession = isLocalSession(session);
+  const accountLabel = localSession ? "Local workspace" : session.email;
   const accountInitial = useMemo(() => {
     const first = new Intl.Segmenter(undefined, { granularity: "grapheme" })
-      .segment(session.email.trim())
+      .segment(accountLabel.trim())
       [Symbol.iterator]()
       .next().value;
     return first?.segment.toLocaleUpperCase() || "?";
-  }, [session.email]);
+  }, [accountLabel]);
   function retireCreate() {
+    setNewDraft(null);
     createGeneration.current++;
     createInFlight.current = null;
     if (createFocusTimer.current !== null)
@@ -309,6 +325,7 @@ export function Workspace({
     setSourceTarget(value);
   }
   function clearSourceRoute() {
+    setNewDraft(null);
     linkNavigationTicket.current++;
     setLinkNotice("");
     sourceRequest.current++;
@@ -467,10 +484,14 @@ export function Workspace({
   const desktop = useDesktop();
   const mainRef = useRef<HTMLElement>(null);
   const [roomForNoteList, setRoomForNoteList] = useState(false);
-  const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(() => readPreference("notes.sidebar.pinned") === "false");
+  const [railPointer, setRailPointer] = useState(false);
+  const [railFocus, setRailFocus] = useState(false);
+  const [railSuppressed, setRailSuppressed] = useState(false);
+  const sidebarExpanded = !sidebarHidden || (!railSuppressed && (railPointer || railFocus));
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const [wide, setWide] = useState(
-    () => matchMedia("(min-width: 900px)").matches,
+    () => !!desktop || matchMedia("(min-width: 900px)").matches,
   );
   const [settings, setSettings] = useState(false);
   const settingsStudyGuard = useRef<SettingsLeaveGuard | null>(null);
@@ -599,18 +620,18 @@ export function Workspace({
   useEffect(() => {
     const query = matchMedia("(min-width: 900px)");
     const update = () => {
-      setWide(query.matches);
-      if (query.matches) setDrawer(false);
+      setWide(!!desktop || query.matches);
+      if (desktop || query.matches) setDrawer(false);
     };
     update();
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
-  }, []);
+  }, [!!desktop]);
   useLayoutEffect(() => {
     if (!desktop || !loaded) return;
     desktop.setLayout({
-      sidebarWidth,
-      sidebarVisible: wide && !sidebarHidden,
+      sidebarWidth: sidebarHidden ? 56 : sidebarWidth,
+      sidebarVisible: wide,
     });
     return () => desktop.setLayout(null);
   }, [desktop?.setLayout, loaded, sidebarWidth, wide, sidebarHidden]);
@@ -634,14 +655,19 @@ export function Workspace({
   useLayoutEffect(() => {
     if (!desktop || !loaded) return;
     desktop.setNavigation({
-      expanded: wide ? !sidebarHidden : drawer,
+      expanded: wide ? sidebarExpanded : drawer,
+      pinned: wide ? !sidebarHidden : drawer,
       toggle: () => {
-        if (wide) setSidebarHidden((value) => !value);
+        if (wide) setSidebarHidden((value) => {
+          try { localStorage.setItem("notes.sidebar.pinned", value ? "true" : "false"); } catch { /* The current window still works. */ }
+          setRailSuppressed(!value);
+          return !value;
+        });
         else setDrawer((value) => !value);
       },
     });
     return () => desktop.setNavigation(null);
-  }, [desktop?.setNavigation, loaded, wide, sidebarHidden, drawer]);
+  }, [desktop?.setNavigation, loaded, wide, sidebarHidden, sidebarExpanded, drawer]);
   useEffect(() => {
     if (loaded) return;
     const timer = setTimeout(() => setShowLoadingSkeleton(true), 400);
@@ -832,7 +858,7 @@ export function Workspace({
     ...(library ? ["pinned", ...(links.service ? ["linked"] : []), "tags"] : []),
     ...sidebarTagKeys, "trash",
   ];
-  const sidebarShape = `${sidebarWidth}:${wide}:${drawer}:${sidebarHidden}`;
+  const sidebarShape = `${sidebarWidth}:${wide}:${drawer}:${sidebarHidden}:${sidebarExpanded}`;
   if (
     sidebarLayout.current.shape !== sidebarShape ||
     sidebarLayout.current.keys.length !== sidebarKeys.length ||
@@ -849,7 +875,7 @@ export function Workspace({
     : trash ? "trash"
       : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
-  const editing = selected !== null && current;
+  const editing = !!newDraft || selected !== null && current;
   const splitNotes = !!desktop && roomForNoteList && !!editing && module === "notes" && !trash;
   const noteActors = Array.from(
     new Set(
@@ -879,6 +905,50 @@ export function Workspace({
     } else clearNavigationGuardNotice();
     return state === "allowed";
   }
+  const location = { module, selected, trash, tag, pinnedOnly, linkedOnly, settings, searchActive };
+  const history = useWorkspaceHistory(location, JSON.stringify(location), loaded && !!desktop,
+    (target) => {
+      clearSourceRoute();
+      cancelSearchWork();
+      setModule(target.module);
+      setSelected(target.selected && notes.some(note => note.id === target.selected) ? target.selected : null);
+      setTrash(target.trash);
+      setTag(target.tag);
+      setPinnedOnly(target.pinnedOnly);
+      setLinkedOnly(target.linkedOnly);
+      setSettings(target.settings);
+      setSearchActive(target.searchActive);
+      setDrawer(false);
+    },
+    (action) => {
+      const leave = () => { if (canNavigate()) action(); };
+      if (settings && settingsStudyGuard.current) settingsStudyGuard.current.requestLeave(leave);
+      else leave();
+    });
+  const chromeActions = useRef({ openSettings: () => {}, newNote: () => {} });
+  chromeActions.current = {
+    openSettings: () => {
+      if (!canNavigate()) return;
+      settingsReturnFocus.current = desktop?.navigationRef.current ?? null;
+      setSettings(true);
+      setDrawer(false);
+    },
+    newNote: () => {
+      const action = () => { if (canNavigate()) { setSettings(false); void create(); } };
+      if (settings && settingsStudyGuard.current) settingsStudyGuard.current.requestLeave(action);
+      else action();
+    },
+  };
+  const chromeTitle = settings ? "Settings" : searchActive ? "Search" : newDraft ? "New note" : editing ? current?.title || "Untitled note"
+    : module === "journal" ? "Journal" : module === "study" ? "Study" : module === "clips" ? "Clips"
+      : module === "tags" ? "Tags" : trash ? "Trash" : tag || (pinnedOnly ? "Pinned" : linkedOnly ? "Linked" : "All notes");
+  useLayoutEffect(() => {
+    if (!desktop || !loaded) return;
+    desktop.setChrome({ title: chromeTitle, settingsOpen: settings, canBack: history.canBack, canForward: history.canForward,
+      back: history.back, forward: history.forward,
+      openSettings: () => chromeActions.current.openSettings(), newNote: () => chromeActions.current.newNote() });
+    return () => desktop.setChrome(null);
+  }, [desktop?.setChrome, loaded, chromeTitle, settings, history.canBack, history.canForward, history.back, history.forward]);
   function clearNavigationGuardNotice() {
     const owned = navigationGuardNotice.current;
     if (owned) {
@@ -1473,67 +1543,60 @@ export function Workspace({
     setDrawer(false);
   }
   async function create() {
-    if (
-      createInFlight.current !== null ||
-      readOnlyRef.current ||
-      !canNavigate()
-    )
-      return;
-    const ticket = ++createGeneration.current;
-    createInFlight.current = ticket;
-    setCreatingNote(true);
-    const current = () =>
-      createGeneration.current === ticket && createInFlight.current === ticket;
-    try {
-      const note = await trackOperation(() =>
-        store.create({
-          title: "",
-          document: { type: "doc", content: [{ type: "paragraph" }] },
-          tags: [],
-        }),
-      );
-      if (!current()) return;
-      setNotes((values) => [
-        note,
-        ...values.filter((value) => value.id !== note.id),
-      ]);
-      if (readOnlyRef.current || !canNavigate()) {
-        const value = readOnlyRef.current
-          ? "Note created. Editing is currently unavailable."
-          : checkClose() === "draft"
-            ? "Note created. Finish or discard your unsaved changes before opening it."
-            : "Note created. Wait for the current work to finish before opening it.";
-        navigationGuardNotice.current = value;
-        setNotice(value);
-        return;
-      }
-      clearSourceRoute();
-      setModule("notes");
-      setTrash(false);
-      setTag("");
-      setPinnedOnly(false);
-      setLinkedOnly(false);
-      setQuery("");
-      setDrawer(false);
-      setSelected(note.id);
-      createFocusTimer.current = setTimeout(() => {
-        createFocusTimer.current = null;
-        if (
-          createGeneration.current === ticket &&
-          !readOnlyRef.current &&
-          selectedForCreateFocus.current === note.id
-        )
-          document.getElementById("note-title")?.focus();
-      }, 0);
-    } catch (e) {
-      if (current()) setError(`Couldn’t create note. ${message(e)}`);
-    } finally {
-      if (current()) {
-        createInFlight.current = null;
-        setCreatingNote(false);
-      }
-    }
+    if (readOnlyRef.current || !canNavigate()) return;
+    const tags = tag ? [tag] : [];
+    clearSourceRoute();
+    setModule("notes"); setSelected(null); setTrash(false); setPinnedOnly(false);
+    setLinkedOnly(false); setQuery(""); setDrawer(false);
+    setNewDraft({ key: crypto.randomUUID(), tags });
   }
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "n" || event.repeat || event.isComposing) return;
+      event.preventDefault();
+      if (document.querySelector('dialog[open], [role="dialog"]') || settings) return;
+      void create();
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  });
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey || event.key.toLowerCase() !== "n" || event.repeat || event.isComposing) return;
+      event.preventDefault();
+      if (isDesktop()) void openQuickNote().catch(error => setNotice(String(error)));
+      else setBrowserQuick(true);
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+  useEffect(() => {
+    if (!desktop) return;
+    let active = true, stop: (() => void) | undefined;
+    void listenHandoff(request => {
+      void (async () => {
+        if (!active || request.accountId !== session.accountId || request.deviceId !== session.deviceId) { await replyHandoff(request.token, false); return; }
+        const note = await store.get(request.noteId);
+        if (!active || !note || note.trashedAt) { await replyHandoff(request.token, false); return; }
+        let live = true, accepted = false;
+        const admit = () => {
+          if (!live || !active || !canNavigate()) return;
+          selectedSnapshot.current = note;
+          setNotes(values => [note, ...values.filter(value => value.id !== note.id)]);
+          clearSourceRoute(); cancelSearchWork();
+          setModule("notes"); setSettings(false); setSetupOpen(false); setSearchActive(false); setSearchOrigin(null);
+          setTrash(false); setPinnedOnly(false); setLinkedOnly(false); setTag(""); setQuery(""); setSelected(note.id); setDrawer(false);
+          accepted = true;
+        };
+        if (settings && settingsStudyGuard.current) settingsStudyGuard.current.requestLeave(admit);
+        else admit();
+        // A delayed Study confirmation never replays an expired handoff.
+        live = false;
+        await replyHandoff(request.token, accepted);
+      })().catch(() => { if (active) setNotice("Quick note could not open here. Its text is still in Quick note."); });
+    }).then(value => { if (active) stop = value; else value(); }).catch(() => setNotice("Quick note handoff is unavailable."));
+    return () => { active = false; stop?.(); };
+  }, [!!desktop, store, session.accountId, session.deviceId, settings]);
   async function move(note: Note) {
     if (readOnly) return;
     if (library) {
@@ -1720,6 +1783,17 @@ export function Workspace({
         exportReceipt.current = null;
       }
       const { blob, name } = output;
+      if (isDesktop()) {
+        const saved = await trackOperation(() => saveDesktopFile(name, blob, async () => {
+          if (ticket !== exportGeneration.current) throw new Error("Export is no longer current.");
+          if (exportReceipt.current) await exportReceipt.current.service.assertFreshExport(exportReceipt.current.result);
+          if (ticket !== exportGeneration.current) throw new Error("Export is no longer current.");
+        }));
+        if (ticket !== exportGeneration.current || !saved) return;
+        setExportNotes(null);
+        setNotice("Export saved");
+        return;
+      }
       setDownload({ url: URL.createObjectURL(blob), name });
       setExportNotes(null);
       setNotice("Export prepared");
@@ -1779,7 +1853,7 @@ export function Workspace({
   return (
     <div
       className={
-        desktop && wide && sidebarHidden ? "app desktop-sidebar-hidden" : "app"
+        desktop && wide && sidebarHidden ? "app desktop-icon-rail" : "app"
       }
       style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
@@ -1814,20 +1888,36 @@ export function Workspace({
         aria-modal={drawer ? true : undefined}
         className={drawer ? "sidebar open" : "sidebar"}
         aria-label="Notes navigation"
+        inert={!!desktop && settings}
+        data-expanded={desktop && wide ? sidebarExpanded : true}
+        data-pinned={!sidebarHidden}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== "touch") { setRailPointer(true); setRailSuppressed(false); }
+        }}
+        onPointerLeave={() => { setRailPointer(false); if (!railFocus) setRailSuppressed(false); }}
+        onFocusCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setRailFocus(true); setRailSuppressed(false); }
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setRailFocus(false); if (!railPointer) setRailSuppressed(false); }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && sidebarHidden && sidebarExpanded) { setRailSuppressed(true); event.stopPropagation(); }
+        }}
       >
         <SidebarSelection
           controller={sidebarSelection}
           activeKey={sidebarActiveKey}
           layoutVersion={sidebarLayout.current.version}
           privacyRevision={sidebarPrivacy}
-          visible={loaded && (wide ? !(desktop && sidebarHidden) : drawer)}
+          visible={loaded && (wide || drawer)}
         />
         <div className="sidebar-account" role="group" aria-label="Account">
           <span className="sidebar-account-avatar" aria-hidden="true">
             {accountInitial}
           </span>
-          <span className="sidebar-account-email" title={session.email}>
-            <bdi>{session.email}</bdi>
+          <span className="sidebar-account-email" title={accountLabel}>
+            <bdi>{accountLabel}</bdi>
           </span>
           <button
             className="sidebar-account-create"
@@ -2004,6 +2094,7 @@ export function Workspace({
                     setDrawer(false);
                   }}
                 >
+                  <Link2 size={15} aria-hidden="true" />
                   <span className="nav-label">Linked</span>
                 </button>
               )}
@@ -2098,7 +2189,7 @@ export function Workspace({
         controls="notes-sidebar"
         disabled={!wide || !!(desktop && sidebarHidden)}
       />
-      <main ref={mainRef} id="main" className="sheet" inert={drawer}>
+      <main ref={mainRef} id="main" className="sheet" inert={drawer || (!!desktop && settings)}>
         <div className="desktop-sheet-content">
         <SearchSurface
           active={searchActive}
@@ -2716,7 +2807,10 @@ export function Workspace({
               )}
             </section>
           )}
-          <div className="note-actor-pool" hidden={!editing}>
+          {newDraft && <NewNote key={newDraft.key} store={store} initialTags={newDraft.tags}
+            onSaved={note => { setNotes(values => [note, ...values.filter(value => value.id !== note.id)]); setNewDraft(value => value && ({ ...value, savedId: note.id })); }}
+            onBack={() => setNewDraft(null)} />}
+          <div className="note-actor-pool" hidden={!editing || !!newDraft}>
             {noteActors.map((actor) => (
               <div
                 key={`${session.accountId}:${snapshot?.token.epoch ?? ""}:${searchPrivacyVersion}:${actor.id}`}
@@ -2816,6 +2910,7 @@ export function Workspace({
         />
         </div>
       </main>
+      {browserQuick && <aside className="browser-quick-note" role="dialog" aria-label="Quick note"><header>Quick note · In this browser<button onClick={() => { if (canNavigate()) setBrowserQuick(false); }}>Close</button></header><NewNote quick store={store} onSaved={note => setNotes(values => [note, ...values.filter(value => value.id !== note.id)])} onBack={() => {}} onClose={() => setBrowserQuick(false)} onOpen={async note => { if (!canNavigate()) throw new Error("Finish your current work before opening this note."); clearSourceRoute(); setModule("notes"); setSelected(note.id); setBrowserQuick(false); }} /></aside>}
       {linkRecoveryOpen && links.service && (
         <Dialog
           title="Note links"
@@ -2924,9 +3019,7 @@ export function Workspace({
         </Dialog>
       )}
       {settings && (
-        <Dialog
-          title="Settings"
-          className="settings-dialog"
+        <SettingsSurface
           returnFocusTo={settingsReturnFocus.current}
           onClose={() => {
             if (settingsStudyGuard.current)
@@ -2954,6 +3047,7 @@ export function Workspace({
             }}
             email={session.email}
             preferences={prefs}
+            onUseLocal={onUseLocal ? () => { if (canNavigate()) onUseLocal(); } : undefined}
             onSignOut={() => {
               setSignOutError("");
               setSignOutOpen(true);
@@ -2977,17 +3071,17 @@ export function Workspace({
             onSetup={() => openSetup("manual")}
             setupUnavailable={incomingNoteIntentActive}
           />
-        </Dialog>
+        </SettingsSurface>
       )}
       {signOutOpen && (
         <Dialog
-          title="Sign out of Notes?"
+          title={localSession ? "Close local workspace?" : "Sign out of Notes?"}
           onClose={() => {
             if (!signOutBusy) setSignOutOpen(false);
           }}
         >
           <p>
-            {storageCopy(!!desktop).signOut}
+            {localSession ? "Your saved local notes stay on this device. They are not backed up or synced. Export a copy to keep them." : storageCopy(!!desktop).signOut}
           </p>
           {signOutError && (
             <p className="error" role="alert">
@@ -3007,13 +3101,13 @@ export function Workspace({
                 await onSignOut();
                 setSignOutOpen(false);
               } catch {
-                setSignOutError("Couldn’t sign out. Try again.");
+                setSignOutError(localSession ? "Couldn’t close the workspace. Try again." : "Couldn’t sign out. Try again.");
               } finally {
                 setSignOutBusy(false);
               }
             }}
           >
-            {signOutBusy ? "Signing out…" : "Sign out"}
+            {signOutBusy ? (localSession ? "Closing…" : "Signing out…") : (localSession ? "Close workspace" : "Sign out")}
           </button>
         </Dialog>
       )}

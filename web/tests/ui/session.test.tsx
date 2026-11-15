@@ -74,12 +74,12 @@ describe("session boundaries", () => {
       screen.queryByText("Private library contents"),
     ).not.toBeInTheDocument();
   });
-  it("shows explicit unavailability without engine configuration", async () => {
+  it("keeps entry available without engine configuration for local use", async () => {
     vi.stubEnv("VITE_ENGINE_URL", "");
     control.session = null;
     render(<App />);
-    await screen.findByText("Notes can’t open yet");
-    expect(screen.queryByText("Signed out entry")).not.toBeInTheDocument();
+    await screen.findByText("Signed out entry");
+    expect(screen.queryByText("Notes can’t open yet")).not.toBeInTheDocument();
   });
   it("opens a locally unlocked library without account network configuration", async () => {
     vi.stubEnv("VITE_ENGINE_URL", "");

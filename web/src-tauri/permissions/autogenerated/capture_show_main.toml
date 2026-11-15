@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-capture-show-main"
+description = "Enables the capture_show_main command without any pre-configured scope."
+commands.allow = ["capture_show_main"]
+
+[[permission]]
+identifier = "deny-capture-show-main"
+description = "Denies the capture_show_main command without any pre-configured scope."
+commands.deny = ["capture_show_main"]

@@ -2,12 +2,34 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
   "description": "The local main window can manage its caption, guarded close and validated HTTP(S) source opening.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "local": true,
   "permissions": [
-    "core:event:allow-listen", "core:event:allow-unlisten",
-    "core:window:allow-is-maximized", "core:window:allow-minimize",
-    "core:window:allow-toggle-maximize", "core:window:allow-start-dragging",
-    "core:window:allow-close", "allow-finish-close", "allow-show-system-menu", "allow-open-external-url", "allow-note-link-snapshot", "allow-note-link-ack", "allow-note-link-retire"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-is-maximized",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "allow-choose-export",
+    "allow-write-export",
+    "allow-discard-export",
+    "allow-finish-close",
+    "allow-show-system-menu",
+    "allow-open-external-url",
+    "allow-note-link-snapshot",
+    "allow-note-link-ack",
+    "allow-note-link-retire",
+    "allow-capture-open",
+    "allow-capture-scope",
+    "allow-capture-require-closed",
+    "allow-capture-handoff-result",
+    "allow-capture-shortcut-status",
+    "allow-capture-quit-reply",
+    "allow-capture-quit",
+    "allow-capture-owner-changed"
   ]
 }

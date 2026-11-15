@@ -10,25 +10,33 @@ import { storageCopy } from "./ui/storageCopy";
 import { protectOperations } from "./desktop/closeGuard";
 import { useIncomingNoteLink } from "./links/useIncomingNoteLink";
 import { IncomingNoteLink } from "./ui/noteLinks/IncomingNoteLink";
+import { localModeSelected, openLocalSession, selectLocalMode } from "./data/local";
+import { lock } from "./account/session";
+import { isQuickWindow, requireQuickClosed, setCaptureScope } from "./desktop/capture";
+const QuickNoteWindow = lazy(() => import("./ui/QuickNoteWindow").then(module => ({ default: module.QuickNoteWindow })));
+const QuickNoteLocked = lazy(() => import("./ui/QuickNoteWindow").then(module => ({ default: module.QuickNoteLocked })));
 const Workspace = lazy(() =>
   import("./ui/Workspace").then((module) => ({ default: module.Workspace })),
 );
 export function App() {
+  if (isQuickWindow()) return <Suspense fallback={<Loading />}><AppContent quick /></Suspense>;
   return (
     <DesktopShell>
       <AppContent />
     </DesktopShell>
   );
 }
-function AppContent() {
+function AppContent({ quick = false }: { quick?: boolean }) {
   usePreferences();
   const [service, setService] = useState<AccountService | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
   const [store, setStore] = useState<NotesLibraryStore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const incoming = useIncomingNoteLink(store, isDesktop());
+  const [local, setLocal] = useState(localModeSelected);
+  const incoming = useIncomingNoteLink(quick ? null : store, isDesktop() && !quick);
   const activeSession = useRef(session);
   activeSession.current = session;
   useEffect(
@@ -48,20 +56,15 @@ function AppContent() {
     setLoading(true);
     setError("");
     try {
-      const original = createAccountService();
-      const account = isDesktop()
+      const original = local ? null : createAccountService();
+      const account = original && isDesktop()
         ? protectOperations(original, Object.keys(original))
         : original;
       setService(account);
-      void account
-        .current()
+      void (local ? openLocalSession(() => active) : account!.current())
         .then((s) => {
           if (active) {
-            if (!s && !import.meta.env.VITE_ENGINE_URL)
-              setError(
-                "The account or encryption service isn’t available. Your saved notes were not changed.",
-              );
-            else setSession(s);
+            setSession(s);
           }
         })
         .catch(() => {
@@ -82,7 +85,7 @@ function AppContent() {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, local]);
   useEffect(() => {
     if (!session || session.deviceState === "pending") return;
     let active = true;
@@ -121,9 +124,20 @@ function AppContent() {
       setStore(null);
     };
   }, [session, attempt]);
+  useEffect(() => {
+    if (!isDesktop()) return;
+    void setCaptureScope(session?.accountId ?? null, session?.deviceId ?? null).catch(() => {});
+    return () => { void setCaptureScope(null, null).catch(() => {}); };
+  }, [session?.accountId, session?.deviceId]);
   async function signOut(propagateFailure = false) {
+    let releaseOwner = async () => {};
     try {
-      await service?.signOut();
+      if (isDesktop() && !quick) releaseOwner = await requireQuickClosed();
+      if (local) {
+        selectLocalMode(false);
+        setLocal(false);
+        lock();
+      } else await service?.signOut();
       incoming.revoke();
       store?.close();
       setStore(null);
@@ -132,6 +146,25 @@ function AppContent() {
     } catch (error) {
       if (propagateFailure) throw error;
       setError("Couldn’t sign out. Try again.");
+    } finally {
+      await releaseOwner().catch(() => setActionError("Quick note is paused because workspace coordination failed. Reopen Notes before trying it again."));
+    }
+  }
+  async function useLocal() {
+    let releaseOwner = async () => {};
+    if (isDesktop() && !quick) { try { releaseOwner = await requireQuickClosed(); } catch (error) { setActionError(String(error)); return; } }
+    try {
+    setActionError("");
+    incoming.revoke();
+    store?.close();
+    setStore(null);
+    setSession(null);
+    setError("");
+    selectLocalMode(true);
+    setLocal(true);
+    setAttempt((value) => value + 1);
+    } catch (error) { setActionError(String(error)); } finally {
+      await releaseOwner().catch(() => setActionError("Quick note is paused because workspace coordination failed. Reopen Notes before trying it again."));
     }
   }
   const incomingNotice = incoming.state ? (
@@ -154,6 +187,7 @@ function AppContent() {
         <Loading />
       </>
     );
+  if (quick && (!session || error)) return <QuickNoteLocked />;
   if (error)
     return (
       <>
@@ -171,19 +205,27 @@ function AppContent() {
             {session && (
               <button onClick={() => void signOut()}>Sign out</button>
             )}
+            {!local && <button onClick={useLocal}>Use without an account</button>}
           </section>
         </main>
       </>
     );
-  if (!service) return publicNotice;
+  if (!session && local) return (
+    <main className="account-page"><section className="account-card">
+      <h1>Local workspace is closed</h1>
+      <p>Your saved local notes are still on this device.</p>
+      <button className="primary" onClick={useLocal}>Open local workspace</button>
+      <button onClick={() => { selectLocalMode(false); setLocal(false); }}>Back</button>
+    </section></main>
+  );
   if (!session)
     return (
       <>
         {publicNotice}
-        <AccountView service={service} onSession={setSession} />
+        {service && <AccountView service={service} onSession={setSession} onUseLocal={useLocal} />}
       </>
     );
-  if (session.deviceState === "pending")
+  if (session.deviceState === "pending" && service)
     return (
       <>
         {publicNotice}
@@ -195,9 +237,11 @@ function AppContent() {
       </>
     );
   if (!store) return publicNotice;
+  if (quick) return <QuickNoteWindow key={session.accountId} store={store} />;
   return (
     <div className="notes-entry-layout">
       {incomingNotice}
+      {actionError && <p role="alert" className="banner">{actionError}</p>}
       <Suspense fallback={<Loading />}>
         <Workspace
           key={session.accountId}
@@ -210,6 +254,7 @@ function AppContent() {
           formatNoteLink={incoming.format}
           session={session}
           onSignOut={() => signOut(true)}
+          onUseLocal={useLocal}
         />
       </Suspense>
     </div>

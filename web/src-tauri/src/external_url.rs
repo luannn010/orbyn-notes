@@ -34,7 +34,7 @@ pub(crate) async fn open_external_url(
     window: tauri::WebviewWindow,
     url: String,
 ) -> Result<(), String> {
-    super::verify_caller(&window).map_err(|_| ERROR.to_string())?;
+    super::capture::verify(&window).map_err(|_| ERROR.to_string())?;
     let url = validate(&url)?;
     #[cfg(windows)]
     {
@@ -44,7 +44,7 @@ pub(crate) async fn open_external_url(
             .run_on_main_thread(move || {
                 let handoff = || -> Result<(), String> {
                     // Recheck the injected live owner at dispatch time; never carry a bare HWND across the queue.
-                    super::verify_caller(&live_window).map_err(|_| ERROR.to_string())?;
+                    super::capture::verify(&live_window).map_err(|_| ERROR.to_string())?;
                     let hwnd = live_window.hwnd().map_err(|_| ERROR.to_string())?;
                     let destination: Vec<u16> =
                         url.as_str().encode_utf16().chain(Some(0)).collect();

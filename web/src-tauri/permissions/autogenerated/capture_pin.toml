@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-capture-pin"
+description = "Enables the capture_pin command without any pre-configured scope."
+commands.allow = ["capture_pin"]
+
+[[permission]]
+identifier = "deny-capture-pin"
+description = "Denies the capture_pin command without any pre-configured scope."
+commands.deny = ["capture_pin"]

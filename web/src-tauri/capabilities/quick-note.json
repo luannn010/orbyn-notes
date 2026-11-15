@@ -1,0 +1,22 @@
+{
+  "identifier": "quick-note",
+  "description": "Local capture window, guarded close and scoped handoff only.",
+  "windows": [
+    "quick-note"
+  ],
+  "local": true,
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "allow-finish-close",
+    "allow-capture-scope",
+    "allow-capture-pin",
+    "allow-capture-show-main",
+    "allow-capture-handoff",
+    "allow-capture-shortcut-status",
+    "allow-capture-quit-reply",
+    "allow-open-external-url"
+  ]
+}

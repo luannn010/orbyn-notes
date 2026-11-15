@@ -15,7 +15,7 @@ const bridge = vi.hoisted(() => ({
     toolbar: null,
     navigationRef: { current: null },
     setLayout: vi.fn(),
-    setNavigation: vi.fn(),
+    setNavigation: vi.fn(), setChrome: vi.fn(),
   } as object | null,
 }));
 vi.mock("../../src/desktop/DesktopShell", () => ({
@@ -33,7 +33,7 @@ beforeEach(() => {
     toolbar: null,
     navigationRef: { current: null },
     setLayout: vi.fn(),
-    setNavigation: vi.fn(),
+    setNavigation: vi.fn(), setChrome: vi.fn(),
   };
   availableWidth = 1000;
   vi.stubGlobal("matchMedia", () => ({

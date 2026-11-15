@@ -10,17 +10,38 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{
-      "label": "main", "title": "Orbyn Notes", "create": false,
-      "width": 1160, "height": 760, "minWidth": 640, "minHeight": 480,
-      "decorations": false, "shadow": true, "resizable": true,
-      "useHttpsScheme": false
-    }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "Orbyn Notes",
+        "create": false,
+        "width": 1160,
+        "height": 760,
+        "minWidth": 640,
+        "minHeight": 480,
+        "decorations": false,
+        "shadow": true,
+        "resizable": true,
+        "useHttpsScheme": false
+      }
+    ],
     "security": {
-      "capabilities": ["main-window"],
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8089; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'",
-      "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8089 ws://127.0.0.1:5179; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'"
+      "capabilities": [
+        "main-window",
+        "quick-note"
+      ],
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'",
+      "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5179; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'"
     }
   },
-  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  }
 }

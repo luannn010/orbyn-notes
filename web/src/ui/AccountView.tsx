@@ -6,9 +6,11 @@ import { storageCopy } from "./storageCopy";
 export function AccountView({
   service,
   onSession,
+  onUseLocal,
 }: {
   service: AccountService;
   onSession: (session: AccountSession) => void;
+  onUseLocal?: () => void;
 }) {
   const [step, setStep] = useState<
     "entry" | "invite" | "register" | "verify" | "signin" | "second"
@@ -111,6 +113,7 @@ export function AccountView({
               Sign in
             </button>
             <button onClick={() => setStep("invite")}>Create an account</button>
+            {onUseLocal && <button onClick={onUseLocal}>Use without an account</button>}
             <small>New accounts need an invite code.</small>
           </div>
         ) : (
@@ -247,6 +250,7 @@ export function AccountView({
               >
                 Back
               </button>
+              {step === "invite" && onUseLocal && <button type="button" disabled={busy} onClick={onUseLocal}>Use without an account</button>}
             </div>
           </form>
         )}

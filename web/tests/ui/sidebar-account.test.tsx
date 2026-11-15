@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Workspace } from "../../src/ui/Workspace";
 import { checkClose, registerCloseGuard } from "../../src/desktop/closeGuard";
@@ -105,7 +112,7 @@ it("keeps a combining grapheme intact in the decorative initial", async () => {
     }),
   ).toHaveAttribute("aria-hidden", "true");
 });
-it("opens a real new note from Study only after successful creation", async () => {
+it("opens an unpersisted note from Study and saves only its first text", async () => {
   const operation = deferred<Note>(),
     create = vi.fn(() => operation.promise);
   fixture(create);
@@ -114,16 +121,23 @@ it("opens a real new note from Study only after successful creation", async () =
   await screen.findByLabelText("study mock module");
   fireEvent.click(action);
   fireEvent.click(action);
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(create).toHaveBeenCalledWith({
-    title: "",
-    document: { type: "doc", content: [{ type: "paragraph" }] },
-    tags: [],
-  });
-  expect(checkClose()).toBe("working");
-  await act(async () => operation.resolve(created));
-  expect(await screen.findByLabelText("Note title")).toHaveValue("");
-  expect(screen.queryByText("From a Study card.")).not.toBeInTheDocument();
+  const title = await screen.findByLabelText("Note title");
+  expect(title).toHaveValue("");
+  expect(create).not.toHaveBeenCalled();
+  expect(checkClose()).toBe("allowed");
+  fireEvent.change(title, { target: { value: "First text" } });
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create).toHaveBeenCalledWith(
+    {
+      title: "First text",
+      document: { type: "doc", content: [{ type: "paragraph" }] },
+      tags: [],
+    },
+    expect.any(String),
+  );
+  expect(checkClose()).toBe("draft");
+  await act(async () => operation.resolve({ ...created, title: "First text" }));
+  expect(title).toHaveValue("First text");
   expect(checkClose()).toBe("allowed");
 });
 it("does not invoke creation or leave the current route while a draft guard refuses navigation", async () => {
@@ -143,7 +157,7 @@ it("does not invoke creation or leave the current route while a draft guard refu
     remove();
   }
 });
-it("retains the current module on failure without automatic retry", async () => {
+it("retains the visible draft on failed first save without automatic retry", async () => {
   const create = vi.fn(async () => {
     throw new Error("Storage quota denied");
   });
@@ -152,33 +166,40 @@ it("retains the current module on failure without automatic retry", async () => 
   fireEvent.click(screen.getByRole("button", { name: "Clips" }));
   await screen.findByLabelText("clips mock module");
   fireEvent.click(action);
-  await screen.findByText("Couldn’t create note. Storage quota denied");
-  expect(screen.getByLabelText("clips mock module")).toBeVisible();
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(checkClose()).toBe("allowed");
+  const title = await screen.findByLabelText("Note title");
+  expect(create).not.toHaveBeenCalled();
+  fireEvent.change(title, { target: { value: "Keep this draft" } });
+  await screen.findByText("Storage quota denied");
+  expect(title).toHaveValue("Keep this draft");
+  expect(create).toHaveBeenCalledOnce();
+  expect(checkClose()).not.toBe("allowed");
 });
-it("does not discard a new draft guard that appears while the write is pending", async () => {
-  const operation = deferred<Note>();
-  fixture(() => operation.promise);
-  const action = await headerAction();
+it("keeps an in-flight first save when navigation is refused", async () => {
+  const operation = deferred<Note>(),
+    create = vi.fn(() => operation.promise);
+  fixture(create);
+  fireEvent.click(await headerAction());
+  const title = await screen.findByLabelText("Note title");
+  fireEvent.change(title, { target: { value: "Pending draft" } });
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("button", { name: "Study" }));
-  await screen.findByLabelText("study mock module");
-  fireEvent.click(action);
-  const remove = registerCloseGuard(() => false);
-  try {
-    await act(async () => operation.resolve(created));
-    expect(screen.getByLabelText("study mock module")).toBeVisible();
-    expect(screen.queryByLabelText("Note title")).not.toBeInTheDocument();
-  } finally {
-    remove();
-  }
+  expect(screen.queryByLabelText("study mock module")).not.toBeInTheDocument();
+  expect(title).toHaveValue("Pending draft");
+  await act(async () =>
+    operation.resolve({ ...created, title: "Pending draft" }),
+  );
+  expect(title).toHaveValue("Pending draft");
 });
 it("does not focus a replacement account input after a held create resolves past unmount", async () => {
   const operation = deferred<Note>();
   const { view } = fixture(() => operation.promise);
   const action = await headerAction();
-  vi.useFakeTimers();
   fireEvent.click(action);
+  fireEvent.change(await screen.findByLabelText("Note title"), {
+    target: { value: "Old account draft" },
+  });
+  await act(async () => {});
+  vi.useFakeTimers();
   view.unmount();
   render(<input id="note-title" aria-label="Replacement account input" />);
   await act(async () => {
@@ -193,6 +214,10 @@ it("retires an old account/store completion before a replacement workspace can u
   const operation = deferred<Note>();
   const { view, api, props } = fixture(() => operation.promise);
   fireEvent.click(await headerAction());
+  fireEvent.change(await screen.findByLabelText("Note title"), {
+    target: { value: "First account private draft" },
+  });
+  await act(async () => {});
   const nextCreate = vi.fn(async () => ({
     ...created,
     id: "second-account-note",
@@ -221,5 +246,9 @@ it("retires an old account/store completion before a replacement workspace can u
   expect(screen.getByTitle("second@example.test")).toBeVisible();
   fireEvent.click(action);
   expect(await screen.findByLabelText("Note title")).toHaveValue("");
-  expect(nextCreate).toHaveBeenCalledOnce();
+  expect(nextCreate).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Note title"), {
+    target: { value: "Second account draft" },
+  });
+  await waitFor(() => expect(nextCreate).toHaveBeenCalledOnce());
 });
