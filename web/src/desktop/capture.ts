@@ -35,41 +35,53 @@ export async function installQuitGuard(
   root: HTMLElement,
   onBlocked: () => void,
 ): Promise<() => void> {
-  let release: (() => void) | null = null;
+  let active: { token: string; release: (() => void) | null } | null = null;
+  let disposed = false;
   const unlock = () => {
-    release?.();
-    release = null;
+    active?.release?.();
+    active = null;
   };
-  const cancel = await listen("notes-quit-cancelled", () => {
+  const cancel = await listen<string>("notes-quit-cancelled", (event) => {
+    if (disposed || active?.token !== event.payload) return;
     unlock();
     onBlocked();
   });
   try {
     const probe = await listen<string>("notes-quit-probe", (event) => {
+      if (disposed || active?.token === event.payload) return;
+      // Native admits B only after A clears. Restore A's baseline before B
+      // captures its freeze; A's late cancellation/reply cannot release B.
+      unlock();
+      const request = { token: event.payload, release: null as (() => void) | null };
+      active = request;
       const allowed = checkClose() === "allowed";
       if (allowed) {
         const unfreeze = freezeWindow(root),
           unlockOperations = lockClosing();
-        release = () => {
+        request.release = () => {
           unfreeze();
           unlockOperations();
         };
       } else onBlocked();
       void invoke("capture_quit_reply", {
-        token: event.payload,
+        token: request.token,
         allowed,
       }).catch(() => {
+        if (disposed || active !== request) return;
         unlock();
         onBlocked();
       });
     });
     return () => {
+      disposed = true;
       probe();
       cancel();
       unlock();
     };
   } catch (error) {
+    disposed = true;
     cancel();
+    unlock();
     throw error;
   }
 }

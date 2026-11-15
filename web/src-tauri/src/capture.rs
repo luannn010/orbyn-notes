@@ -280,7 +280,7 @@ fn cancel_quit(app: &tauri::AppHandle, token: &str) {
     state.quit = None;
     drop(state);
     for window in app.webview_windows().values() {
-        let _ = window.emit_to(window.label(), "notes-quit-cancelled", ());
+        let _ = window.emit_to(window.label(), "notes-quit-cancelled", token);
     }
     show_main(app);
 }
