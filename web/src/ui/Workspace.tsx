@@ -83,6 +83,7 @@ import { TagsView } from "./TagsView";
 import { VersionHistory } from "./VersionHistory";
 import { LibraryActionFeedback, useLibraryAction } from "./libraryAction";
 import "../styles/library.css";
+import "../styles/desktop-note-split.css";
 import { SearchView, type SearchTab } from "./SearchView";
 import { SearchSurface } from "./SearchSurface";
 import { useLocalSearchOwner } from "./localSearchOwner";
@@ -462,6 +463,8 @@ export function Workspace({
   const [grid, setGrid] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const desktop = useDesktop();
+  const mainRef = useRef<HTMLElement>(null);
+  const [roomForNoteList, setRoomForNoteList] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const [wide, setWide] = useState(
@@ -609,6 +612,23 @@ export function Workspace({
     });
     return () => desktop.setLayout(null);
   }, [desktop?.setLayout, loaded, sidebarWidth, wide, sidebarHidden]);
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!desktop || !main || !loaded) return;
+    // The designed list is 300px, leaving at least 480px for the editor
+    // after its separator. Measure the pane, including sidebar resizing.
+    const measure = () => {
+      const room = main.getBoundingClientRect().width >= 781;
+      if (!room && main.querySelector('.notes-workspace[data-split="true"] .notes-library-pane')?.contains(document.activeElement))
+        main.querySelector<HTMLTextAreaElement>("#note-title")?.focus({ preventScroll: true });
+      setRoomForNoteList(room);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(main);
+    return () => observer.disconnect();
+  }, [desktop?.setLayout, loaded]);
   useLayoutEffect(() => {
     if (!desktop || !loaded) return;
     desktop.setNavigation({
@@ -828,6 +848,7 @@ export function Workspace({
       : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = selected !== null && current;
+  const splitNotes = !!desktop && roomForNoteList && !!editing && module === "notes" && !trash;
   const noteActors = Array.from(
     new Set(
       [searchOrigin?.selected, selected].filter((id): id is string => !!id),
@@ -2075,7 +2096,7 @@ export function Workspace({
         controls="notes-sidebar"
         disabled={!wide || !!(desktop && sidebarHidden)}
       />
-      <main id="main" className="sheet" inert={drawer}>
+      <main ref={mainRef} id="main" className="sheet" inert={drawer}>
         <div className="desktop-sheet-content">
         <SearchSurface
           active={searchActive}
@@ -2390,96 +2411,9 @@ export function Workspace({
               onOpenTag={(name) => navigate(false, name)}
             />
           )}
-          <div className="note-actor-pool" hidden={!editing}>
-            {noteActors.map((actor) => (
-              <div
-                key={`${session.accountId}:${snapshot?.token.epoch ?? ""}:${searchPrivacyVersion}:${actor.id}`}
-                className="note-actor"
-                hidden={actor.id !== selected}
-                inert={actor.id !== selected || searchActive}
-                aria-hidden={actor.id !== selected || searchActive}
-                data-note-actor-active={actor.id === selected && !searchActive}
-              >
-                <NoteEditor
-                  active={actor.id === selected && !searchActive}
-                  key={actor.id}
-                  note={actor}
-                  formatNoteLink={formatNoteLink}
-                  noteLinks={
-                    links.service
-                      ? {
-                          service: links.service,
-                          noteId: actor.id,
-                          onOpen: (target) => {
-                            void openNoteTarget(target);
-                          },
-                        }
-                      : undefined
-                  }
-                  store={store}
-                  readOnly={readOnly}
-                  sourceWriter={library?.updateWithSourceSteps}
-                  sourceLibrary={library}
-                  source={
-                    sourceOwners.service && sourceOwners.collections && library
-                      ? {
-                          library,
-                          collections: sourceOwners.collections,
-                          service: sourceOwners.service,
-                          target: actor.id === selected ? sourceTarget : null,
-                          onTargetUnavailable: () => {
-                            if (
-                              actor.id !== selected ||
-                              !sourceTarget ||
-                              activeSourceTarget.current !== sourceTarget.key
-                            )
-                              return;
-                            assignSourceTarget(null);
-                            setSourceProjectionError(
-                              "This saved passage target changed. Open the source again from the card.",
-                            );
-                          },
-                          onOpenCard: openStudyEntry,
-                        }
-                      : undefined
-                  }
-                  tagCatalog={snapshot?.tags.filter(
-                    (tag) => tag.state === "active",
-                  )}
-                  pinned={!!metadata.get(actor.id)?.pinned}
-                  onPin={
-                    library && snapshot
-                      ? () => {
-                          const token = { ...snapshot.token },
-                            pinned = !metadata.get(actor.id)?.pinned;
-                          libraryAction.start(
-                            (id) =>
-                              library.setPinned(actor.id, pinned, token, id),
-                            acceptLibrary,
-                          );
-                        }
-                      : undefined
-                  }
-                  onHistory={
-                    library && !readOnly
-                      ? () => setHistoryNote(actor)
-                      : undefined
-                  }
-                  onSaved={(n) =>
-                    setNotes((v) => [n, ...v.filter((x) => x.id !== n.id)])
-                  }
-                  onBack={() => {
-                    setSelected(null);
-                    setModule("notes");
-                  }}
-                  onTrash={(n) => void move(n)}
-                  onExport={(n) => requestExport([n])}
-                />
-              </div>
-            ))}
-          </div>
-          {(module === "notes" || editing) && !editing && (
-            <>
+          <div className="notes-workspace" data-split={splitNotes} hidden={module !== "notes" && !editing}>
+          {module === "notes" && (!editing || !!desktop) && (
+            <section className="notes-library-pane" aria-label="Notes list" hidden={!!editing && !splitNotes}>
               <header className="page-heading notes-library-heading">
                 <div>
                   <h1 ref={notesHeadingRef}>
@@ -2696,7 +2630,7 @@ export function Workspace({
               ) : (
                 <div
                   className={
-                    grid && !trash ? "note-collection grid" : "note-collection"
+                    grid && !trash && !splitNotes ? "note-collection grid" : "note-collection"
                   }
                 >
                   {visible.map((n) => (
@@ -2724,7 +2658,12 @@ export function Workspace({
                       ) : (
                         <button
                           className="note-open"
-                          onClick={() => setSelected(n.id)}
+                          aria-current={n.id === selected ? "page" : undefined}
+                          onClick={() => {
+                            if (n.id === selected || !canNavigate()) return;
+                            clearSourceRoute();
+                            setSelected(n.id);
+                          }}
                         >
                           <h2>{n.title || "Untitled note"}</h2>
                           <p>{plainText(n.document).slice(0, 180)}</p>
@@ -2772,8 +2711,97 @@ export function Workspace({
                   ))}
                 </div>
               )}
-            </>
+            </section>
           )}
+          <div className="note-actor-pool" hidden={!editing}>
+            {noteActors.map((actor) => (
+              <div
+                key={`${session.accountId}:${snapshot?.token.epoch ?? ""}:${searchPrivacyVersion}:${actor.id}`}
+                className="note-actor"
+                hidden={actor.id !== selected}
+                inert={actor.id !== selected || searchActive}
+                aria-hidden={actor.id !== selected || searchActive}
+                data-note-actor-active={actor.id === selected && !searchActive}
+              >
+                <NoteEditor
+                  active={actor.id === selected && !searchActive}
+                  key={actor.id}
+                  note={actor}
+                  formatNoteLink={formatNoteLink}
+                  noteLinks={
+                    links.service
+                      ? {
+                          service: links.service,
+                          noteId: actor.id,
+                          onOpen: (target) => {
+                            void openNoteTarget(target);
+                          },
+                        }
+                      : undefined
+                  }
+                  store={store}
+                  readOnly={readOnly}
+                  sourceWriter={library?.updateWithSourceSteps}
+                  sourceLibrary={library}
+                  source={
+                    sourceOwners.service && sourceOwners.collections && library
+                      ? {
+                          library,
+                          collections: sourceOwners.collections,
+                          service: sourceOwners.service,
+                          target: actor.id === selected ? sourceTarget : null,
+                          onTargetUnavailable: () => {
+                            if (
+                              actor.id !== selected ||
+                              !sourceTarget ||
+                              activeSourceTarget.current !== sourceTarget.key
+                            )
+                              return;
+                            assignSourceTarget(null);
+                            setSourceProjectionError(
+                              "This saved passage target changed. Open the source again from the card.",
+                            );
+                          },
+                          onOpenCard: openStudyEntry,
+                        }
+                      : undefined
+                  }
+                  tagCatalog={snapshot?.tags.filter(
+                    (tag) => tag.state === "active",
+                  )}
+                  pinned={!!metadata.get(actor.id)?.pinned}
+                  onPin={
+                    library && snapshot
+                      ? () => {
+                          const token = { ...snapshot.token },
+                            pinned = !metadata.get(actor.id)?.pinned;
+                          libraryAction.start(
+                            (id) =>
+                              library.setPinned(actor.id, pinned, token, id),
+                            acceptLibrary,
+                          );
+                        }
+                      : undefined
+                  }
+                  onHistory={
+                    library && !readOnly
+                      ? () => setHistoryNote(actor)
+                      : undefined
+                  }
+                  onSaved={(n) =>
+                    setNotes((v) => [n, ...v.filter((x) => x.id !== n.id)])
+                  }
+                  onBack={() => {
+                    setSelected(null);
+                    setModule("notes");
+                  }}
+                  onTrash={(n) => void move(n)}
+                  onExport={(n) => requestExport([n])}
+                />
+              </div>
+            ))}
+          </div>
+          </div>
         </div>
         <input
           ref={fileRef}
