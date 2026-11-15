@@ -15,7 +15,8 @@ const bridge = vi.hoisted(() => ({
     toolbar: null,
     navigationRef: { current: null },
     setLayout: vi.fn(),
-    setNavigation: vi.fn(), setChrome: vi.fn(),
+    setNavigation: vi.fn(),
+    setChrome: vi.fn(),
   } as object | null,
 }));
 vi.mock("../../src/desktop/DesktopShell", () => ({
@@ -33,7 +34,8 @@ beforeEach(() => {
     toolbar: null,
     navigationRef: { current: null },
     setLayout: vi.fn(),
-    setNavigation: vi.fn(), setChrome: vi.fn(),
+    setNavigation: vi.fn(),
+    setChrome: vi.fn(),
   };
   availableWidth = 1000;
   vi.stubGlobal("matchMedia", () => ({
@@ -103,7 +105,8 @@ function fixture(update?: NotesStore["update"]) {
 
 function openTagEditor() {
   const trigger = screen.queryByRole("button", { name: "Manage note tags" });
-  if (trigger?.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+  if (trigger?.getAttribute("aria-expanded") === "false")
+    fireEvent.click(trigger);
 }
 
 it("keeps the desktop list available with an active note and guards switching away from an unfinished tag", async () => {
@@ -114,9 +117,12 @@ it("keeps the desktop list available with an active note and guards switching aw
   const first = within(list).getByRole("button", { name: /^First/ });
   expect(first).toHaveAttribute("aria-current", "page");
   openTagEditor();
-  fireEvent.change(screen.getByRole("textbox", { name: "New tag" }), {
-    target: { value: "unfinished" },
-  });
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Tags, separated by commas" }),
+    {
+      target: { value: "unfinished" },
+    },
+  );
   fireEvent.click(first);
   expect(
     screen.queryByText(
@@ -125,15 +131,18 @@ it("keeps the desktop list available with an active note and guards switching aw
   ).not.toBeInTheDocument();
   fireEvent.click(within(list).getByRole("button", { name: /^Second/ }));
   expect(screen.getByLabelText("Note title")).toHaveValue("First");
-  expect(screen.getByRole("textbox", { name: "New tag" })).toHaveValue(
-    "unfinished",
-  );
+  expect(
+    screen.getByRole("textbox", { name: "Tags, separated by commas" }),
+  ).toHaveValue("unfinished");
   expect(
     screen.getByText("Finish or discard your unsaved changes before leaving."),
   ).toBeVisible();
-  fireEvent.change(screen.getByRole("textbox", { name: "New tag" }), {
-    target: { value: "" },
-  });
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Tags, separated by commas" }),
+    {
+      target: { value: "" },
+    },
+  );
   fireEvent.click(within(list).getByRole("button", { name: /^Second/ }));
   expect(await screen.findByLabelText("Note title")).toHaveValue("Second");
   expect(within(list).getByRole("button", { name: /^Second/ })).toHaveAttribute(
@@ -148,9 +157,12 @@ it("falls back to one pane without remounting the editor or losing its tag draft
   fireEvent.click(await screen.findByRole("button", { name: /^First/ }));
   const title = await screen.findByLabelText("Note title");
   openTagEditor();
-  fireEvent.change(screen.getByRole("textbox", { name: "New tag" }), {
-    target: { value: "retained" },
-  });
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Tags, separated by commas" }),
+    {
+      target: { value: '"retained' },
+    },
+  );
   within(screen.getByRole("region", { name: "Notes list" }))
     .getByRole("button", { name: /^First/ })
     .focus();
@@ -161,9 +173,9 @@ it("falls back to one pane without remounting the editor or losing its tag draft
   ).not.toBeInTheDocument();
   expect(screen.getByLabelText("Note title")).toBe(title);
   expect(title).toHaveFocus();
-  expect(screen.getByRole("textbox", { name: "New tag" })).toHaveValue(
-    "retained",
-  );
+  expect(
+    screen.getByRole("textbox", { name: "Tags, separated by commas" }),
+  ).toHaveValue('"retained');
   availableWidth = 781;
   act(resize);
   expect(screen.getByRole("region", { name: "Notes list" })).toBeVisible();
@@ -236,4 +248,20 @@ it("waits for a pending commit before admitting a list selection", async () => {
   );
   fireEvent.click(second);
   expect(await screen.findByLabelText("Note title")).toHaveValue("Second");
+});
+
+it("uses a single creation pane and restores the library when an untouched draft is left", async () => {
+  const { unexpected } = fixture();
+  await screen.findByRole("button", { name: /^First/ });
+  fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+  expect(await screen.findByRole("region", { name: "New note" })).toBeVisible();
+  expect(
+    screen.queryByRole("region", { name: "Notes list" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Note title")).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "Back to notes" }));
+  expect(
+    await screen.findByRole("region", { name: "Notes list" }),
+  ).toBeVisible();
+  expect(unexpected).not.toHaveBeenCalled();
 });

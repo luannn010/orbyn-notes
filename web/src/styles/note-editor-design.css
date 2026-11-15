@@ -1,0 +1,166 @@
+/* Notes a582a9b: editor, note-menu and link-picker. */
+.note-editor-header {
+  flex-shrink: 0;
+  min-height: 44px;
+  height: 44px;
+  gap: 6px;
+  padding: 0 16px 0 22px;
+  border-bottom: 0;
+  background: var(--main);
+  min-width: 0;
+}
+.note-header-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--t3);
+}
+.note-header-breadcrumb button {
+  min-height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--t3);
+  white-space: nowrap;
+}
+.note-header-breadcrumb > span[aria-hidden] {
+  color: var(--t4);
+}
+.note-header-title {
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.legacy-back-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.note-editor-header > .note-header-status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--t3);
+  font-size: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.note-editor-header > .note-header-action {
+  margin: 0;
+  flex: none;
+}
+.note-header-action button,
+.note-editor-header > .menu-anchor > button {
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: var(--t3);
+  border-radius: 7px;
+}
+.note-header-action button:hover,
+.note-editor-header > .menu-anchor > button:hover {
+  background: var(--raise);
+  color: var(--t1);
+}
+.note-format-target {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: var(--main);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.note-format-target:empty {
+  display: none;
+}
+.editor-pane > .editor-page {
+  max-width: var(--notes-editor-width, 680px);
+  margin: 0;
+  padding: 28px 40px 80px;
+}
+.editor-page .note-title {
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  min-height: 35px;
+  padding: 0;
+  resize: none;
+}
+.note-editor-header .action-menu {
+  z-index: 80;
+  width: 238px;
+  padding: 5px;
+  border-radius: 12px;
+}
+.action-menu .menu-separated {
+  margin-top: 5px;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding-top: 9px;
+}
+.action-menu button > span {
+  flex: 1;
+  text-align: left;
+}
+.action-menu kbd {
+  color: var(--t3);
+  font: inherit;
+  font-size: 11px;
+  margin-left: auto;
+  background: transparent;
+  padding: 0;
+}
+.note-editor-header .action-menu button {
+  min-height: 30px;
+  height: auto;
+  justify-content: flex-start;
+}
+.note-editor-header .action-menu button:disabled {
+  opacity: 1;
+  color: var(--t4);
+  cursor: default;
+}
+@media (max-width: 650px) {
+  .note-editor-header {
+    padding-inline: 12px;
+  }
+  .note-editor-header > .note-header-status {
+    font-size: 10px;
+  }
+  .note-header-breadcrumb {
+    font-size: 11px;
+  }
+  .note-header-title {
+    max-width: 13ch;
+  }
+  .editor-pane > .editor-page {
+    padding: 24px 20px 64px;
+  }
+}
+@media (max-width: 480px) {
+  .note-header-status svg {
+    display: none;
+  }
+  .note-header-breadcrumb > svg {
+    display: none;
+  }
+  .note-header-title {
+    max-width: 8ch;
+  }
+  .note-editor-header .note-header-action:has([aria-label="Share · Planned"]) {
+    display: none;
+  }
+}
+
+.editor-page .tiptap { line-height: 1.7; color: var(--t2); }
+.editor-page .tiptap h2 { margin: 8px 0 12px; font-size: 17px; font-weight: 500; color: var(--t1); }

@@ -360,3 +360,29 @@ export const FileCode = icon(
     <path d="m14 12.5 2 2.5-2 2.5" />
   </>,
 );
+
+// Lucide 1.70.0 ISC geometry; rendered using the shared Planner 1.6px stroke.
+export const Clock3 = icon(
+  "clock-3",
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6h4" />
+  </>,
+);
+export const LockKeyhole = icon(
+  "lock-keyhole",
+  <>
+    <circle cx="12" cy="16" r="1" />
+    <rect x="3" y="10" width="18" height="12" rx="2" />
+    <path d="M7 10V7a5 5 0 0 1 10 0v3" />
+  </>,
+);
+export const Share2 = icon(
+  "share-2",
+  <>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="m8.59 13.51 6.83 3.98m-.01-10.98-6.82 3.98" />
+  </>,
+);

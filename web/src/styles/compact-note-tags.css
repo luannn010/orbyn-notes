@@ -1,0 +1,70 @@
+/* Owner-approved compact hashtag mock: one # action and comma-separated inline tags. */
+.compact-note-tags {
+  min-width: 0;
+}
+.compact-note-metadata {
+  gap: 6px;
+  min-height: 28px;
+}
+.compact-tags-hash {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--t3);
+  font-size: 17px;
+}
+.compact-tags-hash:hover,
+.compact-tags-hash[aria-expanded="true"] {
+  color: var(--t1);
+  background: var(--raise);
+}
+.compact-tags-text {
+  padding: 0;
+  min-height: 26px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 26px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.compact-tags-text:disabled,
+.compact-tags-hash:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.compact-tags-input {
+  width: min(285px, 100%);
+  flex: 0 1 285px;
+  min-width: 120px;
+  height: 27px;
+  padding: 2px 0;
+  border: 0;
+  border-bottom: 1px solid var(--t3);
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--t1);
+}
+.compact-tags-input:focus {
+  outline: none;
+  border-bottom-color: var(--t1);
+  box-shadow: none;
+}
+.compact-tags-input::placeholder {
+  color: var(--t3);
+}
+.compact-tags-error {
+  color: var(--red);
+  font-size: 12px;
+  margin: 4px 0 12px;
+}
+.new-note-page .compact-note-metadata {
+  margin: 0;
+}

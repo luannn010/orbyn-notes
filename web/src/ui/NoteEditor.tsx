@@ -1,4 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal, flushSync } from "react-dom";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { useDesktop } from "../desktop/DesktopShell";
@@ -28,13 +35,27 @@ import { message, plainText } from "./model";
 import { storageCopy } from "./storageCopy";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
-import { Copy, Download, Pencil, Trash2 } from "./icons";
+import {
+  Check,
+  Clock3,
+  Copy,
+  Download,
+  FileText,
+  Link2,
+  LockKeyhole,
+  Pencil,
+  Pin,
+  Share2,
+  Trash2,
+} from "./icons";
+import { EditorTooltip } from "./editorFormatting";
+import "../styles/note-editor-design.css";
 import type { EditorNoteLinks } from "./noteLinkViews";
 import { NoteLinksPanel } from "./NoteLinksPanel";
 import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
-import "../styles/note-metadata.css";
+import { CompactNoteTags } from "./CompactNoteTags";
 export function NoteEditor({
   note,
   store,
@@ -46,7 +67,6 @@ export function NoteEditor({
   pinned = false,
   onPin,
   onHistory,
-  tagCatalog,
   sourceWriter,
   sourceLibrary,
   source,
@@ -206,20 +226,12 @@ export function NoteEditor({
     document: note.document,
     tags: note.tags,
   });
-  const [tagInput, setTagInput] = useState("");
-  const tagDraftRef = useRef("");
-  const [tagEditorOpen, setTagEditorOpen] = useState(false);
-  const tagEditorId = useId();
-  const tagTrigger = useRef<HTMLButtonElement>(null);
-  const tagInputElement = useRef<HTMLInputElement>(null);
-  useLayoutEffect(() => {
-    if (tagEditorOpen && active)
-      tagInputElement.current?.focus({ preventScroll: true });
-  }, [tagEditorOpen, active]);
-  function closeTagEditor() {
-    setTagEditorOpen(false);
-    tagTrigger.current?.focus({ preventScroll: true });
-  }
+  const [tagPending, setTagPending] = useState(false);
+  const tagPendingRef = useRef(false);
+  const tagPendingChanged = useCallback((pending: boolean) => {
+    tagPendingRef.current = pending;
+    setTagPending(pending);
+  }, []);
   const stepBatches = useRef<
       { id: number; before: NoteDocument; steps: readonly unknown[] }[]
     >([]),
@@ -246,21 +258,30 @@ export function NoteEditor({
   const [copyBusy, setCopyBusy] = useState(false);
   const duplicating = useRef(false);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
+  const [formattingTarget, setFormattingTarget] =
+    useState<HTMLDivElement | null>(null);
+  const [formatDraftPending, setFormatDraftPending] = useState(false);
+  const formatDraftRef = useRef(false);
+  const formatDraftChanged = useCallback((pending: boolean) => {
+    formatDraftRef.current = pending;
+    setFormatDraftPending(pending);
+  }, []);
+  const modifier = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
   useLayoutEffect(
     () =>
       registerCloseGuard(() => {
         if (
+          formatDraftRef.current ||
           sourceIntent.current ||
-          tagDraftRef.current.trim() ||
+          tagPendingRef.current ||
           dirtyRef.current ||
           saving.current ||
           duplicating.current ||
           copyInFlight.current
         ) {
-          if (tagDraftRef.current.trim()) setTagEditorOpen(true);
           setNavigationNotice(
-            tagDraftRef.current.trim()
-              ? "Add or clear the new tag before leaving."
+            tagPendingRef.current
+              ? "Apply or cancel your tag edit before leaving."
               : "Your latest changes are only in this window. Save or copy your text before leaving.",
           );
           return false;
@@ -288,15 +309,6 @@ export function NoteEditor({
       setDraft(next);
     }
   }, [note.revision, dirty]);
-  function addTag() {
-    if (readOnly) return;
-    const name = tagDraftRef.current.trim();
-    if (!name) return;
-    tagDraftRef.current = "";
-    setTagInput("");
-    if (!latest.current.tags.includes(name))
-      change({ tags: [...latest.current.tags, name] });
-  }
   function change(patch: Partial<typeof draft>, trace?: EditorChangeTrace) {
     if (readOnly) return;
     if (patch.document) {
@@ -413,8 +425,8 @@ export function NoteEditor({
       throw new Error(
         "This passage changed. Select it again before adding the card.",
       );
-    if (tagDraftRef.current.trim())
-      throw new Error("Add or clear the new tag before making a card.");
+    if (tagPendingRef.current)
+      throw new Error("Apply or cancel your tag edit before making a card.");
     if (activeSave.current) await activeSave.current;
     if (!capture.isCurrent())
       throw new Error(
@@ -458,26 +470,26 @@ export function NoteEditor({
     };
   }
   useEffect(() => {
-    if (!dirty && !tagInput.trim() && !sourceCapture) return;
+    if (!dirty && !tagPending && !sourceCapture && !formatDraftPending) return;
     const guard = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
-  }, [dirty, tagInput, sourceCapture]);
+  }, [dirty, tagPending, sourceCapture, formatDraftPending]);
   function leave(action: () => void) {
     if (
+      formatDraftRef.current ||
       dirty ||
       sourceIntent.current ||
-      tagDraftRef.current.trim() ||
+      tagPendingRef.current ||
       saving.current ||
       duplicating.current ||
       copyInFlight.current
     ) {
-      if (tagDraftRef.current.trim()) setTagEditorOpen(true);
       setNavigationNotice(
-        tagDraftRef.current.trim()
-          ? "Add or clear the new tag before leaving."
+        tagPendingRef.current
+          ? "Apply or cancel your tag edit before leaving."
           : "Your latest changes are only in this window. Save or copy your text before leaving.",
       );
       return;
@@ -494,70 +506,133 @@ export function NoteEditor({
       setCopyError("Couldn’t copy text. Select your text and copy it.");
     }
   }
+  function duplicate() {
+    if (
+      readOnly ||
+      dirtyRef.current ||
+      tagPendingRef.current ||
+      formatDraftRef.current ||
+      duplicating.current
+    )
+      return;
+    duplicating.current = true;
+    setDuplicateBusy(true);
+    void store
+      .create({
+        ...latest.current,
+        title: `${latest.current.title || "Untitled note"} (copy)`,
+      })
+      .then(onSaved)
+      .catch((failure) => setError(message(failure)))
+      .finally(() => {
+        duplicating.current = false;
+        setDuplicateBusy(false);
+      });
+  }
+  const actionBlocked = dirty || tagPending || formatDraftPending;
   const chrome = (
-    <header className={desktop ? "desktop-editor-actions" : "editor-chrome"}>
-      <button onClick={() => leave(onBack)}>← Back to notes</button>
-      <span role="status">
+    <header
+      className={`${desktop ? "desktop-editor-actions" : "editor-chrome"} note-editor-header`}
+    >
+      <nav className="note-header-breadcrumb" aria-label="Note location">
+        <FileText size={13} aria-hidden="true" />
+        <button onClick={() => leave(onBack)}>
+          <span className="legacy-back-label">← Back to notes</span>
+          <span aria-hidden="true">All notes</span>
+        </button>
+        <span aria-hidden="true">/</span>
+        <span className="note-header-title">
+          {draft.title || "Untitled note"}
+        </span>
+      </nav>
+      <span role="status" className="note-header-status">
+        {!error && !busy && !actionBlocked && (
+          <Check size={13} aria-hidden="true" />
+        )}
         {error
           ? "Couldn’t save"
           : busy
             ? "Saving…"
-            : dirty || !!tagInput.trim()
+            : actionBlocked
               ? "Unsaved changes"
               : storageCopy(!!desktop).saved}
       </span>
-      {onHistory && (
-        <button
-          disabled={dirty || !!tagInput.trim() || readOnly}
-          onClick={onHistory}
-        >
-          Version history
-        </button>
-      )}
       {noteLinks && (
-        <button
-          className="note-links-toggle"
-          type="button"
-          aria-expanded={linksOpen}
-          onClick={() => {
-            linksReturnFocus.current = document.activeElement as HTMLElement;
-            if (linksOpen && !linksCanClose.current()) {
-              setNavigationNotice(
-                "Finish the pending note-link operation before closing this panel.",
-              );
-              return;
-            }
-            if (linksOpen) linksRequestClose.current();
-            else setLinksOpen(true);
-          }}
-        >
-          Links and backlinks
-        </button>
+        <span className="note-header-action">
+          <EditorTooltip label="Links and backlinks">
+            <button
+              className="note-links-toggle"
+              type="button"
+              aria-label="Links and backlinks"
+              aria-expanded={linksOpen}
+              onClick={() => {
+                linksReturnFocus.current =
+                  document.activeElement as HTMLElement;
+                if (linksOpen && !linksCanClose.current()) {
+                  setNavigationNotice(
+                    "Finish the pending note-link operation before closing this panel.",
+                  );
+                  return;
+                }
+                if (linksOpen) linksRequestClose.current();
+                else setLinksOpen(true);
+              }}
+            >
+              <Link2 size={15} aria-hidden="true" />
+            </button>
+          </EditorTooltip>
+        </span>
       )}
+      {onHistory && (
+        <span className="note-header-action">
+          <EditorTooltip label="Version history">
+            <button
+              type="button"
+              aria-label="Version history"
+              disabled={actionBlocked || readOnly}
+              onClick={onHistory}
+            >
+              <Clock3 size={15} aria-hidden="true" />
+            </button>
+          </EditorTooltip>
+        </span>
+      )}
+      <span className="note-header-action">
+        <EditorTooltip label="Share" syntax="Planned">
+          <button type="button" aria-label="Share · Planned" disabled>
+            <Share2 size={15} aria-hidden="true" />
+          </button>
+        </EditorTooltip>
+      </span>
       <Menu
         key={note.id}
         label="Note menu"
         actions={[
-          ...(noteLinks
-            ? [
-                {
-                  label: "Links and backlinks",
-                  onSelect: () => {
-                    linksReturnFocus.current =
-                      document.querySelector<HTMLElement>(
-                        '[aria-label="Note menu"]',
-                      );
-                    setLinksOpen(true);
-                  },
-                },
-              ]
-            : []),
+          {
+            label: "Rename",
+            icon: <Pencil size={14} aria-hidden="true" />,
+            shortcut: "F2",
+            disabled: readOnly,
+            focusAfterSelect: true,
+            onSelect: () => {
+              titleInput.current?.focus();
+              titleInput.current?.select();
+            },
+          },
+          {
+            label: "Duplicate",
+            icon: <Copy size={14} aria-hidden="true" />,
+            shortcut: `${modifier}D`,
+            disabled: readOnly || actionBlocked || duplicateBusy,
+            onSelect: duplicate,
+          },
           ...(noteLinks
             ? [
                 {
                   label: formatNoteLink
                     ? "Copy link to note"
                     : "Copy local reference",
+                  icon: <Link2 size={14} aria-hidden="true" />,
                   onSelect: () => {
                     void copyNoteReference();
                   },
@@ -567,51 +642,50 @@ export function NoteEditor({
           ...(onPin
             ? [
                 {
-                  label: pinned ? "Unpin" : "Pin",
-                  disabled: dirty || !!tagInput.trim() || readOnly,
+                  label: pinned ? "Unpin" : "Pin to top",
+                  icon: <Pin size={14} aria-hidden="true" />,
+                  disabled: actionBlocked || readOnly,
                   onSelect: onPin,
                 },
               ]
             : []),
           {
-            label: "Rename",
-            disabled: readOnly,
-            icon: <Pencil size={14} aria-hidden="true" />,
-            focusAfterSelect: true,
-            onSelect: () => titleInput.current?.focus(),
+            label: "Lock note · Planned",
+            icon: <LockKeyhole size={14} aria-hidden="true" />,
+            disabled: true,
+            separatorBefore: true,
+            onSelect: () => {},
           },
           {
-            label: "Duplicate",
-            icon: <Copy size={14} aria-hidden="true" />,
-            disabled: readOnly || dirty || !!tagInput.trim() || duplicateBusy,
-            onSelect: () => {
-              if (duplicating.current) return;
-              duplicating.current = true;
-              setDuplicateBusy(true);
-              void store
-                .create({
-                  ...draft,
-                  title: `${draft.title || "Untitled note"} (copy)`,
-                })
-                .then(onSaved)
-                .catch((e) => setError(message(e)))
-                .finally(() => {
-                  duplicating.current = false;
-                  setDuplicateBusy(false);
-                });
-            },
+            label: "Share… · Planned",
+            icon: <Share2 size={14} aria-hidden="true" />,
+            disabled: true,
+            onSelect: () => {},
           },
+          ...(onHistory
+            ? [
+                {
+                  label: "Version history",
+                  icon: <Clock3 size={14} aria-hidden="true" />,
+                  disabled: actionBlocked || readOnly,
+                  onSelect: onHistory,
+                },
+              ]
+            : []),
           {
             label: "Export Markdown",
             icon: <Download size={14} aria-hidden="true" />,
-            disabled: dirty || !!tagInput.trim(),
+            disabled: actionBlocked,
+            separatorBefore: true,
             onSelect: () => onExport(base.current),
           },
+          { label: "Export PDF · Planned", disabled: true, onSelect: () => {} },
           {
             label: "Move to Trash",
             icon: <Trash2 size={14} aria-hidden="true" />,
             danger: true,
             disabled: readOnly,
+            separatorBefore: true,
             onSelect: () => leave(() => onTrash(base.current)),
           },
         ]}
@@ -619,7 +693,32 @@ export function NoteEditor({
     </header>
   );
   return (
-    <section className="editor-pane">
+    <section
+      className="editor-pane"
+      onKeyDown={(event) => {
+        if (
+          !active ||
+          readOnly ||
+          event.nativeEvent.isComposing ||
+          event.defaultPrevented
+        )
+          return;
+        if (event.key === "F2") {
+          event.preventDefault();
+          titleInput.current?.focus();
+          titleInput.current?.select();
+        }
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key.toLowerCase() === "d"
+        ) {
+          event.preventDefault();
+          duplicate();
+        }
+      }}
+    >
       {desktop?.toolbar
         ? active
           ? createPortal(chrome, desktop.toolbar)
@@ -641,7 +740,7 @@ export function NoteEditor({
           requestClose={linksRequestClose}
           service={noteLinks.service}
           noteId={note.id}
-          dirty={dirty}
+          dirty={dirty || formatDraftPending}
           onOpen={noteLinks.onOpen}
           onClose={() => {
             setLinksOpen(false);
@@ -680,8 +779,12 @@ export function NoteEditor({
           {conflict ? (
             <>
               <button
-                disabled={copyBusy || readOnly}
+                disabled={copyBusy || readOnly || formatDraftPending}
                 onClick={async () => {
+                  // Source drafts are not in latest.current until they parse.
+                  // Recheck the ref as well as disabling the rendered action.
+                  if (readOnly || copyInFlight.current || formatDraftRef.current)
+                    return;
                   setCopyBusy(true);
                   copyInFlight.current = true;
                   const copiedGeneration = generation.current;
@@ -693,7 +796,8 @@ export function NoteEditor({
                     onSaved(copyNote);
                     if (
                       copiedGeneration !== generation.current ||
-                      tagDraftRef.current.trim()
+                      tagPendingRef.current ||
+                      formatDraftRef.current
                     ) {
                       setNavigationNotice(
                         "An earlier draft was saved as a copy. Your latest changes are still here.",
@@ -747,160 +851,46 @@ export function NoteEditor({
           </button>
         </p>
       )}
+      <div className="note-format-target" ref={setFormattingTarget} />
       <div className="editor-page">
         <textarea
           ref={titleInput}
           id={active ? "note-title" : undefined}
           aria-label="Note title"
           className="note-title"
-          rows={2}
+          rows={1}
           placeholder="Untitled note"
           readOnly={readOnly}
           value={draft.title}
           onChange={(e) => change({ title: e.target.value })}
         />
-        <div className="note-metadata">
-          <div className="note-metadata-tags" aria-label="Current note tags">
-            {draft.tags.map((name) => (
-              <span className="note-metadata-tag" key={name}>
-                <span
-                  className="note-tag-swatch"
-                  aria-hidden="true"
-                  style={{ background: tagCatalog?.find((tag) => tag.name === name)?.color ?? "var(--t3)" }}
-                />
-                {name}
-              </span>
-            ))}
-          </div>
-          <button
-            ref={tagTrigger}
-            type="button"
-            className="note-tags-toggle"
-            aria-label="Manage note tags"
-            aria-expanded={tagEditorOpen}
-            aria-controls={tagEditorId}
-            onClick={() => tagEditorOpen ? closeTagEditor() : setTagEditorOpen(true)}
-          >
-            <Pencil size={12} aria-hidden="true" />
-            {readOnly || draft.tags.length ? "Tags" : "Add tags"}
-          </button>
+        <CompactNoteTags
+          tags={draft.tags}
+          readOnly={readOnly}
+          onChange={(tags) => change({ tags })}
+          onPendingChange={tagPendingChanged}
+          onApply={() =>
+            titleInput.current
+              ?.closest(".editor-page")
+              ?.querySelector<HTMLElement>(
+                '.notes-editor-body:not([hidden]) [contenteditable="true"], .editor-markdown-surface textarea',
+              )
+              ?.focus({ preventScroll: true })
+          }
+        >
           <span aria-hidden="true">·</span>
           <time dateTime={base.current.updatedAt}>
-            Edited {new Date(base.current.updatedAt).toLocaleString(undefined, {
+            Edited{" "}
+            {new Date(base.current.updatedAt).toLocaleString(undefined, {
               dateStyle: "medium",
               timeStyle: "short",
             })}
           </time>
-        </div>
-        <div
-          className="note-tag-editor"
-          id={tagEditorId}
-          role="group"
-          aria-label="Note tags"
-          hidden={!tagEditorOpen}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-            event.preventDefault();
-            event.stopPropagation();
-            closeTagEditor();
-          }}
-        >
-        <div className="note-tag-chips" aria-label="Editable note tags">
-          {draft.tags.map((name) => (
-            <span className="tag" key={name}>
-              {name}
-              <button
-                type="button"
-                aria-label={`Remove tag ${name}`}
-                disabled={readOnly}
-                onClick={() =>
-                  change({
-                    tags: latest.current.tags.filter((tag) => tag !== name),
-                  })
-                }
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-        <div className="tag-entry new-note-tag">
-          <label>
-            New tag
-            <input
-              ref={tagInputElement}
-              aria-label="New tag"
-              maxLength={100}
-              value={tagInput}
-              readOnly={readOnly}
-              placeholder="One tag name"
-              onChange={(event) => {
-                tagDraftRef.current = event.target.value;
-                setTagInput(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  addTag();
-                }
-              }}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={readOnly || !tagInput.trim()}
-            onClick={addTag}
-          >
-            Add tag
-          </button>
-          {tagInput && (
-            <button
-              type="button"
-              onClick={() => {
-                tagDraftRef.current = "";
-                setTagInput("");
-              }}
-            >
-              Clear tag input
-            </button>
-          )}
-        </div>
-        {tagCatalog && (
-          <label className="tag-entry">
-            Add existing tag
-            <select
-              aria-label="Add existing tag"
-              value=""
-              disabled={readOnly}
-              onChange={(event) => {
-                const selectedTag = tagCatalog.find(
-                  (tag) => tag.id === event.target.value,
-                );
-                if (
-                  !selectedTag ||
-                  latest.current.tags.includes(selectedTag.name)
-                )
-                  return;
-                const next = [...latest.current.tags, selectedTag.name];
-                change({ tags: next });
-              }}
-            >
-              <option value="">Choose a tag</option>
-              {tagCatalog
-                .filter((tag) => !draft.tags.includes(tag.name))
-                .map((tag) => (
-                  <option value={tag.id} key={tag.id}>
-                    {tag.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        <button type="button" onClick={closeTagEditor} aria-label="Done editing tags">
-          Done
-        </button>
-        </div>
+        </CompactNoteTags>
         <RichEditor
+          toolbarTarget={formattingTarget}
+          active={active}
+          onUnsavedChange={formatDraftChanged}
           noteLinks={noteLinks}
           documentPolicy="notes"
           readOnly={readOnly || (!!sourceCapture && !sourceReselect)}
@@ -1003,8 +993,8 @@ export function NoteEditor({
           <button
             className="primary"
             onClick={() => {
-              tagDraftRef.current = "";
-              setTagInput("");
+              tagPendingRef.current = false;
+              setTagPending(false);
               stepBatches.current = [];
               traceGap.current = false;
               base.current = conflict;

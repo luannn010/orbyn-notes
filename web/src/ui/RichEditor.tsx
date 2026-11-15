@@ -27,6 +27,8 @@ import {
   referencePlainText,
 } from "./noteLinkClipboard";
 import "../styles/editor-fields.css";
+import { EditorFormatting } from "./editorFormatting";
+import { parseMarkdownSource } from "../editor/markdownSource";
 
 const commands = [
   "Paragraph",
@@ -124,7 +126,13 @@ export function RichEditor({
   sourceControl,
   documentPolicy = "plain",
   noteLinks,
+  toolbarTarget,
+  active: surfaceActive = true,
+  onUnsavedChange,
 }: {
+  toolbarTarget?: HTMLElement | null;
+  active?: boolean;
+  onUnsavedChange?: (dirty: boolean) => void;
   noteLinks?: EditorNoteLinks;
   documentPolicy?: "notes" | "journal" | "plain";
   document: NoteDocument;
@@ -135,6 +143,7 @@ export function RichEditor({
   readOnly?: boolean;
   linkControl?: EditorLinkControl;
 }) {
+  const [markdownView, setMarkdownView] = useState(false);
   const policy = useRef(documentPolicy);
   const pasteReferences = useRef(false);
   const noteLinksRef = useRef(noteLinks);
@@ -517,6 +526,14 @@ export function RichEditor({
         const text = event.clipboardData?.getData("text/plain");
         if (text !== undefined && text !== "") {
           event.preventDefault();
+          if (policy.current === "notes" && preferencesRef.current.markdown && /(^|\n)(?:#{1,6} |[-*] |\d+\. |> )|\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`/.test(text)) {
+            try {
+              const document = parseMarkdownSource(text), node = view.state.schema.nodeFromJSON(document);
+              node.check();
+              view.dispatch(view.state.tr.replaceSelection(Slice.maxOpen(node.content)).scrollIntoView());
+              return true;
+            } catch { setContentNotice("Pasted as plain text because some Markdown is not supported."); }
+          }
           view.dispatch(view.state.tr.insertText(text));
           return true;
         }
@@ -1042,99 +1059,27 @@ export function RichEditor({
   if (!editor) return null;
   return (
     <>
-      <div
-        className="format"
-        role="toolbar"
-        aria-label="Formatting"
-        inert={readOnly || Boolean(checkedDocument.error)}
-        aria-disabled={readOnly || undefined}
-      >
-        {noteLinks && documentPolicy === "notes" && (
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => openNotePicker(editor)}
-          >
-            Link a note
-          </button>
-        )}
-        <button
-          aria-pressed={editor.isActive("bold")}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-        >
-          Bold
-        </button>
-        <button
-          aria-pressed={editor.isActive("italic")}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        >
-          Italic
-        </button>
-        <button
-          aria-pressed={editor.isActive("heading")}
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-        >
-          Heading
-        </button>
-        <button
-          aria-pressed={editor.isActive("bulletList")}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          Bullets
-        </button>
-        <button
-          aria-pressed={editor.isActive("orderedList")}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          Numbered
-        </button>
-        <button
-          aria-pressed={editor.isActive("taskList")}
-          onClick={() => editor.chain().focus().toggleTaskList().run()}
-        >
-          To-do
-        </button>
-        <button
-          onClick={() => {
-            close();
-            const { from, to } = editor.state.selection;
-            const initialUrl = String(editor.getAttributes("link").href ?? "");
-            openLink({
-              from,
-              to,
-              initialUrl,
-              url: initialUrl,
-              source: "toolbar",
-              selection:
-                editor.state.selection.toJSON() as EditorLinkDraft["selection"],
-            });
-          }}
-        >
-          Link
-        </button>
-        <button
-          aria-label="Undo"
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          Undo
-        </button>
-      </div>
-      {sourceControl && (
-        <button
-          type="button"
-          disabled={!sourceSelection || readOnly || !!noteRequest}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            if (sourceSelection?.isCurrent())
-              sourceRef.current?.onCapture(sourceSelection);
-          }}
-        >
-          Make a card
-        </button>
-      )}
+      <EditorFormatting
+        editor={editor}
+        disabled={readOnly || Boolean(checkedDocument.error)}
+        active={surfaceActive}
+        toolbarTarget={toolbarTarget}
+        noteLinks={Boolean(noteLinks && documentPolicy === "notes")}
+        openNote={() => openNotePicker(editor)}
+        onViewChange={setMarkdownView}
+        {...(documentPolicy === "notes" && onUnsavedChange
+          ? { sourceEditing: true as const, onUnsavedChange }
+          : { sourceEditing: false as const })}
+        markdownInput={preferences.markdown}
+        openLink={() => {
+          close();
+          const { from, to } = editor.state.selection;
+          const initialUrl = String(editor.getAttributes("link").href ?? "");
+          openLink({ from, to, initialUrl, url: initialUrl, source: "toolbar", selection: editor.state.selection.toJSON() as EditorLinkDraft["selection"] });
+        }}
+      />
       {sourceControl &&
+        !markdownView &&
         sourceSelection &&
         !linkRequest &&
         !noteRequest &&
@@ -1161,6 +1106,7 @@ export function RichEditor({
         )}
       <div
         className="notes-editor-body"
+        hidden={markdownView}
         data-empty={
           (documentPolicy === "notes" &&
             !readOnly &&

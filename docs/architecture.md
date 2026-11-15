@@ -368,8 +368,10 @@ Source editing is disabled by default. Enabling it requires an explicit
 `sourceEditing: true` and an `onUnsavedChange` callback: the application surface
 must bind that callback to its navigation/save guards before exposing source mode.
 The component's native-close guard does not replace the owning route's admission.
-RichEditor and the note-surface lifecycle are integrated together in the consuming
-slice; the existing application owners keep their current behavior until then.
+RichEditor admits source editing only for Notes with an owning unsaved callback.
+Saved-note and New Note owners include raw Markdown and tag drafts in their
+navigation, close and destructive-action guards. Journal and unowned editors
+retain Rich view only; presentation preferences stay device-local.
 
 ## Account-free sample workspace
 
@@ -384,3 +386,15 @@ Settings exposes the seven existing sections without opening an account or a
 protected store. Sample editor and appearance preferences stay in memory, and
 the previous editor CSS properties are restored on exit. Study, Journal locking,
 and data export are unavailable in the sample.
+
+## Compact tag editing
+
+The owner-approved compact design uses one hashtag action and a comma-separated
+inline field in saved notes and normal New Note creation. Enter or blur applies
+the list through the existing revision-checked save; Escape cancels without a
+write. Pending edits, including deleting every tag, participate in close and
+navigation guards. Read-only and concurrently changed tag lists reject edits.
+Quoted fields preserve existing comma/quote/case/Unicode identities. Legacy tag
+names containing line breaks remain untouched and require a rename through Tags,
+because HTML single-line fields would otherwise strip those characters. Quick
+note keeps its existing capture controls. The encrypted tag schema is unchanged.

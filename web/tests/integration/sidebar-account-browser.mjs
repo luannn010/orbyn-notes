@@ -121,13 +121,13 @@ try {
     .getByLabel("Note content", { exact: true })
     .fill("Created through the real account header action.");
   await expect(
-    page.getByText("Saved in this browser", { exact: true }),
+    page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true }),
   ).toBeVisible();
   // A genuine unsaved tag draft refuses the global action and is never auto-replayed.
   await openNoteTags(page);
   await page
-    .getByLabel("New tag", { exact: true })
-    .fill("Retained unsaved tag");
+    .getByLabel("Tags, separated by commas", { exact: true })
+    .fill('"Retained unsaved tag');
   await create.click();
   await expect(
     page.getByRole("status").filter({
@@ -137,13 +137,13 @@ try {
   await expect(page.getByLabel("Note title", { exact: true })).toHaveValue(
     "Account header encrypted note",
   );
-  await expect(page.getByLabel("New tag", { exact: true })).toHaveValue(
-    "Retained unsaved tag",
+  await expect(page.getByLabel("Tags, separated by commas", { exact: true })).toHaveValue(
+    '"Retained unsaved tag',
   );
   await expect(
     sidebar.getByRole("button", { name: "All notes 1", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("New tag", { exact: true }).fill("");
+  await page.getByLabel("Tags, separated by commas", { exact: true }).press("Escape");
   await page.reload();
   await page
     .getByRole("button", { name: /Account header encrypted note/ })

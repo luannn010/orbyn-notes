@@ -123,8 +123,8 @@ try {
   if (await tagTrigger.count() && await tagTrigger.getAttribute("aria-expanded") === "false")
     await tagTrigger.click();
   await page
-    .getByRole("textbox", { name: "New tag", exact: true })
-    .fill("retained tag draft");
+    .getByRole("textbox", { name: "Tags, separated by commas", exact: true })
+    .fill('"retained tag draft');
   await list.getByRole("button", { name: /^Split second note/ }).click();
   await expect(
     page.getByRole("textbox", { name: "Note title", exact: true }),
@@ -143,8 +143,8 @@ try {
   );
   await expect(list).toBeHidden();
   await expect(
-    page.getByRole("textbox", { name: "New tag", exact: true }),
-  ).toHaveValue("retained tag draft");
+    page.getByRole("textbox", { name: "Tags, separated by commas", exact: true }),
+  ).toHaveValue('"retained tag draft');
   expect(
     await page
       .getByRole("textbox", { name: "Note content", exact: true })
@@ -153,7 +153,7 @@ try {
   await page.screenshot({ path: `${output}/narrow-fallback.png` });
   await page.setViewportSize({ width: 1280, height: 850 });
   await expect(list).toBeVisible();
-  await page.getByRole("textbox", { name: "New tag", exact: true }).fill("");
+  await page.getByRole("textbox", { name: "Tags, separated by commas", exact: true }).press("Escape");
   await list.getByRole("button", { name: /^Split second note/ }).click();
   await expect(
     page.getByRole("textbox", { name: "Note title", exact: true }),
