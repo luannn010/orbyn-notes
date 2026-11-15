@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import {
-  FileText,
+  Note as NoteIcon,
   Search,
   Trash2,
   Settings,
@@ -18,7 +18,9 @@ import {
   Pin,
   Paperclip,
   Tags,
-} from "lucide-react";
+  Sun,
+  Cards,
+} from "./icons";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
 import {
@@ -396,8 +398,11 @@ export function Workspace({
       "opening" | "blocked" | "unavailable" | null
     >(null);
   const [searchActionError, setSearchActionError] = useState("");
+  const [searchComposing, setSearchComposing] = useState(false);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchPrivacyVersion, setSearchPrivacyVersion] = useState(0);
   const [restoreClipSearchOrigin, setRestoreClipSearchOrigin] = useState(0);
+  const [searchInvocation, setSearchInvocation] = useState(0);
   const [clipSearchRequest, setClipSearchRequest] =
       useState<ClipSearchOpenRequest | null>(null),
     [cardSearchRequest, setCardSearchRequest] =
@@ -892,7 +897,8 @@ export function Workspace({
       setSearchNavigation("blocked");
       return;
     }
-    if (!searchOrigin) {
+    if (!searchActive) {
+      setSearchInvocation(value => value + 1);
       searchScroll.current = 0;
       setSearchOrigin({
         module,
@@ -905,6 +911,10 @@ export function Workspace({
     }
     setSearchNavigation(null);
     // A retained certificate is not current proof. Clear it synchronously before exposure.
+    if (submit && searchDebounce.current) {
+      clearTimeout(searchDebounce.current);
+      searchDebounce.current = null;
+    }
     if (submit && searchOwner.service)
       runSearchAction(() => searchOwner.service!.query(raw));
     else if (!searchActive) freshenReadySearch(raw);
@@ -939,6 +949,8 @@ export function Workspace({
     runSearchAction(() => service.query(raw, undefined, Object.freeze(pages)));
   }
   function cancelSearchWork() {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = null;
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -946,10 +958,24 @@ export function Workspace({
     setSearchActionError("");
     searchOwner.service?.cancel();
   }
-  function editSearchQuery(raw: string) {
+  function editSearchQuery(raw: string, composing = false) {
     cancelSearchWork();
+    setSearchComposing(composing);
     setSearchQuery(raw);
   }
+  useEffect(() => {
+    if (!searchActive || searchComposing || !searchQuery.trim() || !searchOwner.service) return;
+    const service = searchOwner.service;
+    const ticket = searchTicket.current;
+    searchDebounce.current = setTimeout(() => {
+      searchDebounce.current = null;
+      if (searchTicket.current === ticket) runSearchAction(() => service.query(searchQuery));
+    }, 150);
+    return () => {
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
+      searchDebounce.current = null;
+    };
+  }, [searchActive, searchQuery, searchComposing, searchOwner.service, searchPrivacyVersion]);
   function selectSearchTab(tab: SearchTab) {
     restoreSearchScroll.current = null;
     setSearchTab(tab);
@@ -961,6 +987,9 @@ export function Workspace({
       setSearchNavigation("blocked");
       return;
     }
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = null;
+    setSearchComposing(false);
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -1068,6 +1097,8 @@ export function Workspace({
   }
   function returnToSearch() {
     if (!canNavigate()) return;
+    setSearchInvocation(value => value + 1);
+    setSearchOrigin({ module, selected, trash, tag, pinned: pinnedOnly, linked: linkedOnly });
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -1102,8 +1133,8 @@ export function Workspace({
     } else if (searchOwner.state.status !== "pending")
       restoreSearchScroll.current = null;
   }, [searchActive, searchOwner.state]);
-  const enterSearchRef = useRef(enterSearch);
-  enterSearchRef.current = enterSearch;
+  const searchToggleRef = useRef(() => {});
+  searchToggleRef.current = () => searchActive ? clearSearch() : enterSearch();
   useEffect(() => {
     if (!sourceOwner) return;
     const key = (event: KeyboardEvent) => {
@@ -1112,11 +1143,11 @@ export function Workspace({
         !(event.ctrlKey || event.metaKey) ||
         event.altKey ||
         event.isComposing ||
-        document.querySelector('dialog[open], [role="dialog"]')
+        document.querySelector('dialog[open]:not(.workspace-search), [role="dialog"]:not(.workspace-search)')
       )
         return;
       event.preventDefault();
-      enterSearchRef.current();
+      searchToggleRef.current();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -1846,9 +1877,9 @@ export function Workspace({
             onClick={() => enterSearch()}
             aria-label="Search notes, clips and cards"
           >
-            <Search size={15} aria-hidden="true" />
+            <Search size={13} aria-hidden="true" />
             <span>Search notes</span>
-            <kbd>Ctrl K</kbd>
+            <kbd>Ctrl+K</kbd>
           </button>
         ) : (
           <label className="search">
@@ -1878,7 +1909,7 @@ export function Workspace({
             }
             onClick={() => navigate()}
           >
-            <FileText size={15} />
+            <NoteIcon size={15} />
             <span className="nav-label">All notes</span>{" "}
             <span>{notes.filter((n) => !n.trashedAt).length}</span>
           </button>
@@ -1896,20 +1927,7 @@ export function Workspace({
               setDrawer(false);
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="3.8" />
-              <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" />
-            </svg>
+            <Sun size={15} />
             <span className="nav-label">Journal</span>
           </button>
           <button
@@ -1923,20 +1941,7 @@ export function Workspace({
               setDrawer(false);
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="6.5" y="3.5" width="12" height="15" rx="2" />
-              <path d="M4 7v12a2 2 0 0 0 2 2h9" />
-            </svg>
+            <Cards size={15} />
             <span className="nav-label">Study</span>
           </button>
           <button
@@ -2103,6 +2108,7 @@ export function Workspace({
         <SearchSurface
           active={searchActive}
           privacyVersion={searchPrivacyVersion}
+          onClose={clearSearch}
         >
           {searchActionError && (
             <p role="alert" className="banner">
@@ -2158,7 +2164,6 @@ export function Workspace({
         )}
         <div
           className="workspace-route"
-          hidden={searchActive}
           inert={searchActive}
         >
           {offline && module === "notes" && (
@@ -2322,6 +2327,7 @@ export function Workspace({
                     openEntry={studyEntry}
                     openClip={view === "clips" ? clipSearchRequest : null}
                     holdClipSearchOrigin={searchOrigin?.module === "clips"}
+                    clipSearchInvocation={searchInvocation}
                     restoreClipSearchOrigin={restoreClipSearchOrigin}
                     openCard={view === "study" ? cardSearchRequest : null}
                     onReturnToSearch={returnToSearch}
@@ -2574,7 +2580,7 @@ export function Workspace({
                   }
                 >
                   <span className={query || trash || pinnedOnly || linkedOnly ? "empty-state-icon" : "library-empty-icon"}>
-                    {query || trash || pinnedOnly || linkedOnly ? <FileText size={20} aria-hidden="true" /> : <NotesMark size={48} />}
+                    {query || trash || pinnedOnly || linkedOnly ? <NoteIcon size={20} aria-hidden="true" /> : <NotesMark size={48} />}
                   </span>
                   <h2>
                     {query
@@ -2666,7 +2672,7 @@ export function Workspace({
                             setSelected(n.id);
                           }}
                         >
-                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <FileText size={14} />}</span>
+                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <NoteIcon size={14} />}</span>
                           <h2>{n.title || "Untitled note"}</h2>
                           <p>{plainText(n.document).slice(0, 180)}</p>
                           <div className="metadata">

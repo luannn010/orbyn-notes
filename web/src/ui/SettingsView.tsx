@@ -19,7 +19,7 @@ import {
   Plug,
   ChevronLeft,
   Search,
-} from "lucide-react";
+} from "./icons";
 import { StudySettingsPanel } from "./StudySettingsPanel";
 import type {
   StudySettingsOwner,

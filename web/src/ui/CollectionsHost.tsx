@@ -34,6 +34,7 @@ export function CollectionsHost({
   openCard,
   onReturnToSearch,
   holdClipSearchOrigin,
+  clipSearchInvocation,
   restoreClipSearchOrigin,
   onSearchReaderResult,
   covered = false,
@@ -46,6 +47,7 @@ export function CollectionsHost({
   openCard?: CardSearchOpenRequest | null;
   onReturnToSearch?: () => void;
   holdClipSearchOrigin?: boolean;
+  clipSearchInvocation?: number;
   restoreClipSearchOrigin?: number;
   onSearchReaderResult?: SearchReaderResult;
   onOpenSource?: (request: StudySourceOpenRequest) => void;
@@ -226,6 +228,7 @@ export function CollectionsHost({
         accountId={session.accountId}
         openClip={openClip}
         holdSearchOrigin={holdClipSearchOrigin}
+        searchInvocation={clipSearchInvocation}
         restoreSearchOrigin={restoreClipSearchOrigin}
         onSearchReaderResult={onSearchReaderResult}
         onOpenExternal={isDesktop() ? openExternalUrl : undefined}

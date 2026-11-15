@@ -38,7 +38,7 @@ try {
   const pin = row.getByRole("button", { name: new RegExp(`^Pin ${title}`) });
   await pin.click();
   await expect(row.getByRole("button", { name: new RegExp(`^Unpin ${title}`) })).toHaveAttribute("aria-pressed", "true");
-  await expect(row.locator(".note-list-lead svg")).toHaveClass(/lucide-pin/);
+  await expect(row.locator(".note-list-lead svg")).toHaveAttribute("data-icon", "pin");
   for (const theme of ["light", "dark", "dim"]) {
     await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
     for (const width of [null, 300]) {

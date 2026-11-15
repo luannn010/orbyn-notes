@@ -9,22 +9,29 @@
 .clip-filters {
   display: flex;
   gap: 6px;
-  padding: 0 28px 16px;
+  padding: 4px 28px 10px;
   flex-wrap: wrap;
 }
 .clip-filters button {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
+  gap: 6px;
   align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border-radius: 999px;
-  background: transparent;
+  background: var(--raise);
+  color: var(--t2);
+  font-size: 12px;
 }
 .clip-filters button[aria-pressed="true"] {
-  background: var(--sel);
+  background: var(--btn);
+  color: var(--btnt);
 }
 .clip-filters span {
-  color: var(--t3);
-  font-size: 11px;
+  color: inherit;
+  font-size: inherit;
 }
 .clip-list {
   padding: 0 28px 28px;
@@ -144,7 +151,7 @@
 }
 @media (max-width: 650px) {
   .clip-filters {
-    padding: 0 16px 14px;
+    padding: 4px 16px 10px;
   }
   .clip-list {
     padding: 0 16px 20px;

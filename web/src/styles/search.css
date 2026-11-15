@@ -368,3 +368,81 @@
 .note-actor[hidden] {
   display: none;
 }
+
+/* The search switcher lives in the browser's modal top layer, above native chrome. */
+dialog.workspace-search {
+  position: fixed;
+  inset: 60px auto auto 50%;
+  transform: translateX(-50%);
+  display: block;
+  width: min(620px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 80px);
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 0;
+  border-radius: 16px;
+  background: var(--main);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .18), 0 0 0 1px var(--line2);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  animation: none;
+}
+dialog.workspace-search::backdrop { background: rgba(0, 0, 0, .16); }
+:root[data-motion="reduced"] dialog.workspace-search,
+:root:not([data-motion="on"]) dialog.workspace-search { animation: none !important; transform: translateX(-50%) !important; }
+:root[data-theme="dark"] dialog.workspace-search::backdrop,
+:root[data-theme="dim"] dialog.workspace-search::backdrop { background: rgba(0, 0, 0, .5); }
+dialog.workspace-search > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.workspace-search .search-active-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.workspace-search .search-heading { padding: 12px 14px 0; }
+.workspace-search .search-heading h1 { font-size: 15px; }
+.workspace-search .search-content { padding: 0; gap: 4px; }
+.workspace-search .unified-search { overflow: visible; }
+.workspace-search .search-input {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--raise);
+  color: var(--t3);
+  font-size: 13px;
+  font-weight: 400;
+}
+.workspace-search .search-input input {
+  height: 100%;
+  border-radius: 0;
+  font: inherit;
+  line-height: 1.45;
+  box-shadow: none;
+}
+.workspace-search .search-input input::placeholder { color: var(--t3); }
+.workspace-search .search-input:focus-within { outline: 2px solid var(--t1); outline-offset: 2px; box-shadow: none; }
+.workspace-search .search-scope {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+/* Planner has an empty results group between the field and its blank hint. */
+.workspace-search .search-hint { padding: 8px 10px; margin: 4px 0 0; color: var(--t3); font-size: 13px; font-weight: 400; line-height: 1.45; }
+.workspace-search .search-tabs { flex-wrap: nowrap; overflow-x: auto; }
+.workspace-search .search-tabs button { flex: none; height: 26px; min-height: 26px; font-weight: 400; }
+.workspace-search .search-group ul { gap: 1px; }
+.workspace-search .search-group h2 { padding: 14px 8px 5px; color: var(--t3); font-size: 11.5px; font-weight: 400; }
+.workspace-search .search-result { min-height: 29px; padding: 5px 8px; border-radius: 8px; font-size: 13px; font-weight: 400; }
+.workspace-search .search-result b { gap: 10px; font-size: 13px; font-weight: 400; }
+.workspace-search .search-result small { font-size: 11.5px; }
+.workspace-search .search-empty { padding: 8px 10px; }
+.workspace-search .search-empty h2 { font-size: 13px; font-weight: 500; }
+.workspace-search .search-result[data-active="true"] { background: var(--sel); }
+.workspace-search .search-result:focus-visible { background: var(--sel); outline: 1px solid var(--t3); outline-offset: -2px; }
+@media (max-width: 899px) {
+  dialog.workspace-search { top: 12px; max-height: calc(100dvh - 24px); }
+  .desktop-shell dialog.workspace-search { top: 54px; max-height: calc(100dvh - 66px); }
+}

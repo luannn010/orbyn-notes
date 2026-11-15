@@ -184,6 +184,22 @@ it("restores the actual held Clip reader on explicit search clear", async () => 
   );
   await screen.findByRole("heading", { name: "Current A" });
 });
+it("recaptures the current clip and filter for a later search invocation", async () => {
+  const f = clips();
+  const v = render(<ClipsView store={f.store} accountId={accountId} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Current A/ }));
+  await screen.findByRole("heading", { name: "Current A" });
+  v.rerender(<ClipsView store={f.store} accountId={accountId} holdSearchOrigin searchInvocation={1} />);
+  v.rerender(<ClipsView store={f.store} accountId={accountId} holdSearchOrigin searchInvocation={1} openClip={clipRequest("b")} />);
+  await screen.findByRole("heading", { name: "Archived B" });
+  fireEvent.click(screen.getByRole("button", { name: /Archived1/ }));
+  v.rerender(<ClipsView store={f.store} accountId={accountId} holdSearchOrigin searchInvocation={2} />);
+  v.rerender(<ClipsView store={f.store} accountId={accountId} holdSearchOrigin searchInvocation={2} openClip={clipRequest("a", "second-a")} />);
+  await screen.findByRole("heading", { name: "Current A" });
+  v.rerender(<ClipsView store={f.store} accountId={accountId} restoreSearchOrigin={1} searchInvocation={2} />);
+  await screen.findByRole("heading", { name: "Archived B" });
+  expect(screen.getByRole("button", { name: /Archived1/ })).toHaveAttribute("aria-pressed", "true");
+});
 function study() {
   const at = new Date("2026-01-01T12:00:00Z");
   let state = createDeck(emptyStudy("UTC"), "Actual deck", at);

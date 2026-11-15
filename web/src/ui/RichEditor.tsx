@@ -26,6 +26,7 @@ import {
   decodeNoteFragment,
   referencePlainText,
 } from "./noteLinkClipboard";
+import "../styles/editor-fields.css";
 
 const commands = [
   "Paragraph",
@@ -263,6 +264,7 @@ export function RichEditor({
   const [linkRequest, setLinkRequest] = useState<LinkRequest | null>(null);
   const [linkError, setLinkError] = useState("");
   const [contentNotice, setContentNotice] = useState("");
+  const [bodyEmpty, setBodyEmpty] = useState(false);
   const [noteRequest, setNoteRequest] = useState<{
     from: number;
     to: number;
@@ -410,6 +412,7 @@ export function RichEditor({
     editable: !readOnly,
     extensions: createNoteExtensions({ noteLinkNodeView: noteViews.renderer }),
     content: checkedDocument.value,
+    onCreate: ({ editor }) => setBodyEmpty(editor.isEmpty),
     editorProps: {
       attributes: {
         role: "textbox",
@@ -536,6 +539,7 @@ export function RichEditor({
     onTransaction: ({ editor, transaction, appendedTransactions }) => {
       const batch = [transaction, ...appendedTransactions];
       if (!batch.some((item) => item.docChanged)) return;
+      setBodyEmpty(editor.isEmpty);
       setContentNotice("");
       editorVersion.current++;
       sourceDecorations.current = DecorationSet.empty;
@@ -1155,7 +1159,18 @@ export function RichEditor({
             </button>
           </div>
         )}
-      <EditorContent editor={editor} />
+      <div
+        className="notes-editor-body"
+        data-empty={
+          (documentPolicy === "notes" &&
+            !readOnly &&
+            !checkedDocument.error &&
+            bodyEmpty) ||
+          undefined
+        }
+      >
+        <EditorContent editor={editor} />
+      </div>
       {noteRequest && noteLinks && documentPolicy === "notes" && (
         <NoteLinkPicker
           owner={noteLinks}

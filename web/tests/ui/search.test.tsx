@@ -75,7 +75,7 @@ function props(state: SearchState = ready()): SearchViewProps {
 it("renders exact grouped counts and escaped original marks; only exact locator is sent to navigation", () => {
   const p = props();
   const view = render(<SearchView {...p} />);
-  expect(screen.getByText("1 result for “lisbon”")).toBeVisible();
+  expect(screen.getByRole("button", { name: "All 1" })).toBeVisible();
   const group = screen.getByRole("region", { name: "Notes results" });
   expect(group.querySelector("mark")).toHaveTextContent("Lisbon");
   expect(view.container.querySelector("script")).toBeNull();
@@ -148,27 +148,53 @@ it("shows the exact empty frame only for a complete zero result with one clear a
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(p.onClear).toHaveBeenCalledOnce();
 });
-it("preserves raw input and suppresses submit during IME composition; Escape clears then returns explicitly", () => {
+it("preserves raw input and suppresses submit during IME composition; Escape closes", () => {
   const p = props({ status: "error", raw: "lisbon", code: "query-too-long" });
-  const v = render(<SearchView {...p} />);
+  render(<SearchView {...p} />);
   const input = screen.getByRole("textbox", {
     name: "Search notes, clips and cards",
   });
   fireEvent.compositionStart(input);
+  fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+  expect(p.onClear).not.toHaveBeenCalled();
   fireEvent.change(input, { target: { value: "unfinished 漢" } });
   fireEvent.submit(input.closest("form")!);
-  expect(p.onQueryChange).toHaveBeenCalledWith("unfinished 漢");
+  expect(p.onQueryChange).toHaveBeenCalledWith("unfinished 漢", true);
   expect(p.onSubmit).not.toHaveBeenCalled();
   fireEvent.compositionEnd(input);
   fireEvent.submit(input.closest("form")!);
   expect(p.onSubmit).toHaveBeenCalledWith("lisbon");
   fireEvent.keyDown(input, { key: "Escape" });
-  expect(p.onCancel).toHaveBeenCalledOnce();
-  expect(p.onQueryChange).toHaveBeenLastCalledWith("");
-  expect(p.onClear).not.toHaveBeenCalled();
-  v.rerender(<SearchView {...p} query="" />);
-  fireEvent.keyDown(input, { key: "Escape" });
   expect(p.onClear).toHaveBeenCalledOnce();
+});
+it("uses arrow keys and Enter to open a current result", () => {
+  const p = props();
+  render(<SearchView {...p} />);
+  const input = screen.getByRole("textbox", { name: "Search notes, clips and cards" });
+  input.focus();
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  const result = within(screen.getByRole("region", { name: "Notes results" })).getByRole("button");
+  expect(input).toHaveFocus();
+  expect(result).toHaveAttribute("data-active", "true");
+  fireEvent.submit(input.closest("form")!);
+  expect(p.onOpen).toHaveBeenCalledWith(hit.locator);
+});
+it("keeps the selected row valid when results shrink and resets it on keyboard category change", () => {
+  const second = { ...hit, primary: { ...hit.primary, text: "Second match" } };
+  const p = props(ready({ counts: { all: 2, notes: 2, clips: 0, cards: 0 }, groups: [
+    { kind: "note", items: [hit, second], offset: 0, previous: null, next: null },
+  ] }));
+  const view = render(<SearchView {...p} />);
+  const input = screen.getByRole("textbox", { name: "Search notes, clips and cards" });
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(within(screen.getByRole("region", { name: "Notes results" })).getByRole("button", { name: /Second match/ })).toHaveAttribute("data-active", "true");
+  view.rerender(<SearchView {...p} state={ready()} />);
+  expect(within(screen.getByRole("region", { name: "Notes results" })).getByRole("button")).toHaveAttribute("data-active", "true");
+  const all = screen.getByRole("button", { name: "All 1" });
+  fireEvent.keyDown(all, { key: "ArrowRight" });
+  expect(p.onTabChange).toHaveBeenCalledWith("note");
+  view.rerender(<SearchView {...p} state={ready()} tab="note" />);
+  expect(within(screen.getByRole("region", { name: "Notes results" })).getByRole("button")).toHaveAttribute("data-active", "true");
 });
 it("retains exact totals and previous complete rows through page pending/pause/error and uses opaque cursors", () => {
   const state = ready({
@@ -201,7 +227,7 @@ it("retains exact totals and previous complete rows through page pending/pause/e
         }}
       />,
     );
-    expect(screen.getByText("120 results for “lisbon”")).toBeVisible();
+    expect(screen.getByRole("button", { name: "All 120" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: /<script>Lisbon/ }),
     ).toBeVisible();
@@ -310,9 +336,7 @@ it("renders blank-query guidance without fake zero counts and clips malformed hi
   const p = props({ status: "idle", raw: "" });
   const v = render(<SearchView {...p} query="" />);
   expect(
-    screen.getByRole("heading", {
-      name: "Search your notes, clips and cards.",
-    }),
+    screen.getByText("Type to search your notes, clips and cards."),
   ).toBeVisible();
   expect(
     screen.queryByText(/0 results|No results for/),

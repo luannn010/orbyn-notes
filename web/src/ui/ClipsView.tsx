@@ -67,6 +67,7 @@ export function ClipsView({
   onSearchReaderResult,
   accountId,
   holdSearchOrigin = false,
+  searchInvocation = 0,
   restoreSearchOrigin = 0,
 }: {
   heading?: HeadingPresentation;
@@ -76,6 +77,7 @@ export function ClipsView({
   onSearchReaderResult?: SearchReaderResult;
   accountId?: string;
   holdSearchOrigin?: boolean;
+  searchInvocation?: number;
   restoreSearchOrigin?: number;
 }) {
   const headingLive = useRef(heading);
@@ -131,7 +133,8 @@ export function ClipsView({
       filter: Filter;
       epoch: string;
     } | null>(null),
-    restoredSearchOrigin = useRef(restoreSearchOrigin);
+    restoredSearchOrigin = useRef(restoreSearchOrigin),
+    heldInvocation = useRef(searchInvocation);
   useLayoutEffect(() => {
     if (restoredSearchOrigin.current !== restoreSearchOrigin) {
       const origin = heldSearchOrigin.current;
@@ -147,14 +150,16 @@ export function ClipsView({
       heldSearchOrigin.current = null;
       restoredSearchOrigin.current = restoreSearchOrigin;
     }
-    if (holdSearchOrigin && !heldSearchOrigin.current && current.current)
+    if (holdSearchOrigin && (!heldSearchOrigin.current || heldInvocation.current !== searchInvocation) && current.current) {
       heldSearchOrigin.current = {
         id: selectedId.current,
         filter,
         epoch: current.current.epoch,
       };
+      heldInvocation.current = searchInvocation;
+    }
     if (!holdSearchOrigin) heldSearchOrigin.current = null;
-  }, [holdSearchOrigin, restoreSearchOrigin, snapshot?.epoch]);
+  }, [holdSearchOrigin, restoreSearchOrigin, searchInvocation, snapshot?.epoch]);
   const searchAdmission = useRef(0),
     readerResult = useRef(onSearchReaderResult);
   readerResult.current = onSearchReaderResult;
