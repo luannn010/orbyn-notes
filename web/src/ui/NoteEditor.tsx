@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { useDesktop } from "../desktop/DesktopShell";
@@ -33,6 +33,7 @@ import { NoteLinksPanel } from "./NoteLinksPanel";
 import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
+import "../styles/note-metadata.css";
 export function NoteEditor({
   note,
   store,
@@ -206,6 +207,18 @@ export function NoteEditor({
   });
   const [tagInput, setTagInput] = useState("");
   const tagDraftRef = useRef("");
+  const [tagEditorOpen, setTagEditorOpen] = useState(false);
+  const tagEditorId = useId();
+  const tagTrigger = useRef<HTMLButtonElement>(null);
+  const tagInputElement = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    if (tagEditorOpen && active)
+      tagInputElement.current?.focus({ preventScroll: true });
+  }, [tagEditorOpen, active]);
+  function closeTagEditor() {
+    setTagEditorOpen(false);
+    tagTrigger.current?.focus({ preventScroll: true });
+  }
   const stepBatches = useRef<
       { id: number; before: NoteDocument; steps: readonly unknown[] }[]
     >([]),
@@ -243,6 +256,7 @@ export function NoteEditor({
           duplicating.current ||
           copyInFlight.current
         ) {
+          if (tagDraftRef.current.trim()) setTagEditorOpen(true);
           setNavigationNotice(
             tagDraftRef.current.trim()
               ? "Add or clear the new tag before leaving."
@@ -459,6 +473,7 @@ export function NoteEditor({
       duplicating.current ||
       copyInFlight.current
     ) {
+      if (tagDraftRef.current.trim()) setTagEditorOpen(true);
       setNavigationNotice(
         tagDraftRef.current.trim()
           ? "Add or clear the new tag before leaving."
@@ -743,7 +758,53 @@ export function NoteEditor({
           value={draft.title}
           onChange={(e) => change({ title: e.target.value })}
         />
-        <div className="note-tag-chips" aria-label="Current note tags">
+        <div className="note-metadata">
+          <div className="note-metadata-tags" aria-label="Current note tags">
+            {draft.tags.map((name) => (
+              <span className="note-metadata-tag" key={name}>
+                <span
+                  className="note-tag-swatch"
+                  aria-hidden="true"
+                  style={{ background: tagCatalog?.find((tag) => tag.name === name)?.color ?? "var(--t3)" }}
+                />
+                {name}
+              </span>
+            ))}
+          </div>
+          <button
+            ref={tagTrigger}
+            type="button"
+            className="note-tags-toggle"
+            aria-label="Manage note tags"
+            aria-expanded={tagEditorOpen}
+            aria-controls={tagEditorId}
+            onClick={() => tagEditorOpen ? closeTagEditor() : setTagEditorOpen(true)}
+          >
+            <Pencil size={12} aria-hidden="true" />
+            {readOnly || draft.tags.length ? "Tags" : "Add tags"}
+          </button>
+          <span aria-hidden="true">·</span>
+          <time dateTime={base.current.updatedAt}>
+            Edited {new Date(base.current.updatedAt).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </time>
+        </div>
+        <div
+          className="note-tag-editor"
+          id={tagEditorId}
+          role="group"
+          aria-label="Note tags"
+          hidden={!tagEditorOpen}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.stopPropagation();
+            closeTagEditor();
+          }}
+        >
+        <div className="note-tag-chips" aria-label="Editable note tags">
           {draft.tags.map((name) => (
             <span className="tag" key={name}>
               {name}
@@ -766,6 +827,7 @@ export function NoteEditor({
           <label>
             New tag
             <input
+              ref={tagInputElement}
               aria-label="New tag"
               maxLength={100}
               value={tagInput}
@@ -833,6 +895,10 @@ export function NoteEditor({
             </select>
           </label>
         )}
+        <button type="button" onClick={closeTagEditor} aria-label="Done editing tags">
+          Done
+        </button>
+        </div>
         <RichEditor
           noteLinks={noteLinks}
           documentPolicy="notes"

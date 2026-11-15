@@ -1,0 +1,56 @@
+/* Notes artifact 06325398: editor/layout-desktop metadata row. */
+.note-metadata,
+.note-metadata-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.note-metadata {
+  margin: 0 0 12px;
+  color: var(--t3);
+  font-size: 12px;
+}
+.note-metadata-tags:empty {
+  display: none;
+}
+.note-metadata-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.note-tag-swatch {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 3px;
+}
+.note-tags-toggle {
+  min-height: 24px;
+  padding: 2px 5px;
+  background: transparent;
+  color: var(--t3);
+  font-size: 12px;
+  gap: 4px;
+}
+.note-tag-editor {
+  padding: 10px 0 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.note-tag-editor[hidden] {
+  display: none;
+}
+.note-tag-editor .tag-entry {
+  margin: 12px 0;
+}
+.note-tag-editor .tag-entry label {
+  min-width: 0;
+}
+@media (max-width: 650px) {
+  .note-tag-editor .tag-entry {
+    flex-wrap: wrap;
+  }
+}

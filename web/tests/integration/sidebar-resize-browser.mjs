@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { openNoteTags } from "./note-tag-controls.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const output = process.env.NOTES_UI_OUTPUT ?? "test-results/sidebar-resize";
@@ -48,6 +49,7 @@ try {
   ).toBeVisible();
   const longTag =
     "A deliberately long sidebar tag whose full accessible name survives resizing";
+  await openNoteTags(page);
   await page.getByLabel("New tag", { exact: true }).fill(longTag);
   await page.getByRole("button", { name: "Add tag", exact: true }).click();
   await expect(

@@ -497,6 +497,7 @@ it("preserves exact comma/case/Unicode tags while adding, saving and reopening",
     tagCatalog: catalog,
   };
   const view = render(<NoteEditor note={initial} {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage note tags" }));
   fireEvent.change(screen.getByLabelText("Add existing tag"), {
     target: { value: "comma-tag" },
   });
@@ -510,6 +511,7 @@ it("preserves exact comma/case/Unicode tags while adding, saving and reopening",
   );
   view.unmount();
   render(<NoteEditor note={saved} {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage note tags" }));
   for (const name of [...initial.tags, "work, play", "Another tag"])
     expect(
       screen.getByRole("button", { name: `Remove tag ${name}` }),
@@ -535,6 +537,7 @@ it("keeps an unsubmitted single tag guarded without rewriting saved tags", async
       onExport={vi.fn()}
     />,
   );
+  fireEvent.click(screen.getByRole("button", { name: "Manage note tags" }));
   fireEvent.change(screen.getByLabelText("New tag"), {
     target: { value: "Unsubmitted" },
   });
