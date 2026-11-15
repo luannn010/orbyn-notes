@@ -139,4 +139,3 @@ it("retains raw Markdown entered while a conflict copy commit awaits completion"
   ).toBeVisible();
   expect(checkClose()).toBe("draft");
 });
-
