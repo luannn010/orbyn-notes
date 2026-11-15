@@ -28,7 +28,7 @@ import { message, plainText } from "./model";
 import { storageCopy } from "./storageCopy";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
-import { Copy, Download, Pencil, Trash2 } from "lucide-react";
+import { Copy, Download, Pencil, Trash2 } from "./icons";
 import type { EditorNoteLinks } from "./noteLinkViews";
 import { NoteLinksPanel } from "./NoteLinksPanel";
 import { encodeNoteReference } from "../links/reference";

@@ -17,7 +17,7 @@ import {
   RefreshCw,
   Sun,
   Plug,
-} from "lucide-react";
+} from "./icons";
 import { StudySettingsPanel } from "./StudySettingsPanel";
 import type {
   StudySettingsOwner,

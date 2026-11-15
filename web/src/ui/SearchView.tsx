@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { FileText, Layers, Paperclip, Search, X } from "lucide-react";
+import { FileText, Layers, Paperclip, Search, X } from "./icons";
 import type { SearchExcerpt } from "../search/matching";
 import type {
   SearchCursor,

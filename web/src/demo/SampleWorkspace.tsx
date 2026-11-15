@@ -9,7 +9,7 @@ import {
   Search,
   Settings,
   Sun,
-} from "lucide-react";
+} from "../ui/icons";
 import { useDesktop } from "../desktop/DesktopShell";
 import { NotesMark } from "../ui/NotesMark";
 import { RichEditor } from "../ui/RichEditor";
