@@ -1,0 +1,49 @@
+.notes-workspace,
+.notes-library-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.notes-workspace[hidden],
+.notes-library-pane[hidden] {
+  display: none;
+}
+.notes-workspace[data-split="true"] {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  overflow: hidden;
+}
+.notes-workspace[data-split="true"] > .notes-library-pane {
+  grid-column: 1;
+  grid-row: 1;
+  border-right: 1px solid var(--line);
+  padding: 6px;
+  overflow: auto;
+}
+.notes-workspace[data-split="true"] > .note-actor-pool {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: auto;
+}
+.notes-workspace[data-split="true"] .notes-library-heading {
+  padding: 12px 10px 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.notes-workspace[data-split="true"] .notes-library-heading h1 {
+  font-size: 17px;
+}
+.notes-workspace[data-split="true"] .notes-library-toolbar {
+  flex-wrap: wrap;
+}
+.notes-workspace[data-split="true"] .notes-library-view {
+  display: none;
+}
+.notes-workspace[data-split="true"] .note-collection {
+  padding: 4px 0 20px;
+}
+.notes-workspace[data-split="true"] .note-open[aria-current="page"] {
+  background: var(--sel);
+}
