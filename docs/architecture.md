@@ -332,3 +332,13 @@ All CSS is scoped to Notes library classes; other action groups, dialogs and the
 native caption/editor toolbar retain their own geometry. Design reference:
 f610ced1da443b04699137333c1309925092fffa, Notes `library-list`, `library-grid`
 and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
+
+## Account-free sample workspace
+
+Account entry remains the default. Its explicit sample action mounts a lazy,
+separate host and unmounts the account/store lifecycle. Sample Notes, Journal,
+Study practice and Clips use disposable React state, with no account identity,
+real store, protected Journal vault or article-fetch adapter. This is an
+interactive demonstration, not an account-free persistent library or beta
+qualification fixture. Edits survive module navigation and reset on exit/reload.
+Appearance changes are temporary and restore the prior root attributes on exit.

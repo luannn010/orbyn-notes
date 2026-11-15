@@ -13,14 +13,18 @@ import { IncomingNoteLink } from "./ui/noteLinks/IncomingNoteLink";
 const Workspace = lazy(() =>
   import("./ui/Workspace").then((module) => ({ default: module.Workspace })),
 );
+const SampleWorkspace = lazy(() => import("./demo/SampleWorkspace"));
 export function App() {
+  const [sample, setSample] = useState(false);
   return (
     <DesktopShell>
-      <AppContent />
+      {sample ? (
+        <Suspense fallback={<Loading />}><SampleWorkspace onExit={() => setSample(false)} /></Suspense>
+      ) : <AppContent onUseWithoutAccount={() => setSample(true)} />}
     </DesktopShell>
   );
 }
-function AppContent() {
+function AppContent({ onUseWithoutAccount }: { onUseWithoutAccount: () => void }) {
   usePreferences();
   const [service, setService] = useState<AccountService | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
@@ -168,6 +172,7 @@ function AppContent() {
             >
               Try again
             </button>
+            {!session && <button onClick={onUseWithoutAccount}>Use without an account</button>}
             {session && (
               <button onClick={() => void signOut()}>Sign out</button>
             )}
@@ -180,7 +185,7 @@ function AppContent() {
     return (
       <>
         {publicNotice}
-        <AccountView service={service} onSession={setSession} />
+        <AccountView service={service} onSession={setSession} onUseWithoutAccount={onUseWithoutAccount} />
       </>
     );
   if (session.deviceState === "pending")
