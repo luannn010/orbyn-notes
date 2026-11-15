@@ -6,6 +6,7 @@ import { AccountView, PendingDevice } from "./ui/AccountView";
 import { usePreferences } from "./ui/primitives";
 import { DesktopShell } from "./desktop/DesktopShell";
 import { isDesktop } from "./desktop/window";
+import { storageCopy } from "./ui/storageCopy";
 import { protectOperations } from "./desktop/closeGuard";
 import { useIncomingNoteLink } from "./links/useIncomingNoteLink";
 import { IncomingNoteLink } from "./ui/noteLinks/IncomingNoteLink";
@@ -108,7 +109,7 @@ function AppContent() {
       .catch(() => {
         if (active)
           setError(
-            "Notes needs working browser storage and encryption. Nothing was opened or changed. Try another browser or allow this site to store data.",
+            storageCopy(isDesktop()).openingError,
           );
       })
       .finally(() => {

@@ -25,6 +25,8 @@ import type {
 } from "./studySettingsTypes";
 import type { Theme, usePreferences } from "./primitives";
 import { useEditorPreferences } from "./editorPreferences";
+import { isDesktop } from "../desktop/window";
+import { storageCopy } from "./storageCopy";
 
 type SettingsProps = {
   studyOwner?: StudySettingsOwner;
@@ -474,8 +476,7 @@ function SettingsPaneContent({
               <div>
                 <b>Export all notes</b>
                 <small>
-                  Local only. Clearing browser data removes your notes. Export a
-                  copy first.
+                  {storageCopy(isDesktop()).exportWarning}
                 </small>
               </div>
               <button onClick={onExport}>Export all notes</button>
@@ -496,10 +497,10 @@ function SettingsPaneContent({
             </div>
             <div className="settings-row">
               <div>
-                <b>Erase this browser</b>
+                <b>{storageCopy(isDesktop()).eraseLabel}</b>
               </div>
               <button className="danger" onClick={onErase}>
-                Erase this browser
+                {storageCopy(isDesktop()).eraseLabel}
               </button>
             </div>
           </>
