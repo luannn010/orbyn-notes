@@ -1,4 +1,4 @@
-import { useLayoutEffect, useSyncExternalStore } from "react";
+import { createContext, useContext, useLayoutEffect, useSyncExternalStore } from "react";
 
 export type EditorPreferences = Readonly<{
   textSize: "small" | "medium" | "large";
@@ -7,12 +7,18 @@ export type EditorPreferences = Readonly<{
   spellcheck: boolean;
 }>;
 const KEY = "notes.editor.v1";
-const defaults: EditorPreferences = Object.freeze({
+export const defaultEditorPreferences: EditorPreferences = Object.freeze({
   textSize: "medium",
   lineWidth: "narrow",
   markdown: true,
   spellcheck: true,
 });
+const defaults = defaultEditorPreferences;
+const EditorPreferencesContext = createContext<{
+  preferences: EditorPreferences;
+  setPreferences: (patch: Partial<EditorPreferences>) => void;
+} | null>(null);
+export const EditorPreferencesProvider = EditorPreferencesContext.Provider;
 let cached: EditorPreferences = defaults;
 let observed: string | null | undefined;
 let memoryOnly = false;
@@ -92,7 +98,9 @@ function update(patch: Partial<EditorPreferences>) {
 }
 /** Device-only presentation choices. Never includes note or Journal content. */
 export function useEditorPreferences() {
-  const preferences = useSyncExternalStore(subscribe, snapshot, () => defaults);
+  const devicePreferences = useSyncExternalStore(subscribe, snapshot, () => defaults);
+  const override = useContext(EditorPreferencesContext);
+  const preferences = override?.preferences ?? devicePreferences;
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.style.setProperty(
@@ -104,5 +112,5 @@ export function useEditorPreferences() {
       preferences.lineWidth === "narrow" ? "640px" : "800px",
     );
   }, [preferences]);
-  return { preferences, setPreferences: update };
+  return { preferences, setPreferences: override?.setPreferences ?? update };
 }

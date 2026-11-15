@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
   SettingsIndicator,
   SettingsMotionPane,
@@ -17,6 +17,8 @@ import {
   RefreshCw,
   Sun,
   Plug,
+  ChevronLeft,
+  Search,
 } from "./icons";
 import { StudySettingsPanel } from "./StudySettingsPanel";
 import type {
@@ -29,6 +31,9 @@ import { isDesktop } from "../desktop/window";
 import { storageCopy } from "./storageCopy";
 
 type SettingsProps = {
+  sampleWorkspace?: boolean;
+  desktopSurface?: boolean;
+  sidebarExpanded?: boolean;
   studyOwner?: StudySettingsOwner;
   onStudyGuardReady?: (guard: SettingsLeaveGuard | null) => void;
   onSetup?: () => void;
@@ -49,7 +54,10 @@ export function SettingsView(props: SettingsProps) {
     onDone,
     onStudyGuardReady,
     studyOwner = unavailable,
+    desktopSurface = false,
+    sidebarExpanded = true,
   } = props;
+  const [find, setFind] = useState("");
   const generation = useSettingsGeneration(studyOwner, email);
   const policy = useSettingsMotion(preferences.motion);
   const presence = useSettingsPresence(generation, policy);
@@ -139,8 +147,10 @@ export function SettingsView(props: SettingsProps) {
     });
   }
   return (
-    <div className="settings-layout" data-settings-motion={policy}>
+    <div className="settings-layout" data-settings-motion={policy} data-settings-pinned={desktopSurface ? sidebarExpanded : undefined} data-settings-expanded={desktopSurface ? sidebarExpanded : undefined}>
       <nav ref={nav} className="settings-nav" aria-label="Settings sections">
+        {desktopSurface && <button className="settings-back" aria-label="Back to workspace" onClick={() => leave(onDone)}><ChevronLeft size={15} aria-hidden="true" /><span>Settings</span></button>}
+        {desktopSurface && <label className="settings-search"><Search size={13} aria-hidden="true" /><input aria-label="Find a setting" placeholder="Find a setting" value={find} onChange={(event) => setFind(event.target.value)} /></label>}
         <SettingsIndicator
           key={generation}
           className="settings-nav-indicators"
@@ -157,9 +167,11 @@ export function SettingsView(props: SettingsProps) {
               ["apps", "Connected apps", Plug, true],
               ["data", "Data and export", Download, false],
             ] as const
-          ).map(([id, label, Icon, planned]) => (
+          ).filter(([, label]) => !desktopSurface || label.toLowerCase().includes(find.trim().toLowerCase())).map(([id, label, Icon, planned]) => (
             <button
               key={id}
+              title={desktopSurface ? label : undefined}
+              aria-label={desktopSurface ? (planned ? `${label} Planned` : label) : undefined}
               data-settings-section={id}
               aria-current={section === id ? "page" : undefined}
               onClick={() => navigate(id)}
@@ -175,11 +187,12 @@ export function SettingsView(props: SettingsProps) {
             </button>
           ))}
         </SettingsIndicator>
+        {desktopSurface && find.trim() && !["General", "Editor", "Sync", "Study", "Journal", "Connected apps", "Data and export"].some((label) => label.toLowerCase().includes(find.trim().toLowerCase())) && <p className="settings-search-empty" role="status">No settings found</p>}
       </nav>
       <div className="settings-pane settings-pane-stack">
-        <button className="settings-motion-done" onClick={() => leave(onDone)}>
+        {!desktopSurface && <button className="settings-motion-done" onClick={() => leave(onDone)}>
           Done
-        </button>
+        </button>}
         {[presence.outgoing, presence.current]
           .filter((pane): pane is Pane => !!pane)
           .map((pane) => (
@@ -207,6 +220,7 @@ export function SettingsView(props: SettingsProps) {
 }
 
 function SettingsPaneContent({
+  sampleWorkspace = false,
   email,
   preferences,
   onSignOut,
@@ -255,10 +269,10 @@ function SettingsPaneContent({
           <>
             <div className="settings-row">
               <div>
-                <b>Account</b>
-                <small>{email}</small>
+                <b>{sampleWorkspace ? "Sample workspace" : "Account"}</b>
+                <small>{sampleWorkspace ? "Changes last until you leave or reload. No account or sync." : email}</small>
               </div>
-              <button onClick={onSignOut}>Sign out</button>
+              {!sampleWorkspace && <button onClick={onSignOut}>Sign out</button>}
             </div>
             <div className="settings-row">
               <b>Plan</b>
@@ -433,11 +447,13 @@ function SettingsPaneContent({
               <b>Planned</b>
               <small>
                 {section === "sync"
-                  ? "Notes stay on this device in this beta."
+                  ? sampleWorkspace ? "Sample changes last until you leave or reload. Sync is unavailable." : "Notes stay on this device in this beta."
                   : "Connections to other apps and browser extensions aren’t available in this beta."}
               </small>
             </div>
           </div>
+        ) : section === "journal" && sampleWorkspace ? (
+          <div className="settings-row"><div><b>Sample Journal</b><small>Sample entries last until you leave or reload. Journal lock and settings are unavailable in the sample.</small></div></div>
         ) : section === "journal" ? (
           <>
             <div className="settings-row">
@@ -468,8 +484,12 @@ function SettingsPaneContent({
               </button>
             </div>
           </>
+        ) : section === "study" && sampleWorkspace ? (
+          <div className="settings-row"><div><b>Study settings unavailable</b><small>Sample practice does not schedule reviews or save Study settings.</small></div></div>
         ) : section === "study" ? (
           <StudySettingsPanel owner={studyOwner} onGuardReady={registerGuard} />
+        ) : sampleWorkspace ? (
+          <div className="settings-row"><div><b>Data and export unavailable</b><small>Sample changes last until you leave or reload and can’t be exported.</small></div></div>
         ) : (
           <>
             <div className="settings-row">
