@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { formatTagText, parseTagText } from "../../src/ui/tagText";
+import {
+  confirmedTagPrefix,
+  formatTagText,
+  parseTagText,
+} from "../../src/ui/tagText";
 it("splits commas, strips optional hash and removes exact duplicates", () =>
   expect(parseTagText("trip, #planning, trip, , ideas")).toEqual([
     "trip",
@@ -25,4 +29,21 @@ it("rejects malformed quotes and limits", () => {
   expect(() =>
     parseTagText(Array.from({ length: 101 }, (_, i) => String(i)).join(",")),
   ).toThrow();
+});
+
+it("confirms newly entered delimiters outside quoted fields and preserves old suffixes", () => {
+  expect(confirmedTagPrefix("trip", "trip,")).toBeNull();
+  expect(confirmedTagPrefix("trip,", "trip, ")).toEqual({
+    text: "trip, ",
+    rest: "",
+  });
+  expect(confirmedTagPrefix('"work,', '"work, ')).toBeNull();
+  expect(confirmedTagPrefix('"work, play"', '"work, play", ')).toEqual({
+    text: '"work, play", ',
+    rest: "",
+  });
+  expect(confirmedTagPrefix("trip, planning", "trips, planning")).toBeNull();
+  expect(
+    confirmedTagPrefix("planning, ideas", "trip, planning, ideas"),
+  ).toBeNull();
 });
