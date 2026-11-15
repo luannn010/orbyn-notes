@@ -8,7 +8,7 @@ import { freezeWindow } from "../desktop/freeze";
 import { installQuitGuard, showNotes } from "../desktop/capture";
 import { NewNote } from "./NewNote";
 import { NotesMark } from "./NotesMark";
-import { Pin, X } from "lucide-react";
+import { Pin, X } from "./icons";
 
 export function QuickNoteWindow({ store }: { store: NotesStore }) {
   const root = useRef<HTMLDivElement>(null),

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CalendarDays, CheckSquare, FileText, Search } from "./icons";
 import type {
   LinkCandidate,
   LinkSearchCursor,
@@ -289,6 +290,7 @@ export function NoteLinkPicker({
       }}
     >
       <div className="note-link-picker-head">
+        <Search size={14} aria-hidden="true" />
         <input
           autoFocus
           aria-label="Search notes to link"
@@ -323,6 +325,18 @@ export function NoteLinkPicker({
           ×
         </button>
       </div>
+      <div className="note-link-planned" aria-label="Planner links · Planned">
+        <div>
+          <CheckSquare size={13} aria-hidden="true" />
+          <span>Tasks · Planner</span>
+          <small>Planned</small>
+        </div>
+        <div>
+          <CalendarDays size={13} aria-hidden="true" />
+          <span>Events · Planner</span>
+          <small>Planned</small>
+        </div>
+      </div>
       <div className="note-link-group">Notes</div>
       <div role="listbox" id="note-link-options" aria-label="Notes to link">
         {items.map((item, index) => (
@@ -337,6 +351,7 @@ export function NoteLinkPicker({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => void choose(item)}
           >
+            <FileText size={14} aria-hidden="true" />
             <span>{item.title || "Untitled note"}</span>
             <small>
               {item.thisNote

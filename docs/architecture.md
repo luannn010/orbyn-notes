@@ -356,6 +356,21 @@ native caption/editor toolbar retain their own geometry. Design reference:
 f610ced1da443b04699137333c1309925092fffa, Notes `library-list`, `library-grid`
 and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
 
+## Shared formatting and Markdown source controls
+
+`EditorFormatting` owns formatting popovers and a transient Markdown source draft;
+`markdownSource` converts only supported structured content and preserves the note's
+already-admitted references. Unsupported content is rejected rather than flattened.
+External link destinations must survive the actual Markdown parser exactly before
+source mode is admitted. Destinations the parser normalizes remain in Rich view;
+unrelated source edits must never change an existing link target.
+Source editing is disabled by default. Enabling it requires an explicit
+`sourceEditing: true` and an `onUnsavedChange` callback: the application surface
+must bind that callback to its navigation/save guards before exposing source mode.
+The component's native-close guard does not replace the owning route's admission.
+RichEditor and the note-surface lifecycle are integrated together in the consuming
+slice; the existing application owners keep their current behavior until then.
+
 ## Account-free sample workspace
 
 Account entry remains the default. Its explicit sample action mounts a lazy,
