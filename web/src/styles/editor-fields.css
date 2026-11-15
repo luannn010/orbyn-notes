@@ -1,0 +1,48 @@
+/* Notes document fields remain transparent until the user approaches them. */
+.editor-page .note-title:not([readonly]),
+.editor-page .notes-editor-body .tiptap[contenteditable="true"] {
+  outline: 1px solid transparent;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.editor-page .note-title:not([readonly]):hover,
+.editor-page .notes-editor-body .tiptap[contenteditable="true"]:hover {
+  outline-color: var(--line2);
+}
+
+.editor-page .note-title:not([readonly]):focus,
+.editor-page .notes-editor-body .tiptap[contenteditable="true"]:focus {
+  outline: 1px solid var(--t2);
+  box-shadow: 0 0 0 4px var(--sel);
+}
+
+.editor-page .notes-editor-body {
+  position: relative;
+}
+
+.editor-page .notes-editor-body[data-empty]::after {
+  content: "Start writing…";
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--t3);
+  pointer-events: none;
+  line-height: 1.75;
+  font-size: var(--notes-editor-size, 14px);
+}
+
+.editor-page .tag-entry input,
+.editor-page .tag-entry select {
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--main);
+  padding: 9px 11px;
+}
+
+.editor-page .tag-entry input:focus,
+.editor-page .tag-entry select:focus {
+  outline: none;
+  border-color: var(--t2);
+  box-shadow: 0 0 0 3px var(--sel);
+}
