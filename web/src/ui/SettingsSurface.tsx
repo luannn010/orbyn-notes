@@ -26,7 +26,8 @@ export function SettingsSurface({ children, onClose, returnFocusTo }: {
     document.addEventListener("keydown", keydown);
     return () => {
       document.removeEventListener("keydown", keydown);
-      (returnFocusTo ?? previous)?.focus();
+      const target = returnFocusTo?.isConnected ? returnFocusTo : previous;
+      if (target?.isConnected) target.focus();
     };
   }, [!!desktop]);
   if (!desktop) return <Dialog title="Settings" className="settings-dialog" onClose={onClose} returnFocusTo={returnFocusTo}>{children}</Dialog>;

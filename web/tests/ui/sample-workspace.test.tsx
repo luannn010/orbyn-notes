@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NoteDocument } from "../../src/domain/contracts";
+import { useEditorPreferences } from "../../src/ui/editorPreferences";
 
 const account = vi.hoisted(() => ({
   current: vi.fn(),
@@ -43,9 +44,12 @@ vi.mock("../../src/ui/RichEditor", () => ({
     document: NoteDocument;
     onChange: (document: NoteDocument) => void;
     ariaLabel: string;
-  }) => (
+  }) => {
+    const { preferences } = useEditorPreferences();
+    return (
     <textarea
       aria-label={ariaLabel}
+      spellCheck={preferences.spellcheck}
       value={document.content
         .map((node) => node.content?.map((item) => item.text).join("") ?? "")
         .join("\n")}
@@ -61,7 +65,8 @@ vi.mock("../../src/ui/RichEditor", () => ({
         })
       }
     />
-  ),
+    );
+  },
 }));
 import SampleWorkspace from "../../src/demo/SampleWorkspace";
 import { App } from "../../src/App";
@@ -85,6 +90,37 @@ beforeEach(() => {
 });
 
 describe("sample workspace", () => {
+  it("opens desktop Settings with search, sample availability, and the native sidebar toggle", () => {
+    const setNavigation = vi.fn();
+    const setLayout = vi.fn();
+    native.current = { setNavigation, setLayout };
+    render(<SampleWorkspace onExit={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const nav = screen.getByRole("navigation", { name: "Settings sections" });
+    for (const label of ["General", "Editor", "Sync Planned", "Study", "Journal", "Connected apps Planned", "Data and export"]) {
+      expect(within(nav).getByRole("button", { name: label })).toBeVisible();
+    }
+    fireEvent.click(within(screen.getByRole("group", { name: "Motion" })).getByRole("button", { name: "Reduced" }));
+    fireEvent.click(within(nav).getByRole("button", { name: "Study" }));
+    expect(screen.getByText("Study settings unavailable")).toBeVisible();
+    fireEvent.click(within(nav).getByRole("button", { name: "Journal" }));
+    expect(screen.getByText("Sample Journal")).toBeVisible();
+    fireEvent.click(within(nav).getByRole("button", { name: "Data and export" }));
+    expect(screen.getByText("Data and export unavailable")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Export all notes" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Find a setting" }), { target: { value: "editor" } });
+    expect(within(nav).getByRole("button", { name: "Editor" })).toBeVisible();
+    expect(within(nav).queryByRole("button", { name: "General" })).not.toBeInTheDocument();
+    const navigation = setNavigation.mock.calls.at(-1)?.[0];
+    fireEvent.click(Object.assign(document.createElement("button"), { onclick: navigation.toggle }));
+    expect(screen.getByRole("region", { name: "Settings screen" }).firstElementChild).toHaveAttribute("data-settings-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Back to workspace" }));
+    expect(screen.queryByRole("region", { name: "Settings screen" })).not.toBeInTheDocument();
+    fireEvent.click(Object.assign(document.createElement("button"), { onclick: setNavigation.mock.calls.at(-1)?.[0].toggle }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Settings screen" })).not.toBeInTheDocument();
+  });
   it("registers and clears native navigation and toggles its sidebar", () => {
     const setNavigation = vi.fn();
     const setLayout = vi.fn();
@@ -206,19 +242,44 @@ describe("sample workspace", () => {
     delete document.documentElement.dataset.motion;
     const write = vi.spyOn(Storage.prototype, "setItem");
     const { unmount } = render(<SampleWorkspace onExit={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Theme" }), {
-      target: { value: "light" },
-    });
-    fireEvent.change(screen.getByRole("combobox", { name: "Motion" }), {
-      target: { value: "reduced" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Appearance" })).getByRole("button", { name: "Light" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Motion" })).getByRole("button", { name: "Reduced" }));
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.dataset.motion).toBe("reduced");
     expect(write).not.toHaveBeenCalled();
     unmount();
     expect(document.documentElement.dataset.theme).toBe("dim");
     expect(document.documentElement.dataset.motion).toBeUndefined();
+    write.mockRestore();
+  });
+
+  it("keeps sample note and editor choices in memory through Settings", () => {
+    const root = document.documentElement;
+    root.style.setProperty("--notes-editor-size", "19px");
+    root.style.setProperty("--notes-editor-width", "720px");
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    const { unmount } = render(<SampleWorkspace onExit={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Lisbon trip, May/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Note title" }), { target: { value: "Draft title" } });
+    const opener = screen.getByRole("button", { name: "Settings" });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editor" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Text size" })).getByRole("button", { name: "Large" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Check spelling" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(opener).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("Draft title");
+    expect(screen.getByRole("textbox", { name: "Sample note content" })).toHaveAttribute("spellcheck", "false");
+    expect(root.style.getPropertyValue("--notes-editor-size")).toBe("16px");
+    expect(write).not.toHaveBeenCalled();
+    unmount();
+    expect(root.style.getPropertyValue("--notes-editor-size")).toBe("19px");
+    expect(root.style.getPropertyValue("--notes-editor-width")).toBe("720px");
+    root.style.removeProperty("--notes-editor-size");
+    root.style.removeProperty("--notes-editor-width");
     write.mockRestore();
   });
 

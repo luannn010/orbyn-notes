@@ -33,6 +33,9 @@ import { useDesktop } from "../desktop/DesktopShell";
 import { isLocalSession } from "../data/local";
 
 type SettingsProps = {
+  sampleWorkspace?: boolean;
+  desktopSurface?: boolean;
+  sidebarExpanded?: boolean;
   studyOwner?: StudySettingsOwner;
   onStudyGuardReady?: (guard: SettingsLeaveGuard | null) => void;
   onSetup?: () => void;
@@ -55,8 +58,9 @@ export function SettingsView(props: SettingsProps) {
     onStudyGuardReady,
     studyOwner = unavailable,
   } = props;
-  const desktop = useDesktop();
-  const sidebarPinned = desktop?.sidebarPinned ?? desktop?.sidebarExpanded ?? true;
+  const desktopContext = useDesktop();
+  const desktop = props.desktopSurface ?? !!desktopContext;
+  const sidebarPinned = props.sidebarExpanded ?? desktopContext?.sidebarPinned ?? desktopContext?.sidebarExpanded ?? true;
   const [find, setFind] = useState("");
   const [pointerInside, setPointerInside] = useState(false);
   const [focusInside, setFocusInside] = useState(false);
@@ -151,7 +155,7 @@ export function SettingsView(props: SettingsProps) {
     });
   }
   return (
-    <div className="settings-layout" data-settings-motion={policy} data-settings-expanded={desktop ? (sidebarPinned || peek) : undefined} data-settings-pinned={desktop ? sidebarPinned : undefined}>
+    <div className="settings-layout" data-settings-motion={policy} data-settings-expanded={desktop ? (props.sidebarExpanded ?? (sidebarPinned || peek)) : undefined} data-settings-pinned={desktop ? sidebarPinned : undefined}>
       <nav ref={nav} className="settings-nav" aria-label="Settings sections"
         onPointerEnter={(event) => { if (event.pointerType !== "touch") setPointerInside(true); }}
         onPointerLeave={(event) => { if (event.pointerType !== "touch") { setPointerInside(false); if (!focusInside) setPeekSuppressed(false); } }}
@@ -214,6 +218,7 @@ export function SettingsView(props: SettingsProps) {
             >
               <SettingsPaneContent
                 {...props}
+                desktopSurface={desktop}
                 studyOwner={studyOwner}
                 section={pane.section}
                 pane={pane}
@@ -229,6 +234,8 @@ export function SettingsView(props: SettingsProps) {
 }
 
 function SettingsPaneContent({
+  sampleWorkspace = false,
+  desktopSurface,
   email,
   preferences,
   onSignOut,
@@ -251,7 +258,8 @@ function SettingsPaneContent({
   leave: (action: () => void) => void;
   policy: "full" | "reduced";
 }) {
-  const desktop = useDesktop();
+  const desktopContext = useDesktop();
+  const desktop = desktopSurface ?? !!desktopContext;
   const local = isLocalSession({ email });
   const editor = useEditorPreferences();
   const registerGuard = useCallback(
@@ -282,10 +290,10 @@ function SettingsPaneContent({
             <div className="settings-group">
             <div className="settings-row">
               <div>
-                <b>{local ? "Local workspace" : "Account"}</b>
-                <small>{local ? "Saved on this device. No account or sync." : email}</small>
+                <b>{sampleWorkspace ? "Sample workspace" : local ? "Local workspace" : "Account"}</b>
+                <small>{sampleWorkspace ? "Changes last until you leave or reload. No account or sync." : local ? "Saved on this device. No account or sync." : email}</small>
               </div>
-              <button onClick={onSignOut}>{local ? "Close workspace" : "Sign out"}</button>
+              {!sampleWorkspace && <button onClick={onSignOut}>{local ? "Close workspace" : "Sign out"}</button>}
             </div>
             {!local && onUseLocal && <div className="settings-row">
               <div><b>Local workspace</b><small>Keep a separate library on this device without an account.</small></div>
@@ -471,11 +479,13 @@ function SettingsPaneContent({
               <b>Planned</b>
               <small>
                 {section === "sync"
-                  ? "Notes stay on this device in this beta."
+                  ? sampleWorkspace ? "Sample changes last until you leave or reload. Sync is unavailable." : "Notes stay on this device in this beta."
                   : "Connections to other apps and browser extensions aren’t available in this beta."}
               </small>
             </div>
           </div>
+        ) : section === "journal" && sampleWorkspace ? (
+          <div className="settings-row"><div><b>Sample Journal</b><small>Sample entries last until you leave or reload. Journal lock and settings are unavailable in the sample.</small></div></div>
         ) : section === "journal" ? (
           <>
             <div className="settings-row">
@@ -506,8 +516,12 @@ function SettingsPaneContent({
               </button>
             </div>
           </>
+        ) : section === "study" && sampleWorkspace ? (
+          <div className="settings-row"><div><b>Study settings unavailable</b><small>Sample practice does not schedule reviews or save Study settings.</small></div></div>
         ) : section === "study" ? (
           <StudySettingsPanel owner={studyOwner} onGuardReady={registerGuard} />
+        ) : sampleWorkspace ? (
+          <div className="settings-row"><div><b>Data and export unavailable</b><small>Sample changes last until you leave or reload and can’t be exported.</small></div></div>
         ) : (
           <>
             <div className="settings-row">

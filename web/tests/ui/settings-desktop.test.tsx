@@ -37,6 +37,22 @@ describe("desktop settings", () => {
     fireEvent.pointerEnter(nav, { pointerType: "touch" });
     expect(nav.parentElement!.getAttribute("data-settings-expanded")).toBe("false");
   });
+  it("honors sample surface and rail overrides without changing normal desktop defaults", () => {
+    const props = { email: "", preferences: { theme: "light" as const, setTheme: vi.fn(), motion: "on" as const, setMotion: vi.fn() }, onSignOut: vi.fn(), onExport: vi.fn(), onErase: vi.fn(), onDone: vi.fn() };
+    const view = render(<SettingsView {...props} sampleWorkspace desktopSurface sidebarExpanded={false} />);
+    const nav = screen.getByRole("navigation", { name: "Settings sections" });
+    expect(nav.parentElement).toHaveAttribute("data-settings-pinned", "false");
+    expect(nav.parentElement).toHaveAttribute("data-settings-expanded", "false");
+    expect(screen.getByText("Sample workspace")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    view.rerender(<SettingsView {...props} desktopSurface={false} />);
+    expect(screen.queryByRole("textbox", { name: "Find a setting" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Done" })).toBeVisible();
+    view.rerender(<SettingsView {...props} />);
+    expect(screen.getByRole("textbox", { name: "Find a setting" })).toBeVisible();
+    expect(nav.parentElement).toHaveAttribute("data-settings-pinned", "true");
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+  });
   it("focuses the surface, closes on Escape and restores focus", () => {
     const trigger = document.createElement("button");
     document.body.append(trigger);

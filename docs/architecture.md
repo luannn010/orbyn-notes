@@ -377,3 +377,7 @@ real store, protected Journal vault or article-fetch adapter. This is an
 interactive demonstration, not an account-free persistent library or beta
 qualification fixture. Edits survive module navigation and reset on exit/reload.
 Appearance changes are temporary and restore the prior root attributes on exit.
+Settings exposes the seven existing sections without opening an account or a
+protected store. Sample editor and appearance preferences stay in memory, and
+the previous editor CSS properties are restored on exit. Study, Journal locking,
+and data export are unavailable in the sample.
