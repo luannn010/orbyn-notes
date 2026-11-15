@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { AccountService, AccountSession } from "../domain/contracts";
 import { message } from "./model";
+import { isDesktop } from "../desktop/window";
+import { storageCopy } from "./storageCopy";
 export function AccountView({
   service,
   onSession,
@@ -94,14 +96,14 @@ export function AccountView({
         </h1>
         <p>
           {step === "entry"
-            ? "Encrypted notes in this browser."
+            ? storageCopy(isDesktop()).entry
             : step === "verify"
               ? `Enter the 8-character code sent to ${email}.`
               : step === "invite"
                 ? "New accounts need an invite code."
                 : step === "second"
                   ? "Enter your authenticator code."
-                  : "Your Orbyn account, one browser at a time."}
+                  : storageCopy(isDesktop()).account}
         </p>
         {step === "entry" ? (
           <div className="stack">
@@ -249,8 +251,7 @@ export function AccountView({
           </form>
         )}
         <p className="local-copy">
-          This beta does not sync. Clearing browser data removes your notes.
-          Export a copy to keep them.
+          {storageCopy(isDesktop()).warning}
         </p>
       </section>
     </main>
@@ -271,8 +272,8 @@ export function PendingDevice({
   return (
     <main className="account-page">
       <section className="account-card">
-        <h1>This browser needs approval before Notes can open.</h1>
-        <p>Approve this browser from a trusted device.</p>
+        <h1>{storageCopy(isDesktop()).approvalHeading}</h1>
+        <p>{storageCopy(isDesktop()).approvalHelp}</p>
         {sas && <p className="sas">{sas}</p>}
         {error && <p role="alert">{error}</p>}
         <div className="stack">

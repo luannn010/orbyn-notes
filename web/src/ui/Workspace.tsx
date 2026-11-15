@@ -38,6 +38,7 @@ import {
 } from "./SidebarSelection";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
+import { storageCopy } from "./storageCopy";
 import { buildDownload } from "./download";
 import { useDesktop } from "../desktop/DesktopShell";
 import {
@@ -2050,7 +2051,7 @@ export function Workspace({
           </button>
         </nav>
         <footer>
-          <p title="Notes stay encrypted in this browser. This beta does not sync.">
+          <p title={storageCopy(!!desktop).encryptedHelp}>
             ◉ Beta · Local only
           </p>
           <button
@@ -2140,8 +2141,7 @@ export function Workspace({
         >
           {offline && module === "notes" && (
             <p className="banner">
-              You’re offline. Notes still saves in this browser. This beta does
-              not sync.
+              {storageCopy(!!desktop).offline}
             </p>
           )}
           {sourceOwner && sourceOwners.error && (
@@ -2956,9 +2956,7 @@ export function Workspace({
           }}
         >
           <p>
-            Your encrypted notes stay in this browser. Sign in to the same
-            account in this browser to open them again. They are not backed up
-            or synced.
+            {storageCopy(!!desktop).signOut}
           </p>
           {signOutError && (
             <p className="error" role="alert">
@@ -3045,7 +3043,7 @@ export function Workspace({
       )}
       {erase && (
         <Dialog
-          title="Erase notes from this browser?"
+          title={storageCopy(!!desktop).eraseTitle}
           onClose={() => {
             if (!busy && !libraryAction.busy && !libraryAction.error)
               setErase(false);

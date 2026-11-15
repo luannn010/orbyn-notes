@@ -25,6 +25,7 @@ import type {
 import type { EditorSourceTarget } from "./RichEditor";
 import { RichEditor } from "./RichEditor";
 import { message, plainText } from "./model";
+import { storageCopy } from "./storageCopy";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
 import { Copy, Download, Pencil, Trash2 } from "lucide-react";
@@ -488,7 +489,7 @@ export function NoteEditor({
             ? "Saving…"
             : dirty || !!tagInput.trim()
               ? "Unsaved changes"
-              : "Saved in this browser"}
+              : storageCopy(!!desktop).saved}
       </span>
       {onHistory && (
         <button
