@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { openNoteTags } from "./note-tag-controls.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 const output = process.env.NOTES_UI_OUTPUT ?? "test-results/sidebar-account";
 const base = process.env.NOTES_PREVIEW_URL ?? "http://127.0.0.1:5187";
@@ -123,6 +124,7 @@ try {
     page.getByText("Saved in this browser", { exact: true }),
   ).toBeVisible();
   // A genuine unsaved tag draft refuses the global action and is never auto-replayed.
+  await openNoteTags(page);
   await page
     .getByLabel("New tag", { exact: true })
     .fill("Retained unsaved tag");

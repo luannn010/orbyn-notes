@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { openNoteTags } from "./note-tag-controls.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const output = process.env.NOTES_UI_OUTPUT ?? "test-results/sidebar-selection";
@@ -133,6 +134,7 @@ try {
       await expect(
         page.getByLabel("Note title", { exact: true }),
       ).toBeVisible();
+      await openNoteTags(page);
       await page
         .getByLabel("New tag", { exact: true })
         .fill("Unsaved navigation guard");
