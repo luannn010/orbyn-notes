@@ -1333,13 +1333,20 @@ export async function openNotesStore(
       access({
         project: (ctx) => ctx.notes.find((note) => note.id === id) ?? null,
       }),
-    create: async (input) => {
+    create: async (input, creationId) => {
       const checked = validateInput(structuredClone(input));
-      let id: string;
+      const id = creationId ?? crypto.randomUUID();
+      noteId(id);
       return access({
         change: (ctx) => {
+          // A retry after an unknown commit outcome must never create a duplicate.
+          const existing = ctx.notes.find((note) => note.id === id);
+          if (existing) {
+            if (existing.revision !== 1 || existing.trashedAt || existing.title !== checked.title || !sameDocument(existing.document, checked.document) || JSON.stringify(existing.tags) !== JSON.stringify(checked.tags))
+              throw new RevisionConflictError(existing, { ...existing, ...checked });
+            return;
+          }
           const now = new Date().toISOString();
-          id = crypto.randomUUID();
           const note: Note = {
             ...checked,
             id,

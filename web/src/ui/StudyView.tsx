@@ -32,6 +32,8 @@ import {
 import { nextSchedule, studyDay } from "../study/scheduler";
 import { parseStudyCsv, importStudyCsv, exportStudyCsv } from "../study/csv";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
+import { isDesktop } from "../desktop/window";
+import { saveDesktopFile } from "../desktop/files";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
 import "../styles/study.css";
@@ -1751,6 +1753,8 @@ export function StudyView({
           {form.kind === "export" && deck && (
             <CsvExport
               state={state}
+              ownerTicket={ownerGeneration.current}
+              ownerCurrent={ownerCurrent}
               deckId={deck.id}
               title={deck.title}
               onCancel={closeForm}
@@ -2226,15 +2230,24 @@ function CsvImport({
 }
 function CsvExport({
   state,
+  ownerCurrent,
+  ownerTicket,
   deckId,
   title,
   onCancel,
 }: {
   state: StudyState;
+  ownerCurrent: (ticket: number) => boolean;
+  ownerTicket: number;
   deckId: string;
   title: string;
   onCancel: () => void;
 }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const active = useRef(true);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const filename = `orbyn-study-${title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "").slice(0, 100) || "deck"}.csv`;
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(
@@ -2256,7 +2269,7 @@ function CsvExport({
         </p>
       )}
       <div className="study-actions">
-        <button onClick={onCancel}>{url ? "Done" : "Cancel"}</button>
+        <button disabled={saving} onClick={onCancel}>{url || saved ? "Done" : "Cancel"}</button>
         {url ? (
           <a
             href={url}
@@ -2272,23 +2285,28 @@ function CsvExport({
         ) : (
           <button
             className="primary"
-            onClick={() => {
+            disabled={saving || saved}
+            onClick={async () => {
+              setSaving(true);
+              setError("");
               try {
-                setUrl(
-                  URL.createObjectURL(
-                    new Blob([exportStudyCsv(state, deckId)], {
-                      type: "text/csv;charset=utf-8",
-                    }),
-                  ),
-                );
+                const blob = new Blob([exportStudyCsv(state, deckId)], { type: "text/csv;charset=utf-8" });
+                if (isDesktop()) {
+                  const result = await trackOperation(() => saveDesktopFile(filename, blob, () => {
+                    if (!active.current || !ownerCurrent(ownerTicket)) throw new Error("Export is no longer current.");
+                  }));
+                  if (active.current && ownerCurrent(ownerTicket) && result) setSaved(true);
+                } else setUrl(URL.createObjectURL(blob));
               } catch {
-                setError(
+                if (active.current && ownerCurrent(ownerTicket)) setError(
                   "Couldn’t export this deck. Your cards were not changed.",
                 );
+              } finally {
+                if (active.current) setSaving(false);
               }
             }}
           >
-            Export
+            {saving ? "Saving…" : saved ? "Saved" : "Export"}
           </button>
         )}
       </div>

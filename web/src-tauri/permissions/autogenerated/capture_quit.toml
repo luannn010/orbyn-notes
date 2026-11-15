@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-capture-quit"
+description = "Enables the capture_quit command without any pre-configured scope."
+commands.allow = ["capture_quit"]
+
+[[permission]]
+identifier = "deny-capture-quit"
+description = "Denies the capture_quit command without any pre-configured scope."
+commands.deny = ["capture_quit"]

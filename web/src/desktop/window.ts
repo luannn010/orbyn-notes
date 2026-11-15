@@ -16,11 +16,11 @@ export async function connectWindow(
   onClose: (requestId: number) => void,
   onResize: () => void,
 ): Promise<DesktopWindow> {
-  const [{ getCurrentWindow }, { listen }, { invoke }] = await Promise.all([
-    import("@tauri-apps/api/window"), import("@tauri-apps/api/event"), import("@tauri-apps/api/core"),
+  const [{ getCurrentWindow }, { invoke }] = await Promise.all([
+    import("@tauri-apps/api/window"), import("@tauri-apps/api/core"),
   ]);
   const window = getCurrentWindow();
-  const unlisten = await listen<{ requestId: number }>("notes-close-requested", ({ payload }) => {
+  const unlisten = await window.listen<{ requestId: number }>("notes-close-requested", ({ payload }) => {
     if (Number.isSafeInteger(payload.requestId) && payload.requestId > 0) onClose(payload.requestId);
   });
   try {

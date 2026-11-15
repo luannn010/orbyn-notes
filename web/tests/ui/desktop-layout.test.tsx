@@ -24,7 +24,7 @@ beforeEach(() => {
     dispose: vi.fn(),
   });
 });
-it("shows the Notes identity without adding navigation to single-pane entry", async () => {
+it("shows branding and disabled navigation on account entry", async () => {
   render(
     <DesktopShell>
       <main>Account entry</main>
@@ -33,9 +33,8 @@ it("shows the Notes identity without adding navigation to single-pane entry", as
   await screen.findByText("Account entry");
   const toolbar = screen.getByRole("banner", { name: "Window toolbar" });
   expect(toolbar).toHaveTextContent("Orbyn Notes");
-  expect(
-    screen.queryByRole("button", { name: /sidebar/ }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /sidebar/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Minimize window" })).toBeEnabled();
   expect(document.querySelector(".desktop-shell")).toHaveAttribute(
     "data-layout",
@@ -192,4 +191,61 @@ it("reveals an already focused toolbar action on resize without scrolling fixed 
   expect(toolbar.scrollLeft).toBe(0);
   view.unmount();
   expect(disconnect).toHaveBeenCalledOnce();
+});
+
+it("routes titlebar actions and closes the menu with Escape", async () => {
+  const back = vi.fn(), newNote = vi.fn(), openSettings = vi.fn();
+  function Content() {
+    const desktop = useDesktop();
+    useLayoutEffect(() => {
+      desktop?.setChrome({ title: "Library", canBack: true, canForward: false, back, forward: vi.fn(), newNote, openSettings });
+      return () => desktop?.setChrome(null);
+    }, [desktop?.setChrome]);
+    return <main>Workspace content</main>;
+  }
+  render(<DesktopShell><Content /></DesktopShell>);
+  await screen.findByText("Workspace content");
+  expect(document.querySelector(".desktop-shell")).toHaveAttribute("data-current-view", "Library");
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(back).toHaveBeenCalledOnce();
+  const trigger = screen.getByRole("button", { name: "App menu" });
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("menuitem", { name: "New note" }));
+  expect(newNote).toHaveBeenCalledOnce();
+  fireEvent.click(trigger);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});
+
+it("hides a retained editor toolbar while Settings is current", async () => {
+  function Content() {
+    const desktop = useDesktop();
+    useLayoutEffect(() => {
+      desktop?.setChrome({ title: "Settings", settingsOpen: true, canBack: false, canForward: false, back: vi.fn(), forward: vi.fn(), newNote: vi.fn(), openSettings: vi.fn() });
+      return () => desktop?.setChrome(null);
+    }, [desktop?.setChrome]);
+    return <main>{desktop?.toolbar && createPortal(<button>Retained editor action</button>, desktop.toolbar)}</main>;
+  }
+  render(<DesktopShell><Content /></DesktopShell>);
+  const action = await screen.findByText("Retained editor action");
+  expect(action.parentElement).toHaveAttribute("hidden");
+  expect(action).not.toBeVisible();
+});
+
+it("keeps editor actions visible for a note named Settings", async () => {
+  function Content() {
+    const desktop = useDesktop();
+    useLayoutEffect(() => {
+      desktop?.setChrome({ title: "Settings", settingsOpen: false, canBack: false, canForward: false,
+        back: vi.fn(), forward: vi.fn(), newNote: vi.fn(), openSettings: vi.fn() });
+      return () => desktop?.setChrome(null);
+    }, [desktop?.setChrome]);
+    return <main>{desktop?.toolbar && createPortal(<button>Note editing action</button>, desktop.toolbar)}</main>;
+  }
+  render(<DesktopShell><Content /></DesktopShell>);
+  const action = await screen.findByText("Note editing action");
+  expect(action.parentElement).not.toHaveAttribute("hidden");
+  expect(action).toBeVisible();
+  expect(document.querySelector(".desktop-shell")).toHaveAttribute("data-settings-open", "false");
 });

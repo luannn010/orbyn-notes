@@ -1,83 +1,75 @@
 # Local Windows shell
 
-The native shell embeds the existing web application in WebView2. It keeps the
-same encryption, IndexedDB and AccountService implementations. Its data belongs
-to the stable app identity `com.kinqsradio.orbyn.notes` and is separate from web
-browser profiles. Browser notes and account sessions are not migrated.
+The Tauri2/WebView2 shell bundles the web UI and WASM. Its stable identity is
+`com.kinqsradio.orbyn.notes`; the desktop profile is separate from browser Notes.
+Use without an account opens the existing isolated encrypted local workspace and
+remembers that choice. No backend or internet connection is required, and browser
+or signed-in data is never copied into it automatically.
 
 ## Build
 
-Use Windows with Node 24, Rust 1.90 or newer with the MSVC toolchain in `%USERPROFILE%\.cargo\bin`,
-Visual Studio C++ build tools with the Windows SDK, and WebView2 installed.
-From `web`:
+Use Windows with Node24, Rust1.90+ MSVC, Visual Studio C++/Windows SDK and WebView2.
+From `web`, run `npm ci` then `npm run desktop:build`. This produces an unsigned
+local debug executable and NSIS test installer in the user-scoped native target
+cache. Use `npm run desktop:build -- --release` for release-mode compilation.
+The script scopes Rust PATH/cache and an empty `VITE_ENGINE_URL` to the child.
+Frontend/WASM assets are embedded; no Vite server is required at runtime.
+Building does not install a runtime, service or Windows startup registration.
+Account/server integration is outside this local build; changing endpoint/origin
+requires CSP and storage-compatibility review rather than a CORS workaround.
 
-```powershell
-npm ci
-npm run desktop:build
-```
+## Notes and Quick note
 
-This creates an unsigned debug executable at
-`%USERPROFILE%\.cache\orbyn-notes-native\target\debug\orbyn-notes.exe`.
-Use `npm run desktop:build -- --release` for the release executable in `release`.
-No installer, service, runtime installer or global configuration is created.
-The script scopes Rust's PATH, target cache and public `VITE_ENGINE_URL` to the
-build child process. The frontend is embedded from `web/dist`; running the EXE
-does not require Vite or a production frontend server.
+- Ctrl+N: blank main-pane note, title focus; Enter moves to its body. Empty drafts
+  never add a record, count or Trash entry. First text or a starter is saved locally.
+- Ctrl+Shift+N: open/focus the native400×204 Quick note, initially always on top.
+  It works from another app while Notes runs in the tray. If OS registration fails,
+  the app reports that state; the Notes menu and tray still open capture.
+- Quick note has plain text, tags and safe links, without starters. Escape/close
+  waits for a successful save or explicit copy of failed text. Ctrl+Enter/Open in
+  Notes requires the current saved revision and admitted main-window navigation.
+- Closing main hides it and releases its close freeze. Menu/tray Quit Notes probes
+  both windows and cancels rather than dropping unsaved work. Quit before replacing
+  an executable; single-instance activation otherwise focuses the old process.
 
-The configured existing engine endpoint is `http://127.0.0.1:8089`. Account
-operations require that engine and its exact-origin CORS support for
-`http://tauri.localhost`. There is no native HTTP proxy or credential bypass.
-Changing the endpoint requires reviewing the build script and CSP together.
-Do not change the native origin to work around CORS or storage failures.
+Reference: Notes artifact b66f1d8, new-note/new-note-states/new-note-starter,
+quick-note/quick-note-states/new-note-phone. Planner links remain Planned.
+Undo of an already saved starter clears that same note but retains its record.
 
-## Boundary and close behavior
+## Native boundaries
 
-Only the local `main` webview receives the listed caption/event permissions.
-External top-level navigation and all new-window requests are denied. The
-caption commands are `finish_close` and the parameter-free `show_system_menu`;
-both verify the injected calling window and its current local URL. No renderer
-permission can destroy the window or access the filesystem or arbitrary processes.
+Only verified local main/quick webviews receive their explicit capabilities.
+External navigation/arbitrary new windows are denied. Close request IDs are scoped
+per label; events target only that window, and listeners use Window.listen.
+Missing listeners fail closed. Native creation leaves synchronous event/command
+callbacks because WebView2 can deadlock there on Windows.
 
-The separate `open_external_url` command hands a deliberate HTTP(S) source action
-to the Windows default browser. It independently checks the local injected caller,
-rejects credentials, other schemes, ambiguous backslashes, raw control characters
-and URLs over 8192 UTF16 units. It checks the live window again on its existing
-COM STA thread before obtaining the owned handle. `ShellExecuteW` receives only a
-validated URL, a fixed `open` verb and null argument/directory pointers. There is
-no general shell or process command. OS acceptance means handoff only; it does not
-mark a clip read or prove that a page loaded. Failure leaves the source copyable.
-Other native platforms report opening unavailable until their adapter is built.
-Browser builds use ordinary safe external anchors with `noopener noreferrer`.
+Main alone can initiate coordinated Quit and owner transitions. Quit seals new
+capture admission; nonce-bound replies, cancellation and timeout preserve drafts.
+Handoff transmits only owner scope, note ID and UUID token. Both native and
+renderer sides reject stale acknowledgments. Signed-in replacement and local-mode
+changes require Quick to close first under its normal save/copy guards.
 
-Rust prevents every normal native close, then emits `notes-close-requested`
-with `{ requestId }`. Repeated requests share the pending safe-integer ID.
-The UI checks its current draft guards and outstanding operations, becomes
-inert, then calls `finish_close({ requestId })`. Rust consumes the matching
-request before destruction and restores it if destruction fails. There is no
-timeout, deferred close replay, or force-close UI. Missing listeners fail closed.
+Markdown, JSON, CSV and binary ZIP export use native save dialogs. Destinations are
+opaque one-use grants with expiry, payload bounds and owner/freshness checks; paths
+are not exposed to the renderer. Cancellation does not claim a successful save.
+The restricted external-source command opens validated HTTP(S) URLs in the system
+browser after checking caller, URL and live window; it is not a shell interface.
+Browser builds retain ordinary safe downloads and external anchors.
 
-The 44px custom caption uses actual native minimize, maximize and drag APIs.
-Its title-region context menu uses the Windows system menu; selected Close
-still follows the guarded native close path. Maximize-hover Snap layouts need
-native hit testing and are not claimed by these custom controls. Keyboard
-window-management behavior must be verified on the actual Windows build.
+Packaged CSP allows local assets, styles/fonts/WASM and local IPC, with no engine
+origin. Development adds only the configured loopback Vite endpoint. There are no
+renderer filesystem/process/destroy/global-shortcut permissions.
 
-The CSP allows embedded scripts and WASM, local styles/fonts/assets and blob
-downloads, Tauri local IPC, and the single configured engine origin. Inline
-styles are allowed for the existing editor and theme styles; inline script and
-general JavaScript evaluation are not enabled. Debug Vite access is restricted
-to `127.0.0.1:5179`. No framework application menubar is created.
-
-Primary implementation references: [Tauri configuration](https://v2.tauri.app/reference/config/),
+Primary APIs: [global shortcuts](https://v2.tauri.app/plugin/global-shortcut/),
+[tray](https://v2.tauri.app/learn/system-tray/),
 [capabilities](https://v2.tauri.app/security/capabilities/),
-[WebviewWindowBuilder](https://docs.rs/tauri/2.12.5/tauri/webview/struct.WebviewWindowBuilder.html),
-and [application command permissions](https://docs.rs/tauri-build/2.7.4/tauri_build/struct.AppManifest.html).
-The restricted source handoff follows [Microsoft ShellExecuteW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew).
+[WebviewWindowBuilder](https://docs.rs/tauri/2.12.5/tauri/webview/struct.WebviewWindowBuilder.html).
 
 ## Trying a new local candidate
 
-Save or explicitly discard any current draft, then close the older Notes window
-normally before starting a newer executable. The stable app identity enforces a
+Save or copy any current drafts, then use Menu → Quit Notes (or the tray menu)
+before starting a newer executable. Closing main only hides it for Quick note. The stable app identity enforces a
 single instance: opening another executable while the old process is running
 focuses that existing process and does not replace its embedded frontend.
 Keep the WebView profile; rebuilding does not require clearing keys or content.

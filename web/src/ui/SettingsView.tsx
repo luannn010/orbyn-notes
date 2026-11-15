@@ -29,6 +29,8 @@ import type { Theme, usePreferences } from "./primitives";
 import { useEditorPreferences } from "./editorPreferences";
 import { isDesktop } from "../desktop/window";
 import { storageCopy } from "./storageCopy";
+import { useDesktop } from "../desktop/DesktopShell";
+import { isLocalSession } from "../data/local";
 
 type SettingsProps = {
   sampleWorkspace?: boolean;
@@ -41,6 +43,7 @@ type SettingsProps = {
   email: string;
   preferences: ReturnType<typeof usePreferences>;
   onSignOut: () => void;
+  onUseLocal?: () => void;
   onExport: () => void;
   onErase: () => void;
   onOpenJournal?: () => void;
@@ -54,10 +57,15 @@ export function SettingsView(props: SettingsProps) {
     onDone,
     onStudyGuardReady,
     studyOwner = unavailable,
-    desktopSurface = false,
-    sidebarExpanded = true,
   } = props;
+  const desktopContext = useDesktop();
+  const desktop = props.desktopSurface ?? !!desktopContext;
+  const sidebarPinned = props.sidebarExpanded ?? desktopContext?.sidebarPinned ?? desktopContext?.sidebarExpanded ?? true;
   const [find, setFind] = useState("");
+  const [pointerInside, setPointerInside] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
+  const [peekSuppressed, setPeekSuppressed] = useState(false);
+  const peek = !peekSuppressed && (pointerInside || focusInside);
   const generation = useSettingsGeneration(studyOwner, email);
   const policy = useSettingsMotion(preferences.motion);
   const presence = useSettingsPresence(generation, policy);
@@ -147,10 +155,15 @@ export function SettingsView(props: SettingsProps) {
     });
   }
   return (
-    <div className="settings-layout" data-settings-motion={policy} data-settings-pinned={desktopSurface ? sidebarExpanded : undefined} data-settings-expanded={desktopSurface ? sidebarExpanded : undefined}>
-      <nav ref={nav} className="settings-nav" aria-label="Settings sections">
-        {desktopSurface && <button className="settings-back" aria-label="Back to workspace" onClick={() => leave(onDone)}><ChevronLeft size={15} aria-hidden="true" /><span>Settings</span></button>}
-        {desktopSurface && <label className="settings-search"><Search size={13} aria-hidden="true" /><input aria-label="Find a setting" placeholder="Find a setting" value={find} onChange={(event) => setFind(event.target.value)} /></label>}
+    <div className="settings-layout" data-settings-motion={policy} data-settings-expanded={desktop ? (props.sidebarExpanded ?? (sidebarPinned || peek)) : undefined} data-settings-pinned={desktop ? sidebarPinned : undefined}>
+      <nav ref={nav} className="settings-nav" aria-label="Settings sections"
+        onPointerEnter={(event) => { if (event.pointerType !== "touch") setPointerInside(true); }}
+        onPointerLeave={(event) => { if (event.pointerType !== "touch") { setPointerInside(false); if (!focusInside) setPeekSuppressed(false); } }}
+        onFocus={() => setFocusInside(true)}
+        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setFocusInside(false); if (!pointerInside) setPeekSuppressed(false); } }}
+        onKeyDown={(event) => { if (event.key === "Escape" && desktop && !sidebarPinned && peek) { event.preventDefault(); event.stopPropagation(); setPeekSuppressed(true); } }}>
+        {desktop && <button className="settings-back" aria-label="Back to workspace" title="Back to workspace" onClick={() => leave(onDone)}><ChevronLeft size={15} aria-hidden="true" /><span>Settings</span></button>}
+        {desktop && <label className="settings-search"><Search size={13} aria-hidden="true" /><input aria-label="Find a setting" placeholder="Find a setting" value={find} onChange={(event) => setFind(event.target.value)} /></label>}
         <SettingsIndicator
           key={generation}
           className="settings-nav-indicators"
@@ -167,12 +180,12 @@ export function SettingsView(props: SettingsProps) {
               ["apps", "Connected apps", Plug, true],
               ["data", "Data and export", Download, false],
             ] as const
-          ).filter(([, label]) => !desktopSurface || label.toLowerCase().includes(find.trim().toLowerCase())).map(([id, label, Icon, planned]) => (
+          ).filter(([, label]) => label.toLowerCase().includes(find.trim().toLowerCase())).map(([id, label, Icon, planned]) => (
             <button
               key={id}
-              title={desktopSurface ? label : undefined}
-              aria-label={desktopSurface ? (planned ? `${label} Planned` : label) : undefined}
               data-settings-section={id}
+              title={label}
+              aria-label={planned ? `${label} Planned` : label}
               aria-current={section === id ? "page" : undefined}
               onClick={() => navigate(id)}
             >
@@ -187,10 +200,10 @@ export function SettingsView(props: SettingsProps) {
             </button>
           ))}
         </SettingsIndicator>
-        {desktopSurface && find.trim() && !["General", "Editor", "Sync", "Study", "Journal", "Connected apps", "Data and export"].some((label) => label.toLowerCase().includes(find.trim().toLowerCase())) && <p className="settings-search-empty" role="status">No settings found</p>}
+        {find.trim() && !["General", "Editor", "Sync", "Study", "Journal", "Connected apps", "Data and export"].some((label) => label.toLowerCase().includes(find.trim().toLowerCase())) && <p className="settings-search-empty" role="status">No settings found</p>}
       </nav>
       <div className="settings-pane settings-pane-stack">
-        {!desktopSurface && <button className="settings-motion-done" onClick={() => leave(onDone)}>
+        {!desktop && <button className="settings-motion-done" onClick={() => leave(onDone)}>
           Done
         </button>}
         {[presence.outgoing, presence.current]
@@ -205,6 +218,7 @@ export function SettingsView(props: SettingsProps) {
             >
               <SettingsPaneContent
                 {...props}
+                desktopSurface={desktop}
                 studyOwner={studyOwner}
                 section={pane.section}
                 pane={pane}
@@ -221,9 +235,11 @@ export function SettingsView(props: SettingsProps) {
 
 function SettingsPaneContent({
   sampleWorkspace = false,
+  desktopSurface,
   email,
   preferences,
   onSignOut,
+  onUseLocal,
   onExport,
   onErase,
   onOpenJournal,
@@ -242,6 +258,9 @@ function SettingsPaneContent({
   leave: (action: () => void) => void;
   policy: "full" | "reduced";
 }) {
+  const desktopContext = useDesktop();
+  const desktop = desktopSurface ?? !!desktopContext;
+  const local = isLocalSession({ email });
   const editor = useEditorPreferences();
   const registerGuard = useCallback(
     (value: SettingsLeaveGuard | null) => register(pane, value),
@@ -267,13 +286,19 @@ function SettingsPaneContent({
       <div className="settings-content">
         {section === "general" ? (
           <>
+            {desktop && <h4 className="settings-group-heading">Workspace</h4>}
+            <div className="settings-group">
             <div className="settings-row">
               <div>
-                <b>{sampleWorkspace ? "Sample workspace" : "Account"}</b>
-                <small>{sampleWorkspace ? "Changes last until you leave or reload. No account or sync." : email}</small>
+                <b>{sampleWorkspace ? "Sample workspace" : local ? "Local workspace" : "Account"}</b>
+                <small>{sampleWorkspace ? "Changes last until you leave or reload. No account or sync." : local ? "Saved on this device. No account or sync." : email}</small>
               </div>
-              {!sampleWorkspace && <button onClick={onSignOut}>Sign out</button>}
+              {!sampleWorkspace && <button onClick={onSignOut}>{local ? "Close workspace" : "Sign out"}</button>}
             </div>
+            {!local && onUseLocal && <div className="settings-row">
+              <div><b>Local workspace</b><small>Keep a separate library on this device without an account.</small></div>
+              <button onClick={() => leave(onUseLocal)}>Use without an account</button>
+            </div>}
             <div className="settings-row">
               <b>Plan</b>
               <span>Planned</span>
@@ -293,6 +318,9 @@ function SettingsPaneContent({
                 </button>
               </div>
             )}
+            </div>
+            {desktop && <h4 className="settings-group-heading">Appearance</h4>}
+            <div className="settings-group">
             <div className="settings-row">
               <div>
                 <b>Appearance</b>
@@ -339,6 +367,9 @@ function SettingsPaneContent({
                 ))}
               </SettingsIndicator>
             </div>
+            </div>
+            {desktop && <h4 className="settings-group-heading">Preferences</h4>}
+            <div className="settings-group">
             <div className="settings-row">
               <b>Language</b>
               <div>
@@ -353,6 +384,7 @@ function SettingsPaneContent({
             <div className="settings-row">
               <b>Week starts on</b>
               <span>Planned</span>
+            </div>
             </div>
           </>
         ) : section === "editor" ? (

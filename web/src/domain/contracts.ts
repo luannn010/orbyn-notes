@@ -35,7 +35,7 @@ export interface NotesStore {
     title: string;
     document: NoteDocument;
     tags: string[];
-  }): Promise<Note>;
+  }, creationId?: string): Promise<Note>;
   update(
     id: string,
     patch: Partial<Pick<Note, "title" | "document" | "tags">>,

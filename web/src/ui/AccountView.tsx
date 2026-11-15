@@ -6,10 +6,12 @@ import { storageCopy } from "./storageCopy";
 export function AccountView({
   service,
   onSession,
+  onUseLocal,
   onUseWithoutAccount,
 }: {
   service: AccountService;
   onSession: (session: AccountSession) => void;
+  onUseLocal?: () => void;
   onUseWithoutAccount?: () => void;
 }) {
   const [step, setStep] = useState<
@@ -252,8 +254,8 @@ export function AccountView({
             </div>
           </form>
         )}
-        {onUseWithoutAccount && (step === "entry" || step === "signin") && (
-          <button type="button" disabled={busy} onClick={onUseWithoutAccount}>Use without an account</button>
+        {(onUseLocal || onUseWithoutAccount) && (step === "entry" || step === "signin" || (onUseLocal && step === "invite")) && (
+          <button type="button" disabled={busy} onClick={onUseLocal ?? onUseWithoutAccount}>Use without an account</button>
         )}
         <p className="local-copy">
           {storageCopy(isDesktop()).warning}

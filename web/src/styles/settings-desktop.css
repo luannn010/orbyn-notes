@@ -1,6 +1,6 @@
 .settings-desktop-surface {
   position: fixed;
-  inset: var(--desktop-titlebar-height, 44px) 0 0;
+  inset: var(--desktop-titlebar-height, 42px) 0 0;
   z-index: 18;
   background: var(--main);
 }
@@ -30,6 +30,8 @@
 .settings-desktop-surface .settings-heading { padding: 22px 28px 6px; }
 .settings-desktop-surface .settings-content { padding: 6px 28px 24px; }
 
+/* Group wrappers do not alter the web dialog layout. */
+.settings-group { display: contents; }
 .settings-desktop-surface .settings-group-heading {
   margin: 0; padding: 12px 0 6px; color: var(--t1); font-size: 13px; font-weight: 500;
 }

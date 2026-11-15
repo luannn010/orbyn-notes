@@ -201,20 +201,51 @@ wiped by local erase.
 
 ## Windows shell and remaining scope
 
-The local Windows build embeds the web UI in a Tauri2 shell with custom caption
-controls and guarded close. Its WebView profile is separate from a normal browser
-profile. The restricted source-opening command hands validated HTTP(S) destinations
-to the OS; other native navigation and new-window requests remain denied. See
-[Windows boundaries and build instructions](windows.md). Local builds do not
-constitute a public release or a completed release qualification.
+The local Windows build embeds the web UI and WASM in a Tauri2 shell. Use without
+an account opens an isolated encrypted workspace under a non-email device-record
+key; it creates no server account, token or trust grant. Its existing wrapping and
+snapshot format is unchanged. Browser, desktop and signed-in libraries are not
+copied or merged. Native startup skips service-worker registration; web caching
+keeps its existing behavior. The packaged local build has no backend endpoint.
+
+New note opens an in-memory draft. The first meaningful text or starter creates a
+note under a caller-generated UUID. Retrying an identical revision1 create returns
+the existing note; different content or a later revision fails instead of being
+adopted. Subsequent writes use normal revision checks. Initial empty/tag-only
+drafts never enter the library or Trash. Starter hints are presentation only.
+Undo on an already committed starter clears the same note using CAS; it does not
+silently delete its record. Reference: artifact b66f1d8, frames new-note,
+new-note-states, new-note-starter and new-note-phone.
+
+Quick note is a separate account-scoped plaintext editor with the same encrypted
+store, failure recovery and one draft UUID. Ctrl+Shift+N (Command+Shift+N on macOS)
+is registered natively; browser builds explicitly offer an in-browser fallback.
+Main close hides its window after save admission, while Quick close destroys its
+capture after admission. Successful hide releases renderer freezes. Menu/tray
+Quit seals capture creation and waits for nonce-bound approval from both windows;
+denial or timeout releases freezes. Owner transitions take a native lease while
+Quick is closed. Per-window events target the intended window. Windows webview
+creation runs off synchronous event/command callbacks to avoid WebView2 deadlock.
+
+Open in Notes sends a note ID, owner scope and UUID token, never note text. Main
+fetches the note and admits navigation through Study/current-draft guards before
+clearing covering UI and acknowledging. Renderer and native sides correlate every
+result, timeout and late callback with that request. Only the current saved
+revision can be handed off; copying a failed draft permits closure, not handoff
+of an older revision. Reference: artifact b66f1d8, quick-note/quick-note-states.
+
+Native export uses a save dialog and opaque one-use destination grants. The
+renderer does not receive paths; binary ZIP payloads use the same bounded write
+and cancellation/freshness checks. Validated HTTP(S) links open in the OS browser;
+external native navigation and arbitrary new windows remain denied. See
+[Windows boundaries and build instructions](windows.md). Local builds are not a
+public release or completed release qualification.
 
 Still incomplete: cross-device sync, attachments, Planner linking, per-note
-protected locks, browser extension capture and extraction, reader highlights and
-the clip-to-note bridge, full Study source-selection qualification, FSRS/Anki transfer,
-agent integrations, public sharing, other native platforms and billing. The
-local module slices above do not qualify every approved design frame. Unsupported
-integration states must remain explicit; fixtures and generated API types do not
-count as working services.
+protected locks, browser extension capture/extraction, reader highlights,
+clip-to-note bridge, full Study source-selection qualification, FSRS/Anki transfer,
+agent integrations, public sharing, other native platforms and billing. These
+integrations remain explicitly Planned; fixtures do not count as working services.
 
 
 ## Sidebar width
@@ -233,22 +264,14 @@ Notes `sidebar-dragging` and Components `window-title-row`.
 
 ## Native title-row surfaces
 
-The native 44px caption row is transparent over full-height sidebar/content
-surfaces and carries no centered window title. Windows caption buttons retain
-46x44px hit areas and the existing readiness, drag, system-menu and close guards.
-The first sidebar control starts 56px from the window top; sheet surface reaches
-the top while interactive sheet content begins below the 44px caption area.
-Workspace publishes only `DesktopLayout {sidebarWidth, sidebarVisible}` through
-the shell context in a layout effect after its initial load. A null layout is a
-single-pane account/loading window with no sidebar toggle. Width metadata has
-no account identity or content and does not remount editors or module actors.
-The existing editor action portal remains mounted in the row. Its bounded area
-scrolls horizontally when actions cannot fit, keeping the protected caption
-buttons outside that scroll area. Buttons and scrollbar interaction do not drag
-the window. Back/Forward history and the account-avatar sidebar header remain
-separate work; no decorative history controls are added.
-Reference: design revision 95bd47e899600c0f038a7d4622a40cfc61d063e2,
-Components `window-title-row` and Notes `layout-desktop`/`layout-narrow`.
+The native 42px caption row contains sidebar visibility, guarded Back/Forward,
+workspace breadcrumb, centered Notes identity, Menu and native caption controls.
+Editor actions remain in a separate row. The sidebar can be pinned open or used
+as a hover/focus rail; Settings uses the same navigation surface with a single-row
+search field. Session-local history retains navigation IDs/filter state, never documents or
+cross-account history, and does not remount editor actors. Existing Study, note-save and privacy guards own admission.
+Reference: approved Planner-style desktop adaptation and Notes artifact b66f1d8;
+existing layout-desktop/layout-narrow behavior is retained.
 
 
 ## Sidebar account header

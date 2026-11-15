@@ -14,6 +14,8 @@ import type {
 import { ClipDuplicateError } from "../clips/contracts";
 import { exportClipsFiles } from "../clips/transfer";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
+import { isDesktop } from "../desktop/window";
+import { saveDesktopFile } from "../desktop/files";
 import { Dialog } from "./primitives";
 import { message } from "./model";
 import { useEditorPreferences } from "./editorPreferences";
@@ -659,6 +661,16 @@ export function ClipsView({
           type: "application/zip",
         });
         if (invocation !== generation.current || !alive.current) return;
+        if (isDesktop()) {
+          const saved = await saveDesktopFile("orbyn-clips.zip", blob, () => {
+            if (invocation !== generation.current || !alive.current || value.epoch !== current.current?.epoch)
+              throw new Error("Export is no longer current.");
+          });
+          if (!saved || invocation !== generation.current || !alive.current) return;
+          setExportOpen(false);
+          setNotice({ text: "Clips export saved" });
+          return;
+        }
         clearDownload();
         const url = URL.createObjectURL(blob);
         downloadUrl.current = url;

@@ -1,0 +1,37 @@
+/* Planner's Windows rail: fixed 56px gutter, immediate hover peek, 150ms labels. */
+[data-desktop="true"] .desktop-content > .app { display: grid; grid-template-columns: var(--sidebar-width, 224px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+[data-desktop="true"] .desktop-content .sidebar {
+  display: flex;
+  position: relative;
+  z-index: 4;
+  width: var(--sidebar-width, 224px);
+  box-sizing: border-box;
+  padding: 8px;
+  padding-top: calc(var(--desktop-titlebar-height, 42px) + 8px);
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+[data-desktop="true"] .desktop-content .desktop-icon-rail { grid-template-columns: 56px minmax(0, 1fr); }
+[data-desktop="true"] .desktop-icon-rail .sidebar[data-expanded="false"] { width: 56px; }
+[data-desktop="true"] .desktop-icon-rail .sidebar[data-expanded="true"] { box-shadow: 0 8px 28px #0003; }
+[data-desktop="true"] .sidebar :is(.nav-label, .nav > span, .sidebar-account-email, .search > span, .search > kbd) {
+  transition: opacity 150ms cubic-bezier(.2,.8,.2,1);
+}
+[data-desktop="true"] .sidebar[data-expanded="false"] :is(.nav > span, .sidebar-account-email, .search > span, .search > kbd) { opacity: 0; pointer-events: none; }
+[data-desktop="true"] .sidebar .nav { white-space: nowrap; height: 36px; gap: 12px; border-radius: 6px; padding: 0 10px; transition: background-color 150ms cubic-bezier(.4,0,.2,1), color 150ms cubic-bezier(.4,0,.2,1); }
+[data-desktop="true"] .sidebar .nav > svg { width: 18px; height: 18px; flex: none; }
+[data-desktop="true"] .sidebar .nav:hover { background: var(--raise); }
+[data-desktop="true"] .sidebar .search { display: flex; justify-content: flex-start; flex: none; min-width: 0; overflow: hidden; }
+[data-desktop="true"] .sidebar .search > svg { flex: 0 0 18px; width: 18px; height: 18px; }
+[data-desktop="true"] .sidebar .search > span { white-space: nowrap; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .nav { overflow: hidden; }
+[data-desktop="true"] .sidebar .nav > .tag-swatch { flex: 0 0 9px; width: 9px; height: 9px; padding: 0; margin: 0 4.5px; border-radius: 50%; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .nav > .tag-swatch { opacity: 1; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .sidebar-account { padding: 0 8px; gap: 12px; overflow: hidden; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .sidebar-account > button { display: none; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .sidebar-account-email { flex: 0 0 0; min-width: 0; }
+[data-desktop="true"] .sidebar[data-expanded="false"] .sidebar-tags-label,
+[data-desktop="true"] .sidebar[data-expanded="false"] nav > .group,
+[data-desktop="true"] .sidebar[data-expanded="false"] footer p { visibility: hidden; }
+[data-desktop="true"] .sidebar footer { margin-top: auto; }

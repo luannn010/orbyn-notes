@@ -3,15 +3,17 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, WebviewWindow, WindowEvent};
 
+mod capture;
 mod external_url;
 mod native_note_link;
+mod save_export;
 
 const MAX_REQUEST_ID: u64 = 9_007_199_254_740_991;
 
 #[derive(Default)]
 struct CloseRequests {
     next: u64,
-    pending: Option<u64>,
+    pending: std::collections::HashMap<String, u64>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -73,21 +75,30 @@ fn verify_caller(window: &WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 async fn finish_close(window: WebviewWindow, request_id: u64) -> Result<(), String> {
-    verify_caller(&window)?;
+    if !matches!(window.label(), "main" | "quick-note")
+        || !local_url(&window.url().map_err(|e| e.to_string())?)
+    {
+        return Err("Invalid window".into());
+    }
     let state = window.state::<Mutex<CloseRequests>>();
     {
         let mut requests = state.lock().map_err(|_| "Close state is unavailable.")?;
-        if requests.pending != Some(request_id) || request_id == 0 {
+        if requests.pending.get(window.label()) != Some(&request_id) || request_id == 0 {
             return Err("Close request is no longer current.".into());
         }
         // Consume before the native effect. There is no renderer destroy permission.
-        requests.pending = None;
+        requests.pending.remove(window.label());
     }
-    if let Err(error) = window.destroy() {
+    let effect = if window.label() == "main" {
+        window.hide()
+    } else {
+        window.destroy()
+    };
+    if let Err(error) = effect {
         let mut requests = state.lock().map_err(|_| "Close state is unavailable.")?;
         // A newer close must not be overwritten if it arrived during the effect.
-        if requests.pending.is_none() {
-            requests.pending = Some(request_id);
+        if !requests.pending.contains_key(window.label()) {
+            requests.pending.insert(window.label().into(), request_id);
         }
         return Err(error.to_string());
     }
@@ -144,13 +155,38 @@ async fn show_system_menu(window: WebviewWindow) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .manage(Mutex::new(native_note_link::initial_broker()))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             native_note_link::activate(app, args);
         }))
         .manage(Mutex::new(CloseRequests::default()))
+        .manage(save_export::ExportState::default())
+        .manage(Mutex::new(capture::CaptureState::default()))
         .invoke_handler(tauri::generate_handler![
+            capture::capture_open,
+            capture::capture_scope,
+            capture::capture_require_closed,
+            capture::capture_owner_changed,
+            capture::capture_pin,
+            capture::capture_show_main,
+            capture::capture_handoff,
+            capture::capture_handoff_result,
+            capture::capture_shortcut_status,
+            capture::capture_quit_reply,
+            capture::capture_quit,
             finish_close,
+            save_export::choose_export,
+            save_export::write_export,
+            save_export::discard_export,
             show_system_menu,
             external_url::open_external_url,
             native_note_link::note_link_snapshot,
@@ -163,20 +199,24 @@ fn main() {
                 .on_navigation(local_url)
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;
+            capture::setup(app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Destroyed) {
+                capture::closed(window.app_handle(), window.label());
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // Always fail closed, including startup, bridge failure and poisoned state.
                 api.prevent_close();
-                if window.label() != "main" {
+                if !matches!(window.label(), "main" | "quick-note") {
                     return;
                 }
                 let state = window.state::<Mutex<CloseRequests>>();
                 let Ok(mut requests) = state.lock() else {
                     return;
                 };
-                let request_id = match requests.pending {
+                let request_id = match requests.pending.get(window.label()).copied() {
                     Some(id) => id,
                     None => {
                         requests.next = if requests.next >= MAX_REQUEST_ID {
@@ -185,13 +225,13 @@ fn main() {
                             requests.next + 1
                         };
                         let id = requests.next;
-                        requests.pending = Some(id);
+                        requests.pending.insert(window.label().into(), id);
                         id
                     }
                 };
                 drop(requests);
                 // Emission failure never authorizes closure; the next explicit request retries.
-                let _ = window.emit("notes-close-requested", CloseRequest { request_id });
+                let _ = window.emit_to(window.label(), "notes-close-requested", CloseRequest { request_id });
             }
         })
         .run(tauri::generate_context!())

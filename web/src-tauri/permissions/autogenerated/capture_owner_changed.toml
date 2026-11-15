@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-capture-owner-changed"
+description = "Enables the capture_owner_changed command without any pre-configured scope."
+commands.allow = ["capture_owner_changed"]
+
+[[permission]]
+identifier = "deny-capture-owner-changed"
+description = "Denies the capture_owner_changed command without any pre-configured scope."
+commands.deny = ["capture_owner_changed"]
