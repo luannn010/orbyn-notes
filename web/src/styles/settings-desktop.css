@@ -1,0 +1,43 @@
+.settings-desktop-surface {
+  position: fixed;
+  inset: var(--desktop-titlebar-height, 44px) 0 0;
+  z-index: 18;
+  background: var(--main);
+}
+.settings-desktop-surface .settings-layout {
+  display: grid; height: 100%; min-height: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.settings-desktop-surface .settings-layout[data-settings-pinned="true"] { grid-template-columns: 224px minmax(0, 1fr); }
+.settings-desktop-surface .settings-nav {
+  position: relative; z-index: 1; width: 56px; height: 100%; padding: 8px;
+  display: flex; flex-direction: column; flex-wrap: nowrap; border-right: 1px solid var(--line); border-bottom: 0;
+  overflow: hidden; gap: 1px; white-space: nowrap;
+}
+.settings-desktop-surface .settings-layout[data-settings-expanded="true"] .settings-nav { width: 224px; }
+.settings-desktop-surface .settings-layout[data-settings-expanded="true"][data-settings-pinned="false"] .settings-nav { box-shadow: 0 8px 24px #0002; }
+.settings-desktop-surface .settings-nav button { flex: none; width: 100%; height: 29px; min-height: 29px; padding: 0 10px; gap: 10px; }
+.settings-desktop-surface .settings-nav button:hover { background: var(--raise); }
+.settings-desktop-surface .settings-nav .settings-back { margin-bottom: 6px; color: var(--t1); font-weight: 500; }
+.settings-desktop-surface .settings-nav button svg, .settings-desktop-surface .settings-search svg { flex: none; }
+.settings-desktop-surface .settings-nav button span, .settings-desktop-surface .settings-nav button small, .settings-desktop-surface .settings-search input, .settings-desktop-surface .settings-search-empty { opacity: 0; transition: opacity 150ms cubic-bezier(.2, .8, .2, 1); }
+.settings-desktop-surface [data-settings-expanded="true"] .settings-nav button span, .settings-desktop-surface [data-settings-expanded="true"] .settings-nav button small, .settings-desktop-surface [data-settings-expanded="true"] .settings-search input, .settings-desktop-surface [data-settings-expanded="true"] .settings-search-empty { opacity: 1; }
+.settings-desktop-surface .settings-search { flex: none; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px; height: 32px; min-height: 32px; margin-bottom: 4px; padding: 0 10px; border-radius: 9px; background: var(--raise); color: var(--t3); }
+.settings-desktop-surface .settings-search input { flex: 1; width: 100%; height: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--t1); font-size: 13px; }
+.settings-desktop-surface .settings-search:focus-within { outline: 2px solid var(--t1); outline-offset: 2px; }
+.settings-desktop-surface .settings-search-empty { margin: 8px 10px; color: var(--t3); }
+.settings-desktop-surface .settings-pane { background: var(--main); }
+.settings-desktop-surface .settings-heading { padding: 22px 28px 6px; }
+.settings-desktop-surface .settings-content { padding: 6px 28px 24px; }
+
+.settings-desktop-surface .settings-group-heading {
+  margin: 0; padding: 12px 0 6px; color: var(--t1); font-size: 13px; font-weight: 500;
+}
+.settings-desktop-surface .settings-group {
+  display: flex; flex-direction: column; padding: 0 14px;
+  background: var(--raise); border-radius: 12px;
+}
+.settings-desktop-surface .settings-group .settings-row { min-height: 44px; border-top: 0; border-bottom: 1px solid var(--line); }
+.settings-desktop-surface .settings-group .settings-row:last-child { border-bottom: 0; }
+
+.settings-desktop-surface .settings-nav-indicators { flex: none; flex-direction: column; flex-wrap: nowrap; width: 100%; min-width: 0; }
