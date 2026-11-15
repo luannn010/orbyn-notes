@@ -68,3 +68,16 @@
 .new-note-page .compact-note-metadata {
   margin: 0;
 }
+
+.compact-tags-confirmed {
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 26px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.compact-tags-confirmed + .compact-tags-input {
+  flex-basis: 140px;
+  width: 140px;
+  min-width: 72px;
+}

@@ -390,10 +390,14 @@ and data export are unavailable in the sample.
 ## Compact tag editing
 
 The owner-approved compact design uses one hashtag action and a comma-separated
-inline field in saved notes and normal New Note creation. Enter or blur applies
-the list through the existing revision-checked save; Escape cancels without a
-write. Pending edits, including deleting every tag, participate in close and
-navigation guards. Read-only and concurrently changed tag lists reject edits.
+inline field in saved notes and normal New Note creation. A newly typed comma
+followed by a space confirms complete tags and keeps focus ready for the next.
+Tab applies the unfinished tag and focuses the writing area; Enter and blur also
+apply through the existing revision-checked save. Escape discards unfinished text
+while retaining already confirmed tags. Mid-list edits before an unchanged suffix
+remain a full-list draft until explicitly applied, preserving untouched tags.
+Pending edits, including deleting every tag, participate in close and navigation
+guards. Read-only and concurrently changed tag lists reject edits.
 Quoted fields preserve existing comma/quote/case/Unicode identities. Legacy tag
 names containing line breaks remain untouched and require a rename through Tags,
 because HTML single-line fields would otherwise strip those characters. Quick

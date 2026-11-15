@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { registerCloseGuard } from "../desktop/closeGuard";
-import { formatTagText, parseTagText } from "./tagText";
+import { confirmedTagPrefix, formatTagText, parseTagText } from "./tagText";
 import "../styles/note-metadata.css";
 import "../styles/compact-note-tags.css";
 export function CompactNoteTags({
@@ -20,13 +20,16 @@ export function CompactNoteTags({
 }) {
   const [editing, setEditing] = useState(false),
     [value, setValue] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [confirmed, setConfirmed] = useState<string[]>([]);
   const input = useRef<HTMLInputElement>(null),
     trigger = useRef<HTMLButtonElement>(null),
     snapshot = useRef<string[]>([]);
   const pending = useRef(false),
     open = useRef(false),
-    composing = useRef(false);
+    composing = useRef(false),
+    tokenized = useRef(false),
+    confirmedRef = useRef<string[]>([]);
   const callbacks = useRef({ onChange, onPendingChange, onApply });
   callbacks.current = { onChange, onPendingChange, onApply };
   const id = useId();
@@ -62,6 +65,9 @@ export function CompactNoteTags({
       return;
     }
     snapshot.current = [...tags];
+    tokenized.current = false;
+    confirmedRef.current = [];
+    setConfirmed([]);
     setValue(formatTagText(tags));
     setError("");
     mark(false);
@@ -82,7 +88,10 @@ export function CompactNoteTags({
         return;
       }
       try {
-        const next = parseTagText(value);
+        const rest = parseTagText(value);
+        const next = tokenized.current
+          ? parseTagText(formatTagText([...confirmedRef.current, ...rest]))
+          : rest;
         if (JSON.stringify(next) !== JSON.stringify(tags))
           callbacks.current.onChange(next);
       } catch (failure) {
@@ -98,6 +107,47 @@ export function CompactNoteTags({
     mark(false);
     setError("");
     setEditing(false);
+  }
+  function edit(nextValue: string) {
+    setError("");
+    const prefix = composing.current
+      ? null
+      : confirmedTagPrefix(value, nextValue);
+    if (prefix) {
+      try {
+        if (readOnly)
+          throw Error("This note is read-only. Your tag edit is still here.");
+        if (JSON.stringify(tags) !== JSON.stringify(snapshot.current))
+          throw Error(
+            "Tags changed while you were editing. Cancel with Escape and try again.",
+          );
+        const names = parseTagText(prefix.text);
+        const next = parseTagText(
+          formatTagText([...confirmedRef.current, ...names]),
+        );
+        if (JSON.stringify(next) !== JSON.stringify(tags))
+          callbacks.current.onChange(next);
+        snapshot.current = [...next];
+        tokenized.current = true;
+        confirmedRef.current = next;
+        setConfirmed(next);
+        setValue(prefix.rest);
+        mark(prefix.rest.length > 0);
+        return;
+      } catch (failure) {
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Couldn’t apply tags. Your edit is still here.",
+        );
+      }
+    }
+    setValue(nextValue);
+    mark(
+      tokenized.current
+        ? nextValue.length > 0
+        : nextValue !== formatTagText(snapshot.current),
+    );
   }
   return (
     <div className="compact-note-tags">
@@ -116,6 +166,12 @@ export function CompactNoteTags({
         >
           #
         </button>
+        {editing && confirmed.length > 0 && (
+          <span className="compact-tags-confirmed" aria-label="Confirmed tags">
+            {confirmed.join(", ")}
+            <span aria-hidden="true">,</span>
+          </span>
+        )}
         {editing ? (
           <input
             ref={input}
@@ -126,13 +182,11 @@ export function CompactNoteTags({
             aria-describedby={error ? `${id}-error` : undefined}
             readOnly={readOnly}
             value={value}
-            placeholder="trip, planning, ideas"
+            placeholder={
+              tokenized.current ? "Next tag" : "trip, planning, ideas"
+            }
             maxLength={24000}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setError("");
-              mark(event.target.value !== formatTagText(snapshot.current));
-            }}
+            onChange={(event) => edit(event.target.value)}
             onBlur={() => finish(true)}
             onCompositionStart={() => {
               composing.current = true;
@@ -142,7 +196,11 @@ export function CompactNoteTags({
             }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || composing.current) return;
-              if (event.key === "Enter" || event.key === "Escape") {
+              if (
+                event.key === "Enter" ||
+                event.key === "Escape" ||
+                (event.key === "Tab" && !event.shiftKey)
+              ) {
                 event.preventDefault();
                 event.stopPropagation();
                 const cancel = event.key === "Escape";

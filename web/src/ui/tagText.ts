@@ -49,3 +49,55 @@ export function parseTagText(input: string): string[] {
   }
   return tags;
 }
+
+/** Only a newly entered comma + space outside quoted fields confirms tags. */
+export function confirmedTagPrefix(
+  previous: string,
+  next: string,
+): { text: string; rest: string } | null {
+  let start = 0,
+    suffix = 0;
+  while (
+    start < previous.length &&
+    start < next.length &&
+    previous[start] === next[start]
+  )
+    start++;
+  while (
+    suffix < previous.length - start &&
+    suffix < next.length - start &&
+    previous[previous.length - suffix - 1] === next[next.length - suffix - 1]
+  )
+    suffix++;
+  const end = next.length - suffix;
+  // Edits before an unchanged suffix remain a full-list draft until applied.
+  if (end <= start || suffix > 0) return null;
+  let quoted = false,
+    fieldStart = true,
+    boundary = -1;
+  for (let i = 0; i < next.length; i++) {
+    const char = next[i];
+    if (quoted) {
+      if (char === '"') {
+        if (next[i + 1] === '"') i++;
+        else quoted = false;
+      }
+      continue;
+    }
+    if (fieldStart && char === '"') {
+      quoted = true;
+      fieldStart = false;
+      continue;
+    }
+    if (char === ",") {
+      if (next[i + 1] === " ") {
+        if ((i >= start && i < end) || (i + 1 >= start && i + 1 < end))
+          boundary = i + 2;
+      }
+      fieldStart = true;
+    } else if (!/\s/.test(char ?? "")) fieldStart = false;
+  }
+  return boundary >= 0
+    ? { text: next.slice(0, boundary), rest: next.slice(boundary) }
+    : null;
+}
