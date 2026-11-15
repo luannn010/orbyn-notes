@@ -10,6 +10,7 @@ import { registerCloseGuard } from "../desktop/closeGuard";
 import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
 import { Dialog } from "./primitives";
 import { Menu } from "./Menu";
+import { Hash, Layers, Pencil, Plus, Trash2 } from "./icons";
 import { LibraryActionFeedback, useLibraryAction } from "./libraryAction";
 import "../styles/library.css";
 const colors: [string, TagColor][] = [
@@ -26,6 +27,22 @@ type Form = {
   color: TagColor;
   target: string;
 };
+// design: notes/tags
+// Tags frame, design revision f53ac93. Compare local calendar days across DST.
+function lastUsedLabel(timestamp: number, now = new Date()) {
+  const edited = new Date(timestamp);
+  const day = (date: Date) =>
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = (day(now) - day(edited)) / 86_400_000;
+  if (days === 0) return "Edited today";
+  if (days === 1) return "Edited yesterday";
+  return `Edited ${edited.toLocaleDateString(
+    "en-GB",
+    days > 1 && days < 7
+      ? { weekday: "short" }
+      : { day: "numeric", month: "short" },
+  )}`;
+}
 export function TagsView({
   library,
   heading,
@@ -46,7 +63,9 @@ export function TagsView({
   const [form, setForm] = useState<Form | null>(null);
   const [discard, setDiscard] = useState(false);
   const headingRef = useRouteHeading(
-    heading && { ...heading, active: heading.active && !form && !discard }, "tags", "target",
+    heading && { ...heading, active: heading.active && !form && !discard },
+    "tags",
+    "target",
   );
   const dirty = useRef(false);
   const action = useLibraryAction();
@@ -117,17 +136,16 @@ export function TagsView({
     );
   }
   return (
-    <section className="library-view" aria-label="Tags">
-      <header className="page-heading">
-        <div>
-          <h1 ref={headingRef}>Tags</h1>
-          <span>{active.length} tags</span>
-        </div>
+    <section className="library-view tags-view" aria-label="Tags">
+      <header className="page-heading tags-heading">
+        <h1 ref={headingRef}>Tags</h1>
+        <span>{active.length} tags</span>
         <button
           className="primary"
           disabled={readOnly || action.busy || !!action.error}
           onClick={() => open("create")}
         >
+          <Plus size={13} />
           New tag
         </button>
       </header>
@@ -138,65 +156,87 @@ export function TagsView({
         </p>
       )}
       <LibraryActionFeedback action={feedbackAction} reload={reload} />
-      <div className="tag-table">
+      <div className="tags-content">
+        <div className="tag-table" role="table" aria-label="Tags">
+          <div className="tag-row tag-table-heading" role="row">
+            <span role="columnheader">Name</span>
+            <span role="columnheader">Notes</span>
+            <span role="columnheader">Last used</span>
+            <span role="columnheader" />
+          </div>
+          {active.map((tag) => {
+            const references = snapshot.notes.filter(
+              (note) =>
+                !note.trashedAt &&
+                snapshot.metadata.some(
+                  (meta) =>
+                    meta.noteId === note.id && meta.tagIds.includes(tag.id),
+                ),
+            );
+            const last = references.reduce(
+              (latest, note) => Math.max(latest, Date.parse(note.updatedAt)),
+              -Infinity,
+            );
+            return (
+              <div className="tag-row" role="row" key={tag.id}>
+                <div role="cell">
+                  <button
+                    className="tag-name"
+                    onClick={() => onOpenTag(tag.name)}
+                  >
+                    <span
+                      className="tag-swatch"
+                      style={tag.color ? { background: tag.color } : undefined}
+                    />
+                    <span className="tag-label">{tag.name}</span>
+                  </button>
+                </div>
+                <span role="cell">
+                  {references.length}{" "}
+                  {references.length === 1 ? "note" : "notes"}
+                </span>
+                <span role="cell">
+                  {Number.isFinite(last) ? lastUsedLabel(last) : "Not used yet"}
+                </span>
+                <div role="cell">
+                  <Menu
+                    label={`Tag menu for ${tag.name}`}
+                    actions={(
+                      ["rename", "color", "merge", "delete"] as const
+                    ).map((kind) => ({
+                      label: {
+                        rename: "Rename",
+                        color: "Change colour",
+                        merge: "Merge into…",
+                        delete: "Delete tag",
+                      }[kind],
+                      icon: {
+                        rename: <Pencil size={13} />,
+                        color: <Hash size={13} />,
+                        merge: <Layers size={13} />,
+                        delete: <Trash2 size={13} />,
+                      }[kind],
+                      separatorBefore: kind === "delete",
+                      danger: kind === "delete",
+                      disabled:
+                        readOnly ||
+                        action.busy ||
+                        !!action.error ||
+                        (kind === "merge" && active.length < 2),
+                      onSelect: () => open(kind, tag),
+                    }))}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
         {active.length === 0 && (
-          <p className="empty">
-            No tags yet. Create a tag to organize your notes.
-          </p>
+          <p className="empty">No tags yet. Create a tag to organize your notes.</p>
         )}
-        {active.map((tag) => {
-          const references = snapshot.notes.filter(
-            (note) =>
-              !note.trashedAt &&
-              snapshot.metadata.some(
-                (meta) =>
-                  meta.noteId === note.id && meta.tagIds.includes(tag.id),
-              ),
-          );
-          const last = references.reduce(
-            (latest, note) => Math.max(latest, Date.parse(note.updatedAt)),
-            0,
-          );
-          return (
-            <div className="tag-row" key={tag.id}>
-              <button onClick={() => onOpenTag(tag.name)}>
-                <span
-                  className="tag-swatch"
-                  style={tag.color ? { background: tag.color } : undefined}
-                />
-                {tag.name}
-              </button>
-              <span>
-                {references.length} {references.length === 1 ? "note" : "notes"}
-              </span>
-              <span>
-                {last
-                  ? `Last used ${new Date(last).toLocaleDateString()}`
-                  : "Not used yet"}
-              </span>
-              <Menu
-                label={`Actions for ${tag.name}`}
-                actions={(["rename", "color", "merge", "delete"] as const).map(
-                  (kind) => ({
-                    label: {
-                      rename: "Rename tag",
-                      color: "Change color",
-                      merge: "Merge tag",
-                      delete: "Delete tag",
-                    }[kind],
-                    danger: kind === "delete",
-                    disabled:
-                      readOnly ||
-                      action.busy ||
-                      !!action.error ||
-                      (kind === "merge" && active.length < 2),
-                    onSelect: () => open(kind, tag),
-                  }),
-                )}
-              />
-            </div>
-          );
-        })}
+        <p className="tags-delete-note">
+          Deleting a tag removes it from its notes. The notes stay.
+        </p>
       </div>
       {form && (
         <Dialog
