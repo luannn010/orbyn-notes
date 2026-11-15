@@ -50,6 +50,7 @@ const starters = [
     headings: ["Terms", "Summary", "Cards"],
   },
 ];
+// design: notes/new-note-starter
 function starterDocument(name: string): NoteDocument {
   const starter = starters.find((item) => item.name === name)!;
   if (name === "Meeting")
@@ -113,6 +114,8 @@ function starterDocument(name: string): NoteDocument {
     ]),
   };
 }
+// design: notes/new-note
+// design: notes/new-note-states
 export function NewNote({
   store,
   initialTags = [],
@@ -195,6 +198,7 @@ export function NewNote({
     writer.current!.change({ ...writer.current!.state.value, ...patch });
   }
   const empty = !meaningful(state.value);
+  // design: notes/quick-note-states
   const status =
     state.status === "empty"
       ? quick

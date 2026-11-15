@@ -26,6 +26,7 @@ type Form = {
   color: TagColor;
   target: string;
 };
+// design: notes/tags
 export function TagsView({
   library,
   heading,
@@ -43,6 +44,7 @@ export function TagsView({
   reload: () => Promise<unknown>;
   onOpenTag: (name: string) => void;
 }) {
+  // design: notes/library-tags-edit
   const [form, setForm] = useState<Form | null>(null);
   const [discard, setDiscard] = useState(false);
   const headingRef = useRouteHeading(

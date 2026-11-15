@@ -56,6 +56,7 @@ import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
 import { CompactNoteTags } from "./CompactNoteTags";
+// design: notes/note-menu
 export function NoteEditor({
   note,
   store,
@@ -530,6 +531,7 @@ export function NoteEditor({
       });
   }
   const actionBlocked = dirty || tagPending || formatDraftPending;
+  // design: notes/save-states
   const chrome = (
     <header
       className={`${desktop ? "desktop-editor-actions" : "editor-chrome"} note-editor-header`}
