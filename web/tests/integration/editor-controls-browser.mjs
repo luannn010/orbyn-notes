@@ -11,6 +11,9 @@ try {
     page.getByRole("textbox", { name: "Note content" }),
   ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
+  expect(
+    await page.evaluate(() => document.fonts.check('400 14px "Geist"')),
+  ).toBe(true);
   for (const theme of ["light", "dark", "dim"]) {
     await page.getByRole("combobox", { name: "Theme" }).selectOption(theme);
     for (const width of ["980", "620", "380"]) {
