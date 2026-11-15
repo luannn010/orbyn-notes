@@ -22,7 +22,7 @@ try {
   await expect(page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Back to notes/ }).click();
   await page.getByRole("button", { name: "Manage tags", exact: true }).click();
-  await page.getByRole("button", { name: "Actions for A very long descriptive tag name" }).click();
+  await page.getByRole("button", { name: "Tag menu for A very long descriptive tag name" }).click();
   await page.getByRole("menuitem", { name: "Change color" }).click();
   const colorDialog = page.getByRole("dialog", { name: "Change color" });
   await colorDialog.getByRole("button", { name: "Blue", exact: true }).click();
