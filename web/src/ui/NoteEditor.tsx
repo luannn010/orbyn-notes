@@ -779,8 +779,12 @@ export function NoteEditor({
           {conflict ? (
             <>
               <button
-                disabled={copyBusy || readOnly}
+                disabled={copyBusy || readOnly || formatDraftPending}
                 onClick={async () => {
+                  // Source drafts are not in latest.current until they parse.
+                  // Recheck the ref as well as disabling the rendered action.
+                  if (readOnly || copyInFlight.current || formatDraftRef.current)
+                    return;
                   setCopyBusy(true);
                   copyInFlight.current = true;
                   const copiedGeneration = generation.current;
@@ -792,7 +796,8 @@ export function NoteEditor({
                     onSaved(copyNote);
                     if (
                       copiedGeneration !== generation.current ||
-                      tagPendingRef.current
+                      tagPendingRef.current ||
+                      formatDraftRef.current
                     ) {
                       setNavigationNotice(
                         "An earlier draft was saved as a copy. Your latest changes are still here.",
