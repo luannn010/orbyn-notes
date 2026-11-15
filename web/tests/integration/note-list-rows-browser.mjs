@@ -15,6 +15,8 @@ try {
   const title = "A long note title that must remain available to assistive technology and never overlap the date";
   await page.getByLabel("Note title", { exact: true }).fill(title);
   await page.getByLabel("Note content", { exact: true }).fill("A long preview that should truncate gracefully while the complete note remains accessible.");
+  const manageTags = page.getByRole("button", { name: "Manage note tags", exact: true });
+  if (await manageTags.isVisible()) await manageTags.click();
   await page.getByLabel("New tag", { exact: true }).fill("A very long descriptive tag name");
   await page.getByRole("button", { name: "Add tag", exact: true }).click();
   await expect(page.getByText("Saved in this browser", { exact: true })).toBeVisible();
