@@ -1,5 +1,5 @@
-import { useRef, type ReactNode } from "react";
-import { FileText, Layers, Paperclip, Search, X } from "./icons";
+import { useRef, useState, type ReactNode } from "react";
+import { FileText, Layers, Paperclip, Search } from "./icons";
 import type { SearchExcerpt } from "../search/matching";
 import type {
   SearchCursor,
@@ -15,7 +15,7 @@ export type SearchViewProps = {
   state: SearchState;
   query: string;
   tab: SearchTab;
-  onQueryChange: (raw: string) => void;
+  onQueryChange: (raw: string, composing?: boolean) => void;
   onSubmit: (raw: string) => void;
   onTabChange: (tab: SearchTab) => void;
   onClear: () => void;
@@ -86,7 +86,14 @@ function MarkedExcerpt({ excerpt }: { excerpt: SearchExcerpt }) {
 export function SearchView(props: SearchViewProps) {
   const { state, query, tab, navigationState } = props;
   const composing = useRef(false);
+  const [activeResult, setActiveResult] = useState(0);
+  const resultArea = useRef<HTMLElement>(null);
   const ready = state.status === "ready" ? state : null;
+  const visibleGroups = ready?.groups.filter((group) =>
+    tab === "all" ? group.items.length > 0 : tab === group.kind,
+  ) ?? [];
+  const visibleResults = visibleGroups.flatMap((group) => group.items);
+  const selectedResult = Math.min(activeResult, Math.max(0, visibleResults.length - 1));
   const empty = ready?.counts.all === 0;
   const busy = state.status === "pending";
   const error =
@@ -101,44 +108,53 @@ export function SearchView(props: SearchViewProps) {
         }[state.code]
       : "";
   return (
-    <section className="unified-search" aria-label="Search">
-      <header className="search-heading">
-        <h1>Search</h1>
-        {ready && (
-          <p>
-            {ready.counts.all} {ready.counts.all === 1 ? "result" : "results"}
-            {!empty && <> for “{ready.raw}”</>}
-          </p>
-        )}
-        {!empty && (
-          <button onClick={props.onClear}>
-            <X size={14} aria-hidden="true" />
-            Clear search
-          </button>
-        )}
-      </header>
+    <section ref={resultArea} className="unified-search" aria-label="Search" onKeyDown={(event) => {
+      if (composing.current || event.nativeEvent.isComposing || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
+      const target = event.target as HTMLElement;
+      if (target.tagName !== "INPUT" && !target.classList.contains("search-result")) return;
+      const buttons = Array.from(resultArea.current?.querySelectorAll<HTMLButtonElement>(".search-result:not(:disabled)") ?? []);
+      if (!buttons.length) return;
+      event.preventDefault();
+      if (target.tagName === "INPUT") {
+        const next = (selectedResult + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+        setActiveResult(next);
+        buttons[next]?.scrollIntoView?.({ block: "nearest" });
+        return;
+      }
+      const current = buttons.indexOf(target as HTMLButtonElement);
+      const next = current < 0 ? (event.key === "ArrowDown" ? 0 : buttons.length - 1) : (current + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+      setActiveResult(next);
+      buttons[next]?.focus();
+    }}>
       <div className="search-content">
         <form
           className="search-query"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!composing.current) props.onSubmit(query);
+            if (!composing.current && navigationState !== "opening") {
+              const buttons = resultArea.current?.querySelectorAll<HTMLButtonElement>(".search-result:not(:disabled)");
+              if (ready && ready.raw === query && buttons?.length) buttons[selectedResult]?.click();
+              else props.onSubmit(query);
+            }
           }}
         >
           <label className="search-input">
-            <Search size={16} aria-hidden="true" />
+            <Search size={13} aria-hidden="true" />
             <input
               value={query}
               aria-label="Search notes, clips and cards"
               aria-describedby="search-scope"
+              placeholder="Search notes, clips and cards"
               autoComplete="off"
               spellCheck={false}
-              onChange={(event) => props.onQueryChange(event.target.value)}
+              onChange={(event) => { setActiveResult(0); props.onQueryChange(event.target.value, composing.current); }}
               onCompositionStart={() => {
                 composing.current = true;
+                props.onQueryChange(query, true);
               }}
-              onCompositionEnd={() => {
+              onCompositionEnd={(event) => {
                 composing.current = false;
+                props.onQueryChange(event.currentTarget.value, false);
               }}
               onKeyDown={(event) => {
                 if (
@@ -146,28 +162,19 @@ export function SearchView(props: SearchViewProps) {
                   (composing.current || event.nativeEvent.isComposing)
                 )
                   event.preventDefault();
-                if (
-                  event.key === "Escape" &&
-                  !composing.current &&
-                  !event.nativeEvent.isComposing
-                ) {
+                if (event.key === "Escape") {
                   event.preventDefault();
-                  if (query) {
-                    props.onCancel();
-                    props.onQueryChange("");
-                  } else props.onClear();
+                  if (!composing.current && !event.nativeEvent.isComposing) props.onClear();
                 }
               }}
             />
           </label>
-          <button type="submit" disabled={busy}>
-            Search
-          </button>
         </form>
         <p className="search-scope" id="search-scope">
           Notes, clips and cards. Journal stays private.
         </p>
-        <div
+        <span className="search-active-announcement" aria-live="polite">{visibleResults[selectedResult] ? `Result ${selectedResult + 1} of ${visibleResults.length}: ${visibleResults[selectedResult].primary.text}` : ""}</span>
+        {query.trim() && <div
           className="search-tabs"
           role="group"
           aria-label="Search categories"
@@ -193,6 +200,7 @@ export function SearchView(props: SearchViewProps) {
                       buttons.length) %
                     buttons.length;
             buttons[next]?.focus();
+            setActiveResult(0);
             props.onTabChange(tabs[next]!);
           }}
         >
@@ -200,7 +208,7 @@ export function SearchView(props: SearchViewProps) {
             <button
               key={value}
               aria-pressed={tab === value}
-              onClick={() => props.onTabChange(value)}
+              onClick={() => { setActiveResult(0); props.onTabChange(value); }}
             >
               {names[value]}
               {ready && (
@@ -211,11 +219,9 @@ export function SearchView(props: SearchViewProps) {
               )}
             </button>
           ))}
-        </div>
-        {state.status === "idle" && (
-          <div className="search-empty">
-            <h2>Search your notes, clips and cards.</h2>
-          </div>
+        </div>}
+        {!query.trim() && (
+          <p className="search-hint">Type to search your notes, clips and cards.</p>
         )}
         {busy && (
           <div className="search-feedback" role="status" aria-live="polite">
@@ -267,9 +273,7 @@ export function SearchView(props: SearchViewProps) {
         )}
         {ready &&
           !empty &&
-          ready.groups
-            .filter((group) => tab === "all" || tab === group.kind)
-            .map((group) => {
+          visibleGroups.map((group, groupIndex) => {
               const total = ready.counts[fields[group.kind]],
                 page = ready.page?.kind === group.kind ? ready.page : null;
               const Icon =
@@ -296,7 +300,13 @@ export function SearchView(props: SearchViewProps) {
                       {group.items.map((hit, index) => (
                         <li key={index}>
                           <button
+                            type="button"
                             className="search-result"
+                            data-active={selectedResult === visibleGroups.slice(0, groupIndex).reduce((total, previous) => total + previous.items.length, 0) + index}
+                            onFocus={(event) => {
+                              const buttons = Array.from(resultArea.current?.querySelectorAll<HTMLButtonElement>(".search-result:not(:disabled)") ?? []);
+                              setActiveResult(buttons.indexOf(event.currentTarget));
+                            }}
                             disabled={navigationState === "opening"}
                             onClick={() => props.onOpen(hit.locator)}
                           >
