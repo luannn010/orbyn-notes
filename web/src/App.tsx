@@ -18,15 +18,19 @@ const QuickNoteLocked = lazy(() => import("./ui/QuickNoteWindow").then(module =>
 const Workspace = lazy(() =>
   import("./ui/Workspace").then((module) => ({ default: module.Workspace })),
 );
+const SampleWorkspace = lazy(() => import("./demo/SampleWorkspace"));
 export function App() {
+  const [sample, setSample] = useState(false);
   if (isQuickWindow()) return <Suspense fallback={<Loading />}><AppContent quick /></Suspense>;
   return (
     <DesktopShell>
-      <AppContent />
+      {sample ? (
+        <Suspense fallback={<Loading />}><SampleWorkspace onExit={() => setSample(false)} /></Suspense>
+      ) : <AppContent onUseWithoutAccount={() => setSample(true)} />}
     </DesktopShell>
   );
 }
-function AppContent({ quick = false }: { quick?: boolean }) {
+function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; onUseWithoutAccount?: () => void }) {
   usePreferences();
   const [service, setService] = useState<AccountService | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
@@ -202,10 +206,11 @@ function AppContent({ quick = false }: { quick?: boolean }) {
             >
               Try again
             </button>
+
             {session && (
               <button onClick={() => void signOut()}>Sign out</button>
             )}
-            {!local && <button onClick={useLocal}>Use without an account</button>}
+            {!local && <button onClick={isDesktop() ? useLocal : onUseWithoutAccount}>Use without an account</button>}
           </section>
         </main>
       </>
@@ -222,7 +227,7 @@ function AppContent({ quick = false }: { quick?: boolean }) {
     return (
       <>
         {publicNotice}
-        {service && <AccountView service={service} onSession={setSession} onUseLocal={useLocal} />}
+        {service && <AccountView service={service} onSession={setSession} onUseLocal={isDesktop() ? useLocal : undefined} onUseWithoutAccount={onUseWithoutAccount} />}
       </>
     );
   if (session.deviceState === "pending" && service)

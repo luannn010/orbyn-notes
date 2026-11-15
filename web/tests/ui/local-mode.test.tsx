@@ -29,3 +29,36 @@ it("offers Planner’s local-use action at entry and invite without making an ac
   expect(service.checkInvite).not.toHaveBeenCalled();
   expect(service.signIn).not.toHaveBeenCalled();
 });
+
+it("prefers persistent local entry over sample entry without duplicate actions", () => {
+  const local = vi.fn(),
+    sample = vi.fn();
+  render(
+    <AccountView
+      service={{} as AccountService}
+      onSession={vi.fn()}
+      onUseLocal={local}
+      onUseWithoutAccount={sample}
+    />,
+  );
+  expect(
+    screen.getAllByRole("button", { name: "Use without an account" }),
+  ).toHaveLength(1);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use without an account" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use without an account" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create an account" }));
+  expect(
+    screen.getAllByRole("button", { name: "Use without an account" }),
+  ).toHaveLength(1);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use without an account" }),
+  );
+  expect(local).toHaveBeenCalledTimes(3);
+  expect(sample).not.toHaveBeenCalled();
+});
