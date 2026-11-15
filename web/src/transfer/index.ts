@@ -15,13 +15,13 @@ function inline(tokens: Token[]): RichNode[] {
   const nodes: RichNode[] = [];
   let marks: NonNullable<RichNode["marks"]> = [];
   for (const token of tokens) {
-    if (token.type === "text")
+    if (token.type === "text" && token.content)
       nodes.push({
         type: "text",
         text: token.content,
         ...(marks.length ? { marks: structuredClone(marks) } : {}),
       });
-    else if (token.type === "code_inline")
+    else if (token.type === "code_inline" && token.content)
       nodes.push({
         type: "text",
         text: token.content,
@@ -30,7 +30,7 @@ function inline(tokens: Token[]): RichNode[] {
     else if (token.type === "softbreak")
       nodes.push({ type: "text", text: "\n" });
     else if (token.type === "hardbreak") nodes.push({ type: "hardBreak" });
-    else if (token.type === "image")
+    else if (token.type === "image" && token.content)
       nodes.push({ type: "text", text: token.content });
     else if (token.type.endsWith("_open")) {
       const kind: Record<string, string> = {
