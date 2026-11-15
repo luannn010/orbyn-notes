@@ -346,6 +346,37 @@ it("blocks keyboard Search admission while dirty and requires a new explicit com
   expect(model.searchService!.query).not.toHaveBeenCalled();
   expect(f.base.update).not.toHaveBeenCalled();
 });
+it("searches live after composition ends and cancels queued work on close or privacy revocation", async () => {
+  fixture();
+  await screen.findByRole("heading", { name: "All notes" });
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  const input = await screen.findByRole("textbox", { name: "Search notes, clips and cards" });
+  vi.useFakeTimers();
+  try {
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "needle" } });
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(model.searchService!.query).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input);
+    await act(async () => { vi.advanceTimersByTime(149); });
+    expect(model.searchService!.query).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(model.searchService!.query).toHaveBeenCalledWith("needle");
+    fireEvent.change(input, { target: { value: "pending private" } });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(model.searchService!.query).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const reopened = screen.getByRole("textbox", { name: "Search notes, clips and cards" });
+    fireEvent.change(reopened, { target: { value: "revoked private" } });
+    act(() => model.searchInvalidate!("unverified"));
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(model.searchService!.query).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/revoked private/)).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 async function search() {
   fireEvent.click(
     screen.getByRole("button", { name: "Search notes, clips and cards" }),
@@ -355,10 +386,10 @@ async function search() {
   });
   fireEvent.change(input, { target: { value: "needle" } });
   fireEvent.submit(input.closest("form")!);
-  await screen.findByText("1 result for “needle”");
+  await screen.findByRole("region", { name: "Notes results" });
   return input;
 }
-it("keeps exact clean Notes origin through result and Back/Clear without persisting the query", async () => {
+it("returns to the current opened note after reopening search, without persisting the query", async () => {
   const f = fixture();
   await screen.findByRole("heading", { name: "All notes" });
   fireEvent.click(screen.getByRole("button", { name: /^B / }));
@@ -372,9 +403,12 @@ it("keeps exact clean Notes origin through result and Back/Clear without persist
   );
   await screen.findByRole("heading", { name: "Editor A" });
   fireEvent.click(screen.getByRole("button", { name: "Back to search" }));
-  await screen.findByText("1 result for “needle”");
-  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-  await screen.findByRole("heading", { name: "Editor B" });
+  await screen.findByRole("region", { name: "Notes results" });
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Search notes, clips and cards" }), { key: "Escape" });
+  await screen.findByRole("heading", { name: "Editor A" });
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Search notes, clips and cards" }), { key: "Escape" });
+  await screen.findByRole("heading", { name: "Editor A" });
   expect(location.hash).toBe(hash);
   expect(f.base.update).not.toHaveBeenCalled();
 });
@@ -422,10 +456,10 @@ it("keeps changed query text but requires explicit Search again before new count
   expect(
     screen.getByRole("textbox", { name: "Search notes, clips and cards" }),
   ).toHaveValue("needle");
-  expect(screen.queryByText("1 result for “needle”")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Notes results" })).not.toBeInTheDocument();
   expect(model.searchService!.query).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Search again" }));
-  await screen.findByText("1 result for “needle”");
+  await screen.findByRole("region", { name: "Notes results" });
   expect(model.searchService!.query).toHaveBeenCalledTimes(2);
 });
 it("clears a held raw query and route on privacy invalidation even before the first service query", async () => {
@@ -473,13 +507,13 @@ it("removes a retained ready certificate before exposing Search while a genuine 
   expect(
     screen.getByText("Searching local notes, clips and cards…"),
   ).toBeVisible();
-  expect(screen.queryByText("1 result for “needle”")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Notes results" })).not.toBeInTheDocument();
   expect(
     screen.queryByRole("region", { name: "Notes results" }),
   ).not.toBeInTheDocument();
   expect(model.searchService!.query).toHaveBeenCalledTimes(2);
   await act(async () => proof.resolve(undefined));
-  await screen.findByText("1 result for “needle”");
+  await screen.findByRole("region", { name: "Notes results" });
 });
 it("retains changed state on Back instead of silently granting a new matching round", async () => {
   fixture();
@@ -520,7 +554,7 @@ it("clears query and every held editor when a held reentry proof fails authority
     throw Error("Unverified source");
   });
   fireEvent.click(screen.getByRole("button", { name: "Back to search" }));
-  expect(screen.queryByText("1 result for “needle”")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Notes results" })).not.toBeInTheDocument();
   await act(async () => {
     model.searchInvalidate!("unverified");
     publish({ status: "idle", raw: "" });
@@ -535,7 +569,7 @@ it("clears query and every held editor when a held reentry proof fails authority
   expect(model.noteUnmounts.get("A")).toBe(1);
   expect(model.noteUnmounts.get("B")).toBe(1);
 });
-it("keeps max2 actors at stable keyed positions through origin B to result A and Clear, preserving local state", async () => {
+it("keeps the origin actor mounted while search is open and returns to the current result", async () => {
   const f = fixture();
   await screen.findByRole("heading", { name: "All notes" });
   fireEvent.click(screen.getByRole("button", { name: /^B / }));
@@ -556,18 +590,10 @@ it("keeps max2 actors at stable keyed positions through origin B to result A and
   expect(model.noteMounts.get("B")).toBe(1);
   expect(f.view.container.querySelectorAll(".note-actor")).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: "Back to search" }));
-  await screen.findByText("1 result for “needle”");
-  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-  expect(
-    (await screen.findByRole("heading", { name: "Editor B" })).closest(
-      "section",
-    ),
-  ).toBe(origin);
-  expect(within(origin).getByRole("status")).toHaveTextContent(
-    "Actor state B 1",
-  );
+  await screen.findByRole("region", { name: "Notes results" });
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Search notes, clips and cards" }), { key: "Escape" });
+  await screen.findByRole("heading", { name: "Editor A" });
   expect(model.noteMounts.get("B")).toBe(1);
-  expect(model.noteUnmounts.get("B")).toBeUndefined();
   expect(f.view.container.querySelectorAll(".note-actor")).toHaveLength(1);
 });
 
@@ -588,14 +614,14 @@ it("freshens a hidden ready certificate on sidebar reentry before exposing any o
   expect(
     screen.getByText("Searching local notes, clips and cards…"),
   ).toBeVisible();
-  expect(screen.queryByText("1 result for “needle”")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Notes results" })).not.toBeInTheDocument();
   expect(model.searchService!.query).toHaveBeenLastCalledWith(
     "needle",
     undefined,
     { note: 0 },
   );
   await act(async () => proof.resolve(undefined));
-  await screen.findByText("1 result for “needle”");
+  await screen.findByRole("region", { name: "Notes results" });
 });
 
 it("passes only numeric current page intent into a fresh query, never retained cursors", async () => {

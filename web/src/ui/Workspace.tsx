@@ -398,8 +398,11 @@ export function Workspace({
       "opening" | "blocked" | "unavailable" | null
     >(null);
   const [searchActionError, setSearchActionError] = useState("");
+  const [searchComposing, setSearchComposing] = useState(false);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchPrivacyVersion, setSearchPrivacyVersion] = useState(0);
   const [restoreClipSearchOrigin, setRestoreClipSearchOrigin] = useState(0);
+  const [searchInvocation, setSearchInvocation] = useState(0);
   const [clipSearchRequest, setClipSearchRequest] =
       useState<ClipSearchOpenRequest | null>(null),
     [cardSearchRequest, setCardSearchRequest] =
@@ -894,7 +897,8 @@ export function Workspace({
       setSearchNavigation("blocked");
       return;
     }
-    if (!searchOrigin) {
+    if (!searchActive) {
+      setSearchInvocation(value => value + 1);
       searchScroll.current = 0;
       setSearchOrigin({
         module,
@@ -907,6 +911,10 @@ export function Workspace({
     }
     setSearchNavigation(null);
     // A retained certificate is not current proof. Clear it synchronously before exposure.
+    if (submit && searchDebounce.current) {
+      clearTimeout(searchDebounce.current);
+      searchDebounce.current = null;
+    }
     if (submit && searchOwner.service)
       runSearchAction(() => searchOwner.service!.query(raw));
     else if (!searchActive) freshenReadySearch(raw);
@@ -941,6 +949,8 @@ export function Workspace({
     runSearchAction(() => service.query(raw, undefined, Object.freeze(pages)));
   }
   function cancelSearchWork() {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = null;
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -948,10 +958,24 @@ export function Workspace({
     setSearchActionError("");
     searchOwner.service?.cancel();
   }
-  function editSearchQuery(raw: string) {
+  function editSearchQuery(raw: string, composing = false) {
     cancelSearchWork();
+    setSearchComposing(composing);
     setSearchQuery(raw);
   }
+  useEffect(() => {
+    if (!searchActive || searchComposing || !searchQuery.trim() || !searchOwner.service) return;
+    const service = searchOwner.service;
+    const ticket = searchTicket.current;
+    searchDebounce.current = setTimeout(() => {
+      searchDebounce.current = null;
+      if (searchTicket.current === ticket) runSearchAction(() => service.query(searchQuery));
+    }, 150);
+    return () => {
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
+      searchDebounce.current = null;
+    };
+  }, [searchActive, searchQuery, searchComposing, searchOwner.service, searchPrivacyVersion]);
   function selectSearchTab(tab: SearchTab) {
     restoreSearchScroll.current = null;
     setSearchTab(tab);
@@ -963,6 +987,9 @@ export function Workspace({
       setSearchNavigation("blocked");
       return;
     }
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = null;
+    setSearchComposing(false);
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -1070,6 +1097,8 @@ export function Workspace({
   }
   function returnToSearch() {
     if (!canNavigate()) return;
+    setSearchInvocation(value => value + 1);
+    setSearchOrigin({ module, selected, trash, tag, pinned: pinnedOnly, linked: linkedOnly });
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
@@ -1104,8 +1133,8 @@ export function Workspace({
     } else if (searchOwner.state.status !== "pending")
       restoreSearchScroll.current = null;
   }, [searchActive, searchOwner.state]);
-  const enterSearchRef = useRef(enterSearch);
-  enterSearchRef.current = enterSearch;
+  const searchToggleRef = useRef(() => {});
+  searchToggleRef.current = () => searchActive ? clearSearch() : enterSearch();
   useEffect(() => {
     if (!sourceOwner) return;
     const key = (event: KeyboardEvent) => {
@@ -1114,11 +1143,11 @@ export function Workspace({
         !(event.ctrlKey || event.metaKey) ||
         event.altKey ||
         event.isComposing ||
-        document.querySelector('dialog[open], [role="dialog"]')
+        document.querySelector('dialog[open]:not(.workspace-search), [role="dialog"]:not(.workspace-search)')
       )
         return;
       event.preventDefault();
-      enterSearchRef.current();
+      searchToggleRef.current();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -1848,9 +1877,9 @@ export function Workspace({
             onClick={() => enterSearch()}
             aria-label="Search notes, clips and cards"
           >
-            <Search size={15} aria-hidden="true" />
+            <Search size={13} aria-hidden="true" />
             <span>Search notes</span>
-            <kbd>Ctrl K</kbd>
+            <kbd>Ctrl+K</kbd>
           </button>
         ) : (
           <label className="search">
@@ -2079,6 +2108,7 @@ export function Workspace({
         <SearchSurface
           active={searchActive}
           privacyVersion={searchPrivacyVersion}
+          onClose={clearSearch}
         >
           {searchActionError && (
             <p role="alert" className="banner">
@@ -2134,7 +2164,6 @@ export function Workspace({
         )}
         <div
           className="workspace-route"
-          hidden={searchActive}
           inert={searchActive}
         >
           {offline && module === "notes" && (
@@ -2298,6 +2327,7 @@ export function Workspace({
                     openEntry={studyEntry}
                     openClip={view === "clips" ? clipSearchRequest : null}
                     holdClipSearchOrigin={searchOrigin?.module === "clips"}
+                    clipSearchInvocation={searchInvocation}
                     restoreClipSearchOrigin={restoreClipSearchOrigin}
                     openCard={view === "study" ? cardSearchRequest : null}
                     onReturnToSearch={returnToSearch}
