@@ -13,6 +13,20 @@ describe("Markdown transfer boundary", () => {
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
   });
+  it("identifies an unsupported table in a mixed batch without altering other files", () => {
+    const files = [
+      { name: "plain.md", content: "plain" },
+      { name: "table.md", content: "| A | B |\n|---|---|\n| X | Y |" },
+    ];
+    const original = structuredClone(files);
+    expect(() => parseMarkdown(files)).toThrow(
+      /unsupported_table:.*table\.md.*Convert the table to text.*Nothing was imported/s,
+    );
+    expect(files).toEqual(original);
+    expect(
+      parseMarkdown([files[0]!])[0]?.document.content[0]?.content?.[0]?.text,
+    ).toBe("plain");
+  });
   it("preserves ordinary list items alongside tasks without turning them into checkboxes", () => {
     const result = parseMarkdown([{ name: "mixed.md", content: "- Plain\n- [x] Done\n- Other\n- [ ] Next" }])[0]!;
     expect(result.document.content.map(n => n.type)).toEqual(["bulletList", "taskList", "bulletList", "taskList"]);
