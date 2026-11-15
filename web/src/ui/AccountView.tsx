@@ -288,6 +288,8 @@ export function PendingDevice({
             disabled={busy}
             onClick={async () => {
               setBusy(true);
+              setSas("");
+              setError("");
               try {
                 const p = await service.pendingDevice();
                 if (p.status === "compare") setSas(p.sas ?? "");
@@ -310,6 +312,7 @@ export function PendingDevice({
                 try {
                   onSession(await service.confirmDevice(sas));
                 } catch (e) {
+                  setSas("");
                   setError(message(e));
                 } finally {
                   setBusy(false);
