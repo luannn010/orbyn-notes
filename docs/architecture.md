@@ -361,6 +361,9 @@ and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
 `EditorFormatting` owns formatting popovers and a transient Markdown source draft;
 `markdownSource` converts only supported structured content and preserves the note's
 already-admitted references. Unsupported content is rejected rather than flattened.
+External link destinations must survive the actual Markdown parser exactly before
+source mode is admitted. Destinations the parser normalizes remain in Rich view;
+unrelated source edits must never change an existing link target.
 Source editing is disabled by default. Enabling it requires an explicit
 `sourceEditing: true` and an `onUnsavedChange` callback: the application surface
 must bind that callback to its navigation/save guards before exposing source mode.

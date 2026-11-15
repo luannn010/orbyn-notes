@@ -16,6 +16,25 @@ export type MarkdownSource = {
 };
 const marker = "\uE000ORBYN";
 
+function markdownDestination(href: string): string {
+  // Markdown unescapes punctuation before URI normalization. Protect entities and
+  // delimiters without percent-encoding characters that were literal in storage.
+  const destination = href.replace(/[\\()<>&]/g, "\\$&");
+  const parsed = parseMarkdown([
+    { name: "Link.md", content: `\n[Link](${destination})` },
+  ])[0]?.document.content[0]?.content?.[0]?.marks?.find(
+    (mark) => mark.type === "link",
+  );
+  // The import parser normalizes some valid stored URLs (Unicode, backslashes,
+  // angle brackets). Refuse source admission rather than retarget those links
+  // after an unrelated edit; Rich view keeps the original document intact.
+  if (parsed?.attrs?.href !== href)
+    throw Error(
+      "This link cannot be preserved as Markdown. Keep using Rich view.",
+    );
+  return destination;
+}
+
 export function createMarkdownSource(document: NoteDocument): MarkdownSource {
   const original = validateNoteDocument(document),
     references = new Map<string, RichNode>();
@@ -40,7 +59,7 @@ export function createMarkdownSource(document: NoteDocument): MarkdownSource {
           else if (mark.type === "code")
             text = markdownCodeSpan(node.text ?? "");
           else if (mark.type === "link")
-            text = `[${text}](${String(mark.attrs?.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+            text = `[${text}](${markdownDestination(String(mark.attrs?.href))})`;
           else
             throw Error(
               "This formatting cannot be edited as Markdown. Keep using Rich view.",

@@ -4,6 +4,64 @@ import {
   parseMarkdownSource,
 } from "../../src/editor/markdownSource";
 import type { NoteDocument } from "../../src/domain/contracts";
+it.each([
+  "https://example.test/?x=&copy;",
+  "https://example.test/?x=&#169;&other=1",
+  "https://example.test/a(b)",
+  "https://example.test/caf%C3%A9",
+  "https://example.test/a%5Cb%3Cc%3E?x=&copy;",
+])(
+  "preserves an external destination after unrelated source edits: %s",
+  (href) => {
+    const document: NoteDocument = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Link",
+              marks: [{ type: "link", attrs: { href } }],
+            },
+          ],
+        },
+      ],
+    };
+    const source = createMarkdownSource(document);
+    const edited = parseMarkdownSource(source.text + "\n\nExtra", source);
+    expect(edited.content[0]?.content?.[0]?.marks?.[0]?.attrs?.href).toBe(href);
+  },
+);
+it.each([
+  "https://example.test/a\\b",
+  "https://example.test/a<b>",
+  "https://example.test/café",
+])(
+  "refuses source admission when the parser normalizes a stored destination: %s",
+  (href) => {
+    const document: NoteDocument = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Link",
+              marks: [{ type: "link", attrs: { href } }],
+            },
+          ],
+        },
+      ],
+    };
+    const original = structuredClone(document);
+    expect(() => createMarkdownSource(document)).toThrow(
+      "This link cannot be preserved as Markdown",
+    );
+    expect(document).toEqual(original);
+  },
+);
 it("round-trips an untouched structured note exactly, including empty paragraphs", () => {
   const document: NoteDocument = {
     type: "doc",
