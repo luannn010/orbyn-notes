@@ -261,3 +261,102 @@ export const Tags = icon(
     <circle cx="10.5" cy="6.5" r=".5" fill="currentColor" />
   </>,
 );
+
+// Editor controls share the Orbyn renderer. Existing Lucide 1.70.0 ISC glyph
+// extensions retain their notice in public/third-party-notices.txt.
+export const Bold = icon(
+  "bold",
+  <>
+    <path d="M6 12h9a4 4 0 010 8H7a1 1 0 01-1-1V5a1 1 0 011-1h7a4 4 0 010 8" />
+  </>,
+);
+export const Italic = icon(
+  "italic",
+  <>
+    <line x1="19" x2="10" y1="4" y2="4" />
+    <line x1="14" x2="5" y1="20" y2="20" />
+    <line x1="15" x2="9" y1="4" y2="20" />
+  </>,
+);
+export const Strikethrough = icon(
+  "strikethrough",
+  <>
+    <path d="M16 4H9a3 3 0 0 0-2.83 4" />
+    <path d="M14 12a4 4 0 0 1 0 8H6" />
+    <line x1="4" x2="20" y1="12" y2="12" />
+  </>,
+);
+export const Code = icon(
+  "code",
+  <>
+    <path d="m16 18 6-6-6-6" />
+    <path d="m8 6-6 6 6 6" />
+  </>,
+);
+export const List = icon(
+  "list",
+  <path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />,
+);
+export const ListOrdered = icon(
+  "list-ordered",
+  <>
+    <path d="M11 5h10" />
+    <path d="M11 12h10" />
+    <path d="M11 19h10" />
+    <path d="M4 4h1v5" />
+    <path d="M4 9h2" />
+    <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
+  </>,
+);
+export const ListTodo = icon(
+  "list-todo",
+  <>
+    <path d="M13 5h8" />
+    <path d="M13 12h8" />
+    <path d="M13 19h8" />
+    <path d="m3 17 2 2 4-4" />
+    <rect x="3" y="4" width="6" height="6" rx="1" />
+  </>,
+);
+export const Quote = icon(
+  "quote",
+  <>
+    <path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
+    <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
+  </>,
+);
+export const Link = Link2;
+export const Undo2 = icon(
+  "undo2",
+  <>
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+  </>,
+);
+export const Redo2 = icon(
+  "redo2",
+  <>
+    <path d="m15 14 5-5-5-5" />
+    <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" />
+  </>,
+);
+export const MoreHorizontal = icon(
+  "more-horizontal",
+  <path d="M6 12h.01M12 12h.01M18 12h.01" />,
+);
+export const Eye = icon(
+  "eye",
+  <>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+    <circle cx="12" cy="12" r="2.8" />
+  </>,
+);
+export const FileCode = icon(
+  "file-code",
+  <>
+    <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+    <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+    <path d="M10 12.5 8 15l2 2.5" />
+    <path d="m14 12.5 2 2.5-2 2.5" />
+  </>,
+);

@@ -298,3 +298,12 @@ dialog .note-links-panel {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The beta searches actual Notes; Planner groups remain explicit until connected. */
+.note-link-picker-head { align-items: center; padding-left: 7px; }
+.note-link-picker-head > svg { flex: none; color: var(--t3); }
+.note-link-planned { border-bottom: 1px solid var(--line); margin: 3px 4px; padding-block: 3px; }
+.note-link-planned > div { display: flex; align-items: center; gap: 8px; padding: 5px; color: var(--t3); font-size: 11.5px; }
+.note-link-planned small { margin-left: auto; color: var(--t4); }
+.note-link-picker [role="option"] > svg { flex: none; color: var(--t3); }
+.note-link-picker [role="option"] > span { flex: 1; text-align: left; }

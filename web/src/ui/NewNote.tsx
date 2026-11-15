@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CheckSquare, Globe, Hash, Users } from "lucide-react";
+import { BookOpen, CheckSquare, Globe, Hash, Users } from "./icons";
 import type { Note, NoteDocument, NotesStore } from "../domain/contracts";
 import { registerCloseGuard } from "../desktop/closeGuard";
 import { RichEditor } from "./RichEditor";
