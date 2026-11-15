@@ -2635,7 +2635,7 @@ export function Workspace({
                   }
                 >
                   {visible.map((n) => (
-                    <article className="note-row" key={n.id}>
+                    <article className={trash ? "note-row" : "note-row note-list-row"} key={n.id}>
                       {trash ? (
                         <>
                           <div>
@@ -2666,15 +2666,17 @@ export function Workspace({
                             setSelected(n.id);
                           }}
                         >
+                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <FileText size={14} />}</span>
                           <h2>{n.title || "Untitled note"}</h2>
                           <p>{plainText(n.document).slice(0, 180)}</p>
                           <div className="metadata">
                             {metadata.get(n.id)?.pinned && (
-                              <Pin size={13} aria-label="Pinned" />
+                              <Pin className="note-list-pinned" size={13} aria-label="Pinned" />
                             )}
                             {n.tags.map((t) => (
                               <span className="tag" key={t}>
-                                {t}
+                                <span className="note-list-tag-dot" aria-hidden="true" style={{ background: snapshot?.tags.find((tag) => tag.name === t)?.color ?? undefined }} />
+                                <span className="note-list-tag-label">{t}</span>
                               </span>
                             ))}
                             <time dateTime={n.updatedAt}>
