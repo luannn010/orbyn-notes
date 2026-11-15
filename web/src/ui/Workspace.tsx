@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import {
-  FileText,
+  Note as NoteIcon,
   Search,
   Trash2,
   Settings,
@@ -18,7 +18,9 @@ import {
   Pin,
   Paperclip,
   Tags,
-} from "lucide-react";
+  Sun,
+  Cards,
+} from "./icons";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
 import {
@@ -1878,7 +1880,7 @@ export function Workspace({
             }
             onClick={() => navigate()}
           >
-            <FileText size={15} />
+            <NoteIcon size={15} />
             <span className="nav-label">All notes</span>{" "}
             <span>{notes.filter((n) => !n.trashedAt).length}</span>
           </button>
@@ -1896,20 +1898,7 @@ export function Workspace({
               setDrawer(false);
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="3.8" />
-              <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" />
-            </svg>
+            <Sun size={15} />
             <span className="nav-label">Journal</span>
           </button>
           <button
@@ -1923,20 +1912,7 @@ export function Workspace({
               setDrawer(false);
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="6.5" y="3.5" width="12" height="15" rx="2" />
-              <path d="M4 7v12a2 2 0 0 0 2 2h9" />
-            </svg>
+            <Cards size={15} />
             <span className="nav-label">Study</span>
           </button>
           <button
@@ -2574,7 +2550,7 @@ export function Workspace({
                   }
                 >
                   <span className={query || trash || pinnedOnly || linkedOnly ? "empty-state-icon" : "library-empty-icon"}>
-                    {query || trash || pinnedOnly || linkedOnly ? <FileText size={20} aria-hidden="true" /> : <NotesMark size={48} />}
+                    {query || trash || pinnedOnly || linkedOnly ? <NoteIcon size={20} aria-hidden="true" /> : <NotesMark size={48} />}
                   </span>
                   <h2>
                     {query
@@ -2666,7 +2642,7 @@ export function Workspace({
                             setSelected(n.id);
                           }}
                         >
-                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <FileText size={14} />}</span>
+                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <NoteIcon size={14} />}</span>
                           <h2>{n.title || "Untitled note"}</h2>
                           <p>{plainText(n.document).slice(0, 180)}</p>
                           <div className="metadata">

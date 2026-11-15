@@ -6,7 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-} from "lucide-react";
+} from "../ui/icons";
 import { dayKey, offsetDay, sampleDecks, type SampleClip } from "./fixtures";
 
 const habits = [
