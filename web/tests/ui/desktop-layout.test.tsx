@@ -24,7 +24,7 @@ beforeEach(() => {
     dispose: vi.fn(),
   });
 });
-it("leaves single-pane caption space free of invented title and navigation", async () => {
+it("shows the Notes identity without adding navigation to single-pane entry", async () => {
   render(
     <DesktopShell>
       <main>Account entry</main>
@@ -32,7 +32,7 @@ it("leaves single-pane caption space free of invented title and navigation", asy
   );
   await screen.findByText("Account entry");
   const toolbar = screen.getByRole("banner", { name: "Window toolbar" });
-  expect(toolbar).not.toHaveTextContent("Orbyn Notes");
+  expect(toolbar).toHaveTextContent("Orbyn Notes");
   expect(
     screen.queryByRole("button", { name: /sidebar/ }),
   ).not.toBeInTheDocument();

@@ -81,9 +81,16 @@ try {
     page.getByRole("heading", { name: "All notes", exact: true }),
   ).toBeVisible();
   const rail = page.getByRole("separator", { name: "Resize sidebar" });
-  await expect(page.locator(".desktop-titlebar")).not.toContainText(
-    "Orbyn Notes",
-  );
+  const brand = page.locator(".desktop-brand");
+  await expect(brand).toBeVisible();
+  await expect(brand).toHaveText("Orbyn Notes");
+  await expect(page.locator(".library-empty-icon svg")).toHaveAttribute("width", "48");
+  await page.setViewportSize({ width: 640, height: 850 });
+  const brandBox = await brand.boundingBox();
+  const minimizeBox = await page.getByRole("button", { name: "Minimize window" }).boundingBox();
+  expect(Math.abs(brandBox.x + brandBox.width / 2 - 320)).toBeLessThan(1);
+  expect(brandBox.x + brandBox.width).toBeLessThan(minimizeBox.x);
+  await page.setViewportSize({ width: 1280, height: 850 });
   for (const theme of ["light", "dark", "dim"]) {
     await page.evaluate((theme) => {
       document.documentElement.dataset.theme = theme;
@@ -137,6 +144,7 @@ try {
     .getByLabel("Note content", { exact: true })
     .elementHandle();
   const portal = await page.locator(".desktop-editor-actions").elementHandle();
+  await expect(brand).toBeHidden();
   await page.getByRole("button", { name: "Hide sidebar" }).click();
   await page.getByRole("button", { name: "Show sidebar" }).click();
   expect(

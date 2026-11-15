@@ -159,6 +159,7 @@ fn main() {
         ])
         .setup(|app| {
             tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                .icon(tauri::include_image!("icons/32x32.png"))?
                 .on_navigation(local_url)
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;

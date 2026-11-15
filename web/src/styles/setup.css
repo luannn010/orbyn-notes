@@ -111,6 +111,13 @@
   max-width: 540px;
 }
 .library-empty-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--t2);
+}
+.empty-state-icon {
   width: 40px;
   height: 40px;
   border-radius: 12px;

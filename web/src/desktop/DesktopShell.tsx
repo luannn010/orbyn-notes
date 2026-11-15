@@ -3,6 +3,7 @@ import { PanelLeft, Minus, Square, Copy, X } from "lucide-react";
 import { checkClose, lockClosing } from "./closeGuard";
 import { freezeWindow } from "./freeze";
 import { connectWindow, isDesktop, type DesktopWindow } from "./window";
+import { NotesMark } from "../ui/NotesMark";
 import "./desktop.css";
 
 export type DesktopLayout = { sidebarWidth: number; sidebarVisible: boolean };
@@ -132,6 +133,7 @@ function NativeShell({ children }: { children: ReactNode }) {
         <div className="desktop-drag-area" />
         <div className="desktop-editor-toolbar" data-window-interactive="true" ref={setToolbar}
           onFocusCapture={() => revealToolbarFocus(toolbar)} />
+        <div className="desktop-brand" aria-hidden="true"><NotesMark size={16} />Orbyn Notes</div>
         <div className="desktop-caption-controls">
           <button data-preserves-editor-draft="true" aria-label="Minimize window" title="Minimize" disabled={!ready} onClick={() => run(window => window.minimize())}><Minus size={12} /></button>
           <button data-preserves-editor-draft="true" aria-label={maximized ? "Restore window" : "Maximize window"} title={maximized ? "Restore" : "Maximize"} disabled={!ready} onClick={() => run(window => window.toggleMaximize())}>{maximized ? <Copy size={11} /> : <Square size={10} />}</button>
