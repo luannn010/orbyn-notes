@@ -38,6 +38,7 @@ import {
 } from "./SidebarSelection";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
+import { NotesMark } from "./NotesMark";
 import { buildDownload } from "./download";
 import { useDesktop } from "../desktop/DesktopShell";
 import {
@@ -2638,8 +2639,8 @@ export function Workspace({
                       : "empty library-empty"
                   }
                 >
-                  <span className="library-empty-icon">
-                    <FileText size={20} aria-hidden="true" />
+                  <span className={query || trash || pinnedOnly || linkedOnly ? "empty-state-icon" : "library-empty-icon"}>
+                    {query || trash || pinnedOnly || linkedOnly ? <FileText size={20} aria-hidden="true" /> : <NotesMark size={48} />}
                   </span>
                   <h2>
                     {query

@@ -47,6 +47,8 @@
 .desktop-caption-controls button:focus-visible { outline-offset: -4px; }
 .desktop-editor-toolbar { min-width: 0; flex: 1; height: 44px; overflow-x: auto; scrollbar-width: thin; }
 .desktop-editor-toolbar:empty { display: none; }
+.desktop-brand { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; color: var(--t2); font-size: 12px; white-space: nowrap; pointer-events: none; }
+.desktop-titlebar:has(.desktop-editor-toolbar:not(:empty)) .desktop-brand { display: none; }
 .desktop-editor-actions { display: flex; align-items: center; gap: 12px; padding-right: 8px; min-width: max-content; min-height: 36px; }
 .desktop-editor-actions > span { margin-left: auto; color: var(--t3); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .desktop-editor-actions > button { white-space: nowrap; background: transparent; flex-shrink: 0; }
