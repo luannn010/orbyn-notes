@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check } from "./icons";
 import { Dialog } from "./primitives";
 import { isLocalSession } from "../data/local";
 import "../styles/setup.css";
