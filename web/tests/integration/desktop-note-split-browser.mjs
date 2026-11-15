@@ -49,7 +49,7 @@ try {
       .getByRole("textbox", { name: "Note content", exact: true })
       .fill(`Synthetic content for ${title}.`);
     await expect(
-      page.getByText("Saved in this browser", { exact: true }),
+      page.getByText(/^Saved (?:in this browser|on this device)$/),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Back to notes", exact: false })
@@ -119,6 +119,9 @@ try {
   ).toBe(true);
   await page.screenshot({ path: `${output}/minimum-split.png` });
   await page.setViewportSize({ width: 1280, height: 850 });
+  const tagTrigger = page.getByRole("button", { name: "Manage note tags", exact: true });
+  if (await tagTrigger.count() && await tagTrigger.getAttribute("aria-expanded") === "false")
+    await tagTrigger.click();
   await page
     .getByRole("textbox", { name: "New tag", exact: true })
     .fill("retained tag draft");

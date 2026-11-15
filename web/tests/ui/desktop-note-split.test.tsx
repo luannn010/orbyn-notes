@@ -101,6 +101,11 @@ function fixture(update?: NotesStore["update"]) {
   return { unexpected };
 }
 
+function openTagEditor() {
+  const trigger = screen.queryByRole("button", { name: "Manage note tags" });
+  if (trigger?.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+}
+
 it("keeps the desktop list available with an active note and guards switching away from an unfinished tag", async () => {
   const { unexpected } = fixture();
   fireEvent.click(await screen.findByRole("button", { name: /^First/ }));
@@ -108,6 +113,7 @@ it("keeps the desktop list available with an active note and guards switching aw
   const list = screen.getByRole("region", { name: "Notes list" });
   const first = within(list).getByRole("button", { name: /^First/ });
   expect(first).toHaveAttribute("aria-current", "page");
+  openTagEditor();
   fireEvent.change(screen.getByRole("textbox", { name: "New tag" }), {
     target: { value: "unfinished" },
   });
@@ -141,6 +147,7 @@ it("falls back to one pane without remounting the editor or losing its tag draft
   fixture();
   fireEvent.click(await screen.findByRole("button", { name: /^First/ }));
   const title = await screen.findByLabelText("Note title");
+  openTagEditor();
   fireEvent.change(screen.getByRole("textbox", { name: "New tag" }), {
     target: { value: "retained" },
   });
