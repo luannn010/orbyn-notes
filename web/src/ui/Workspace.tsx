@@ -20,6 +20,7 @@ import {
   Tags,
 } from "lucide-react";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
+import { storageCopy } from "./storageCopy";
 import {
   parseMarkdown,
   MAX_MARKDOWN_FILE_BYTES,
@@ -38,7 +39,6 @@ import {
 } from "./SidebarSelection";
 import type { SettingsLeaveGuard } from "./studySettingsTypes";
 import { NoteEditor } from "./NoteEditor";
-import { storageCopy } from "./storageCopy";
 import { buildDownload } from "./download";
 import { useDesktop } from "../desktop/DesktopShell";
 import {
