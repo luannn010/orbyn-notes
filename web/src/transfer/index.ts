@@ -106,6 +106,7 @@ function document(tokens: Token[], filename: string): NoteDocument {
           item.type = "taskItem";
           item.attrs = { checked: match[1] !== " " };
           text!.text = text!.text!.slice(match[0].length);
+          if (!text!.text) item.content![0]!.content!.shift();
         }
         let group = groups[groups.length - 1];
         if (group?.type !== type) {
