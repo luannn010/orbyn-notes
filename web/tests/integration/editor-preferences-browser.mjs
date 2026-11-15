@@ -18,7 +18,7 @@ try {
     exact: true,
   });
   const saved = () =>
-    expect(page.locator('.editor-chrome [role="status"]')).toHaveText(
+    expect(page.locator('.note-header-status')).toHaveText(
       "Saved in this browser",
     );
   const type = async (value) => {
@@ -51,7 +51,8 @@ try {
   await expect(page.locator(".editor-page")).toHaveCSS("max-width", "800px");
   await expect(page.locator(".tiptap")).toHaveAttribute("spellcheck", "false");
   await done();
-  await page.getByRole("button", { name: "Heading", exact: true }).click();
+  await page.getByRole("button", { name: "Text style", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Text", exact: true }).click();
   await type("## ");
   await expect(editor.locator("h2")).toHaveCount(0);
   await expect(editor).toHaveText("## ");

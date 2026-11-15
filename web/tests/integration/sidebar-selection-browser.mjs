@@ -136,12 +136,12 @@ try {
       ).toBeVisible();
       await openNoteTags(page);
       await page
-        .getByLabel("New tag", { exact: true })
-        .fill("Unsaved navigation guard");
+        .getByLabel("Tags, separated by commas", { exact: true })
+        .fill('"Unsaved navigation guard');
       const guardedPosition = await layer.getAttribute("style");
       await study.click();
-      await expect(page.getByLabel("New tag", { exact: true })).toHaveValue(
-        "Unsaved navigation guard",
+      await expect(page.getByLabel("Tags, separated by commas", { exact: true })).toHaveValue(
+        '"Unsaved navigation guard',
       );
       await expect(study).not.toHaveClass(/active/);
       await expect(layer).toHaveAttribute("style", guardedPosition);

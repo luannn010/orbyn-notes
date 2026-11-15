@@ -71,10 +71,10 @@ it("focuses an unpersisted title, inherits a tag, moves Enter to body and drops 
   const title = screen.getByRole("textbox", { name: "Note title" });
   expect(title).toHaveFocus();
   expect(screen.getByRole("status")).toHaveTextContent("Not saved yet");
-  expect(screen.getByRole("button", { name: "Remove tag trip" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Current note tags" })).toHaveTextContent("trip");
   fireEvent.keyDown(title, { key: "Enter" });
   expect(screen.getByRole("textbox", { name: "Note content" })).toHaveFocus();
-  fireEvent.click(screen.getByText("← Back to notes"));
+  fireEvent.click(screen.getByRole("button", { name: "Back to notes" }));
   expect(back).toHaveBeenCalledOnce();
   expect(create).not.toHaveBeenCalled();
 });

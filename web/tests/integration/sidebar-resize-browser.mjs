@@ -45,13 +45,13 @@ try {
     .getByLabel("Note content", { exact: true })
     .fill("Writing survives sidebar gestures.");
   await expect(
-    page.getByText("Saved in this browser", { exact: true }),
+    page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true }),
   ).toBeVisible();
   const longTag =
     "A deliberately long sidebar tag whose full accessible name survives resizing";
   await openNoteTags(page);
-  await page.getByLabel("New tag", { exact: true }).fill(longTag);
-  await page.getByRole("button", { name: "Add tag", exact: true }).click();
+  await page.getByLabel("Tags, separated by commas", { exact: true }).fill(longTag);
+  await page.getByRole("textbox", { name: "Tags, separated by commas", exact: true }).press("Enter");
   await expect(
     page.getByRole("button", { name: `${longTag}, 1 note`, exact: true }),
   ).toBeVisible();

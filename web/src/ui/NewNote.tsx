@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CheckSquare, Globe, Hash, Users } from "./icons";
+import {
+  BookOpen,
+  CheckSquare,
+  FileText,
+  Globe,
+  Hash,
+  Users,
+} from "./icons";
 import type { Note, NoteDocument, NotesStore } from "../domain/contracts";
 import { registerCloseGuard } from "../desktop/closeGuard";
 import { RichEditor } from "./RichEditor";
@@ -15,6 +22,7 @@ import { openExternalUrl } from "../desktop/external";
 import { useDesktop } from "../desktop/DesktopShell";
 import { createPortal } from "react-dom";
 import "../styles/new-note.css";
+import { CompactNoteTags } from "./CompactNoteTags";
 
 const starters = [
   {
@@ -142,11 +150,20 @@ export function NewNote({
   const [tagOpen, setTagOpen] = useState(false),
     [tag, setTag] = useState(""),
     [starter, setStarter] = useState("");
+  const compactTagPending = useRef(false);
   const pendingTag = useRef("");
   pendingTag.current = tag;
   const [notice, setNotice] = useState("");
+  const [formattingTarget, setFormattingTarget] =
+    useState<HTMLDivElement | null>(null);
+  const formatDraftPending = useRef(false);
   function leave(action: () => void) {
-    if (!writer.current!.canLeave() || pendingTag.current.trim()) {
+    if (
+      compactTagPending.current ||
+      formatDraftPending.current ||
+      !writer.current!.canLeave() ||
+      pendingTag.current.trim()
+    ) {
       setNotice(
         "Your text is still here. Save or copy it before leaving; add or clear any unfinished tag.",
       );
@@ -158,7 +175,11 @@ export function NewNote({
     writer.current!.activate();
     title.current?.focus();
     const stop = registerCloseGuard(() => {
-      const allowed = writer.current!.canLeave() && !pendingTag.current.trim();
+      const allowed =
+        !compactTagPending.current &&
+        !formatDraftPending.current &&
+        writer.current!.canLeave() &&
+        !pendingTag.current.trim();
       if (!allowed)
         setNotice(
           "Your text is still here. Save or copy it before leaving; add or clear any unfinished tag.",
@@ -224,9 +245,19 @@ export function NewNote({
   const toolbar = (
     <header className="new-note-header">
       {!quick && (
-        <button onClick={() => leave(() => callbacks.current.onBack())}>
-          ← Back to notes
-        </button>
+        <nav className="new-note-breadcrumb" aria-label="Note location">
+          <FileText size={13} aria-hidden="true" />
+          <button
+            aria-label="Back to notes"
+            onClick={() => leave(() => callbacks.current.onBack())}
+          >
+            All notes
+          </button>
+          <span aria-hidden="true">/</span>
+          <span className="new-note-location">
+            {state.value.title.trim() || "New note"}
+          </span>
+        </nav>
       )}
       <span role="status">{status}</span>
     </header>
@@ -286,6 +317,13 @@ export function NewNote({
           )}
         </div>
       )}
+      {!quick && (
+        <div
+          className="new-note-format-target"
+          hidden={empty}
+          ref={setFormattingTarget}
+        />
+      )}
       <div
         className="new-note-page"
         onMouseDown={(event) => {
@@ -317,8 +355,30 @@ export function NewNote({
             }
           }}
         />
-        {!quick && pills}
-        {tagOpen && (
+        {!quick && (
+          <CompactNoteTags
+            tags={state.value.tags}
+            onChange={(tags) => change({ tags })}
+            onPendingChange={(pending) => {
+              compactTagPending.current = pending;
+            }}
+            onApply={() =>
+              body.current
+                ?.querySelector<HTMLElement>(
+                  '[contenteditable="true"], .editor-markdown-surface textarea',
+                )
+                ?.focus({ preventScroll: true })
+            }
+          >
+            <span
+              className="new-note-pill"
+              title="Planner links are not available in this beta"
+            >
+              Link a task · Planned
+            </span>
+          </CompactNoteTags>
+        )}
+        {quick && tagOpen && (
           <form
             className="capture-tag-form"
             onSubmit={(event) => {
@@ -369,18 +429,20 @@ export function NewNote({
                 change({
                   document: {
                     type: "doc",
-                    content: event.target.value
-                      .split("\n")
-                      .map((text) => ({
-                        type: "paragraph",
-                        ...(text ? { content: [{ type: "text", text }] } : {}),
-                      })),
+                    content: event.target.value.split("\n").map((text) => ({
+                      type: "paragraph",
+                      ...(text ? { content: [{ type: "text", text }] } : {}),
+                    })),
                   },
                 })
               }
             />
           ) : (
             <RichEditor
+              toolbarTarget={formattingTarget}
+              onUnsavedChange={(pending) => {
+                formatDraftPending.current = pending;
+              }}
               documentPolicy="notes"
               document={state.value.document}
               onChange={(document) => change({ document })}

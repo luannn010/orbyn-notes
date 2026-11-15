@@ -17,10 +17,10 @@ try {
   await page.getByLabel("Note content", { exact: true }).fill("A long preview that should truncate gracefully while the complete note remains accessible.");
   const manageTags = page.getByRole("button", { name: "Manage note tags", exact: true });
   if (await manageTags.isVisible()) await manageTags.click();
-  await page.getByLabel("New tag", { exact: true }).fill("A very long descriptive tag name");
-  await page.getByRole("button", { name: "Add tag", exact: true }).click();
-  await expect(page.getByText("Saved in this browser", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "← Back to notes", exact: true }).click();
+  await page.getByLabel("Tags, separated by commas", { exact: true }).fill("A very long descriptive tag name");
+  await page.getByRole("textbox", { name: "Tags, separated by commas", exact: true }).press("Enter");
+  await expect(page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Back to notes/ }).click();
   await page.getByRole("button", { name: "Manage tags", exact: true }).click();
   await page.getByRole("button", { name: "Actions for A very long descriptive tag name" }).click();
   await page.getByRole("menuitem", { name: "Change color" }).click();

@@ -881,7 +881,7 @@ export function Workspace({
       : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = !!newDraft || selected !== null && current;
-  const splitNotes = !!desktop && roomForNoteList && !!editing && module === "notes" && !trash;
+  const splitNotes = !!desktop && !newDraft && roomForNoteList && !!editing && module === "notes" && !trash;
   const noteActors = Array.from(
     new Set(
       [searchOrigin?.selected, selected].filter((id): id is string => !!id),

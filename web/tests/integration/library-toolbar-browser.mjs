@@ -199,18 +199,18 @@ try {
     .getByLabel("Note content", { exact: true })
     .fill("Genuine encrypted toolbar note.");
   await expect(
-    page.getByText("Saved in this browser", { exact: true }),
+    page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true }),
   ).toBeVisible();
   const longTag =
     "Averylongunbrokentagheadingthatmustremainreachableatnarrowwidth";
   await openNoteTags(page);
-  await page.getByLabel("New tag", { exact: true }).fill(longTag);
-  await page.getByRole("button", { name: "Add tag", exact: true }).click();
+  await page.getByLabel("Tags, separated by commas", { exact: true }).fill(longTag);
+  await page.getByRole("textbox", { name: "Tags, separated by commas", exact: true }).press("Enter");
   await expect(
-    page.getByText("Saved in this browser", { exact: true }),
+    page.getByText(/^Saved (?:in this browser|on this device)$/, { exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "← Back to notes", exact: true })
+    .getByRole("button", { name: /Back to notes/ })
     .click();
   await grid.click();
   await expect(page.locator(".note-collection")).toHaveClass(/grid/);
