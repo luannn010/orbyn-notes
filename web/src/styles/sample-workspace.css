@@ -251,7 +251,7 @@
   font-size: 11px;
 }
 .sample-editor.editor-page {
-  max-width: 760px;
+  max-width: calc(var(--notes-editor-width, 640px) + 120px);
   padding: 34px 44px 80px;
 }
 .sample-note-title {
@@ -285,7 +285,7 @@
   font-size: 11px;
 }
 .sample-editor .tiptap {
-  font-size: 14px;
+  font-size: var(--notes-editor-size, 14px);
 }
 .sample-empty {
   padding: 60px 24px;

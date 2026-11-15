@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -13,7 +13,10 @@ import {
 import { useDesktop } from "../desktop/DesktopShell";
 import { NotesMark } from "../ui/NotesMark";
 import { RichEditor } from "../ui/RichEditor";
-import { Dialog } from "../ui/primitives";
+import type { Theme } from "../ui/primitives";
+import { SettingsSurface } from "../ui/SettingsSurface";
+import { SettingsView } from "../ui/SettingsView";
+import { defaultEditorPreferences, EditorPreferencesProvider } from "../ui/editorPreferences";
 import { plainText } from "../ui/model";
 import {
   createSample,
@@ -60,8 +63,18 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
     theme: document.documentElement.dataset.theme,
     motion: document.documentElement.dataset.motion,
   }));
-  const [theme, setTheme] = useState(appearance.theme ?? "light");
+  const [theme, setTheme] = useState<Theme>(appearance.theme === "dark" || appearance.theme === "dim" ? appearance.theme : "light");
   const [motion, setMotion] = useState(appearance.motion ?? "system");
+  const [editorPreferences, setEditorPreferences] = useState(defaultEditorPreferences);
+  const [originalEditorStyles] = useState(() => {
+    const style = document.documentElement.style;
+    return ["--notes-editor-size", "--notes-editor-width"].map((name) => ({ name, value: style.getPropertyValue(name), priority: style.getPropertyPriority(name) }));
+  });
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  function openSettings() {
+    settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSettings(true);
+  }
   useLayoutEffect(
     () => () => {
       if (appearance.theme === undefined)
@@ -70,12 +83,20 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
       if (appearance.motion === undefined)
         delete document.documentElement.dataset.motion;
       else document.documentElement.dataset.motion = appearance.motion;
+      for (const { name, value, priority } of originalEditorStyles) {
+        if (value) document.documentElement.style.setProperty(name, value, priority);
+        else document.documentElement.style.removeProperty(name);
+      }
     },
-    [appearance],
+    [appearance, originalEditorStyles],
   );
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const query = matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => { document.documentElement.dataset.theme = theme === "system" ? (query.matches ? "dark" : "light") : theme; };
+    applyTheme();
+    query.addEventListener("change", applyTheme);
     document.documentElement.dataset.motion = motion;
+    return () => query.removeEventListener("change", applyTheme);
   }, [theme, motion]);
   useLayoutEffect(() => {
     if (!desktop) return;
@@ -122,8 +143,9 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
     setSelected(id);
   }
   return (
+    <EditorPreferencesProvider value={{ preferences: editorPreferences, setPreferences: (patch) => setEditorPreferences((current) => ({ ...current, ...patch })) }}>
     <div className={`sample-workspace${sidebarVisible ? "" : " sample-sidebar-hidden"}`} aria-label="Sample workspace">
-      <aside id="notes-sidebar" className="sample-sidebar" aria-label="Sample navigation" hidden={!sidebarVisible}>
+      <aside id="notes-sidebar" className="sample-sidebar" aria-label="Sample navigation" inert={settings} hidden={!sidebarVisible}>
         <div className="sample-brand">
           <NotesMark size={16} />
           <strong>
@@ -196,9 +218,9 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
         </nav>
         <footer>
           <p>Changes last until you leave or reload.</p>
-          <button className="sample-nav" onClick={() => setSettings(true)}>
+          <button className="sample-nav" onClick={openSettings}>
             <Settings size={16} />
-            Appearance
+            Settings
           </button>
           <button className="sample-nav" onClick={onExit}>
             <LogOut size={16} />
@@ -206,7 +228,7 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
           </button>
         </footer>
       </aside>
-      <main className="sample-main">
+      <main className="sample-main" inert={settings}>
         <div className="sample-status">
           <span>Sample workspace</span>
           <span>Changes last until you leave or reload.</span>
@@ -379,36 +401,10 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
           />
         )}
       </main>
-      {settings && (
-        <Dialog title="Appearance" onClose={() => setSettings(false)}>
-          <div className="stack">
-            <label>
-              Theme
-              <select
-                value={theme}
-                onChange={(event) => setTheme(event.target.value)}
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="dim">Dim</option>
-              </select>
-            </label>
-            <label>
-              Motion
-              <select
-                value={motion}
-                onChange={(event) => setMotion(event.target.value)}
-              >
-                <option value="system">Follow system</option>
-                <option value="reduced">Reduce motion</option>
-              </select>
-            </label>
-            <button className="primary" onClick={() => setSettings(false)}>
-              Done
-            </button>
-          </div>
-        </Dialog>
-      )}
     </div>
+    {settings && <SettingsSurface onClose={() => setSettings(false)} returnFocusTo={settingsReturnFocus.current}>
+      <SettingsView desktopSurface={!!desktop} sidebarExpanded={sidebarVisible} sampleWorkspace email="" preferences={{ theme, setTheme, motion, setMotion }} onSignOut={() => {}} onExport={() => {}} onErase={() => {}} onDone={() => setSettings(false)} />
+    </SettingsSurface>}
+    </EditorPreferencesProvider>
   );
 }
