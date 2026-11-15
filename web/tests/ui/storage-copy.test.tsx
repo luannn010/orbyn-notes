@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AccountService, Note, NotesStore } from "../../src/domain/contracts";
 import { AccountView, PendingDevice } from "../../src/ui/AccountView";
 import { NoteEditor } from "../../src/ui/NoteEditor";
+import { SettingsView } from "../../src/ui/SettingsView";
 
 const runtime = vi.hoisted(() => ({ desktop: false }));
 vi.mock("../../src/desktop/window", () => ({ isDesktop: () => runtime.desktop }));
@@ -11,8 +12,26 @@ vi.mock("../../src/desktop/DesktopShell", () => ({
 }));
 vi.mock("../../src/ui/RichEditor", () => ({ RichEditor: () => <div>Writing surface</div> }));
 
-beforeEach(() => { runtime.desktop = false; });
-afterEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => {
+  runtime.desktop = false;
+  localStorage.clear();
+  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it.each([false, true])("uses runtime storage guidance in Data and export without erasing (desktop=%s)", async (desktop) => {
+  runtime.desktop = desktop;
+  const erase = vi.fn();
+  render(<SettingsView email="fixture@example.invalid"
+    preferences={{ theme: "dark", motion: "reduced", setTheme: vi.fn(), setMotion: vi.fn() }}
+    onDone={vi.fn()} onSignOut={vi.fn()} onExport={vi.fn()} onErase={erase} />);
+  fireEvent.click(screen.getByRole("button", { name: "Data and export" }));
+  expect(await screen.findByText(desktop
+    ? "Local only. Clearing this app’s data removes your notes. Export a copy first."
+    : "Local only. Clearing browser data removes your notes. Export a copy first.")).toBeVisible();
+  expect(screen.getByRole("button", { name: desktop ? "Erase this app’s data" : "Erase this browser" })).toBeVisible();
+  expect(erase).not.toHaveBeenCalled();
+});
 
 it.each([false, true])("describes the actual storage at account entry and approval (desktop=%s)", (desktop) => {
   runtime.desktop = desktop;
