@@ -54,10 +54,10 @@ function inline(tokens: Token[]): RichNode[] {
   }
   return nodes;
 }
-function document(tokens: Token[]): NoteDocument {
+function document(tokens: Token[], filename: string): NoteDocument {
   if (tokens.some((token) => token.type === "table_open"))
     throw new Error(
-      "unsupported_table: Markdown tables are not supported yet. Convert the table to text before importing. Nothing was imported.",
+      `unsupported_table: ${JSON.stringify(filename)} contains a Markdown table, which is not supported yet. Convert the table to text before importing. Nothing was imported.`,
     );
   const root: NoteDocument = { type: "doc", content: [] };
   const stack: RichNode[] = [root];
@@ -190,7 +190,7 @@ export function parseMarkdown(
     const front = frontmatter(
       file.content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"),
     );
-    const doc = document(parser.parse(front.body, {}));
+    const doc = document(parser.parse(front.body, {}), file.name);
     const heading = doc.content.find((n) => n.type === "heading");
     return validateInput({
       title:
