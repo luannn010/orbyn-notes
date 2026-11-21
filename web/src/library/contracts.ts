@@ -12,6 +12,9 @@ export type Tag = {
   id: string;
   name: string;
   color: TagColor;
+  // Persisted by tag-management builds; retain these when editing older libraries.
+  pinned?: boolean;
+  order?: number;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -49,6 +52,8 @@ export type LibraryAction =
   | "tag-create"
   | "tag-rename"
   | "tag-color"
+  | "tag-pin"
+  | "tag-reorder"
   | "tag-merge"
   | "tag-delete"
   | "history-restore"
