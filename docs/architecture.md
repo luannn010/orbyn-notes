@@ -71,6 +71,12 @@ membership atomically; restoring a version restores its title/document while
 retaining current tags and pin state. Trash has explicit restore and empty actions;
 the current implementation does not automatically purge notes after 30 days.
 
+The reader retains the known optional tag-management fields `pinned` (boolean)
+and `order` (nonnegative safe integer), plus `tag-pin` and `tag-reorder` receipts.
+Only reorder receipts receive the bounded allowance for all catalog tag IDs;
+other unknown fields, actions and invalid values still fail closed. Opening an
+existing library does not rewrite its encrypted snapshot.
+
 The account-scoped `CollectionsStore` owns `notes-collections-v1/workspace`. Study,
 the sealed Journal envelope and Clips share its epoch/revision CAS and one writer.
 Collection schema3 supports anchored Study sources alongside legacy sources;
