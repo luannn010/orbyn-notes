@@ -242,26 +242,7 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 0;
-}
-.journal-legend-swatches {
-  display: inline-grid;
-  grid-template-columns: repeat(4, 14px);
-  gap: 3px;
-}
-.journal-legend-swatches i {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  background: var(--raise);
-}
-.journal-legend-swatches i[data-level="1"] {
-  background: var(--line2);
-}
-.journal-legend-swatches i[data-level="2"] {
-  background: var(--t3);
-}
-.journal-legend-swatches i[data-level="3"] {
-  background: var(--t1);
+  max-width: 250px;
 }
 @media (max-width: 499px) {
   .journal-habit-streak {
@@ -345,36 +326,90 @@
   color: var(--t3);
   text-align: center;
 }
+.journal-calendar {
+  --journal-bar: 20px;
+}
 .journal-calendar-days button {
+  position: relative;
   width: 30px;
   height: 30px;
   min-height: 30px;
   padding: 0;
   border-radius: 7px;
-  display: grid;
-  place-items: center;
+  display: block;
   background: var(--raise);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--t3);
-}
-.journal-calendar-days button[data-level="1"] {
-  background: var(--line2);
   color: var(--t1);
 }
-.journal-calendar-days button[data-level="2"] {
-  background: var(--t3);
-  color: var(--btnt);
+.journal-calendar-days button em {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  text-align: center;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--t1);
 }
-.journal-calendar-days button[data-level="3"] {
+.journal-calendar-days button u,
+.journal-calendar-days button s {
+  position: absolute;
+  left: 5px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  text-decoration: none;
+}
+.journal-calendar-days button u {
+  width: 20px;
+  background: var(--line2);
+}
+.journal-calendar-days button s {
   background: var(--t1);
+}
+.journal-day-tip {
+  display: none;
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--btn);
   color: var(--btnt);
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  z-index: 2;
+  pointer-events: none;
+}
+.journal-calendar-days button:nth-child(7n + 1) .journal-day-tip {
+  left: 0;
+  transform: none;
+}
+.journal-calendar-days button:nth-child(7n) .journal-day-tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.journal-calendar-days button:hover .journal-day-tip,
+.journal-calendar-days button:focus-visible .journal-day-tip {
+  display: block;
 }
 .journal-calendar-days button:disabled {
   opacity: 1;
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--t3);
+  color: var(--t4);
+}
+.journal-calendar-days button:disabled em {
+  color: var(--t4);
+}
+.journal-calendar-days button:disabled u,
+.journal-calendar-days button:disabled s,
+.journal-calendar-days button:disabled .journal-day-tip {
+  display: none;
 }
 .journal-calendar-days button[aria-current="date"] {
   box-shadow:

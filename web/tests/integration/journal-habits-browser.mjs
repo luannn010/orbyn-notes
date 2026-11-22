@@ -388,25 +388,26 @@ try {
       .click();
     const days = calendarPage.locator(".journal-calendar-days button");
     async function assertDays() {
-      for (const [day, level, count] of [
-        [1, 1, 1],
-        [2, 1, 2],
-        [3, 2, 3],
-        [4, 3, 4],
-        [5, 3, 5],
+      for (const [day, percent, count] of [
+        [1, 20, 1],
+        [2, 40, 2],
+        [3, 60, 3],
+        [4, 80, 4],
+        [5, 100, 5],
         [6, 0, 0],
       ]) {
-        const button = days.filter({ hasText: new RegExp(`^${day}$`) });
-        await expect(button).toHaveAttribute("data-level", String(level));
+        const button = days.filter({ hasText: new RegExp(`^${day}`) });
+        await expect(button.locator("s")).toHaveAttribute(
+          "style",
+          new RegExp(`\\(${percent} / 100\\)`),
+        );
         await expect(button).toHaveAccessibleName(
           new RegExp(`${count} of 5 habits`),
         );
       }
-      const legend = calendarPage.getByRole("group", {
-        name: "Habits done legend",
-      });
-      await expect(legend.getByText("4+", { exact: true })).toBeVisible();
-      await expect(legend).toContainText("4 or more");
+      await expect(
+        calendarPage.getByText(/Each day fills by the share of habits done/),
+      ).toBeVisible();
     }
     await assertDays();
     await calendarPage.evaluate(async () => {
@@ -452,13 +453,11 @@ try {
     const todayButton = calendarPage.locator(
       '.journal-calendar-days button[aria-current="date"]',
     );
-    await expect(todayButton).toHaveAttribute("data-level", "2");
+    await expect(todayButton.locator("s")).toHaveAttribute(
+      "style",
+      /\(3 \/ 100\)/,
+    );
     await expect(todayButton).toHaveAccessibleName(/3 of 100 habits/);
-    const legend = calendarPage.getByRole("group", {
-      name: "Habits done legend",
-    });
-    await expect(legend).toContainText("0, 1 to 2, 3, 4");
-    await expect(legend.getByText("4+", { exact: true })).toHaveCount(0);
     expect(calendarErrors).toEqual([]);
     runs.push({
       id: "calendar-history",

@@ -17,6 +17,7 @@ import type {
 import type { Habit, JournalData } from "../collections/journal";
 import {
   archiveHabit,
+  habitShare,
   journalMonth,
   journalToday,
   setHabitCompletion,
@@ -1142,7 +1143,6 @@ function Calendar({
   onMove: (delta: number) => void;
 }) {
   const offset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
-  const overflow = days.some((day) => day.habitsCompleted > 4);
   return (
     <div className="journal-calendar">
       <header>
@@ -1179,48 +1179,29 @@ function Calendar({
           <button
             key={day.date}
             disabled={day.date > today}
-            data-level={
-              day.habitsCompleted === 0
-                ? 0
-                : day.habitsCompleted <= 2
-                  ? 1
-                  : day.habitsCompleted === 3
-                    ? 2
-                    : 3
-            }
             aria-label={`${dayTitle(day.date)} · ${day.habitsCompleted} of ${day.habitTotal} habits${day.written ? " · written" : ""}`}
             aria-pressed={day.date === selected}
             aria-current={day.date === today ? "date" : undefined}
             onClick={() => onSelect(day.date)}
           >
-            {Number(day.date.slice(-2))}
+            <em>{Number(day.date.slice(-2))}</em>
+            <u aria-hidden="true" />
+            <s
+              aria-hidden="true"
+              style={{
+                width: `calc((${habitShare(day.habitsCompleted, day.habitTotal)} / 100) * var(--journal-bar))`,
+              }}
+            />
+            <span className="journal-day-tip" aria-hidden="true">
+              {`${dayDate(day.date).toLocaleDateString(undefined, { weekday: "short" })} ${Number(day.date.slice(-2))} · ${day.habitsCompleted} of ${day.habitTotal} habits`}
+            </span>
           </button>
         ))}
       </div>
-      <div
-        className="journal-caption journal-legend"
-        role="group"
-        aria-label="Habits done legend"
-      >
-        <span>Habits done</span>
-        <span className="journal-legend-swatches" aria-hidden="true">
-          <i />
-          <i data-level="1" />
-          <i data-level="2" />
-          <i data-level="3" />
-        </span>
-        <span>
-          0, 1 to 2, 3,{" "}
-          {overflow ? (
-            <>
-              <span aria-hidden="true">4+</span>
-              <span className="journal-sr-only">4 or more</span>
-            </>
-          ) : (
-            "4"
-          )}
-        </span>
-      </div>
+      <p className="journal-caption journal-legend">
+        Each day fills by the share of habits done. Point at a day or focus it
+        to see the count.
+      </p>
       <p className="journal-caption">
         Days written · {days.filter((day) => day.written).length}
       </p>

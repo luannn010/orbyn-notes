@@ -103,6 +103,11 @@ export function archiveHabit(data: JournalData, habitId: string, at: Date): Jour
   if (!habit.archivedAt) { habit.archivedAt = at.toISOString(); habit.archivedOn = journalToday(at); habit.revision++; }
   return validateJournalData(next);
 }
+/** Whole-percent share of eligible habits done on a day; 0 when none were eligible. */
+export function habitShare(completed: number, total: number): number {
+  if (total <= 0 || completed <= 0) return 0;
+  return Math.min(100, Math.round((completed / total) * 100));
+}
 export function journalMonth(data: JournalData, year: number, month: number) {
   if (!Number.isInteger(year) || year < 1000 || year > 9999 || !Number.isInteger(month) || month < 1 || month > 12) throw new Error("invalid_month: Choose a valid month.");
   const days = new Date(Date.UTC(year, month, 0)).getUTCDate();

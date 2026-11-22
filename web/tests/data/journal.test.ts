@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { createJournalEnvelope, unlockJournalEnvelope, sealJournalData, emptyJournal, writeJournalEntry, setHabitCompletion, validateJournalData, saveHabit, archiveHabit, journalMonth } from "../../src/collections/journal";
+import { createJournalEnvelope, unlockJournalEnvelope, sealJournalData, emptyJournal, writeJournalEntry, setHabitCompletion, validateJournalData, saveHabit, archiveHabit, journalMonth, habitShare } from "../../src/collections/journal";
 const context = { accountId: "11111111-1111-4111-8111-111111111111", epoch: "22222222-2222-4222-8222-222222222222" };
 const passphrase = "synthetic Journal phrase only";
 const current = () => {};
@@ -23,6 +23,30 @@ describe("separate Journal encryption boundary", () => {
     expect(data.completions[0]!.habitId).toBe(habit.id);
     expect(data.entries).toHaveLength(1);
     expect(journalMonth(emptyJournal(), 2028, 2)).toHaveLength(29);
+  });
+  it("computes the daily habit share for the month bar", () => {
+    expect(habitShare(0, 0)).toBe(0);
+    expect(habitShare(1, 1)).toBe(100);
+    expect(habitShare(4, 6)).toBe(67);
+    expect(habitShare(6, 6)).toBe(100);
+    expect(habitShare(1, 6)).toBe(17);
+    expect(habitShare(5, 6)).toBe(83);
+    expect(habitShare(7, 6)).toBe(100);
+  });
+  it("keeps historical totals after habits are created and archived", () => {
+    const at = new Date(2026, 1, 10, 12);
+    let data = saveHabit(emptyJournal(), "Read", new Date(2026, 1, 1, 12));
+    data = saveHabit(data, "Walk", new Date(2026, 1, 1, 12));
+    data = saveHabit(data, "Late", new Date(2026, 1, 20, 12));
+    data = setHabitCompletion(data, "2026-02-10", data.habits[0]!.id, true, at);
+    data = archiveHabit(data, data.habits[1]!.id, new Date(2026, 1, 15, 12));
+    const month = journalMonth(data, 2026, 2);
+    const share = (d: number) => habitShare(month[d - 1]!.habitsCompleted, month[d - 1]!.habitTotal);
+    expect(month[9]).toMatchObject({ habitsCompleted: 1, habitTotal: 2 });
+    expect(share(10)).toBe(50);
+    expect(month[16]).toMatchObject({ habitTotal: 1 });
+    expect(share(17)).toBe(0);
+    expect(month[24]).toMatchObject({ habitTotal: 2 });
   });
   it("snapshots KDF metadata before encryption yields and rejects weaker AES keys", async () => {
     const created = await createJournalEnvelope(passphrase, emptyJournal(), context, current);

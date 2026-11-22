@@ -371,55 +371,36 @@ describe("protected Journal UI", () => {
     expect(button).toHaveAccessibleDescription(/5 consecutive days/);
     expect(fixture.vault.update).toHaveBeenCalledTimes(5);
   });
-  it("shades actual calendar counts and retains the numeric overflow legend", async () => {
+  it("draws a proportional bar per day with the count on hover and focus", async () => {
     useNovemberClock();
     const month = journalToday().slice(0, 7),
       fixture = testVault();
     await fixture.vault.update(() =>
-      history(5, `${month}-01`, (i) =>
-        Array.from(
-          { length: 5 - i },
-          (_, offset) => `${month}-${String(i + offset + 1).padStart(2, "0")}`,
-        ),
+      history(6, `${month}-01`, (i) =>
+        [i < 4 ? `${month}-02` : "", i < 2 ? `${month}-03` : ""].filter(Boolean),
       ),
     );
     const { container } = render(<JournalView vault={fixture.vault} />);
     const calendar = container.querySelector(".journal-calendar-days")!;
-    for (const [day, level, count] of [
-      [1, 1, 1],
-      [2, 1, 2],
-      [3, 2, 3],
-      [4, 3, 4],
-      [5, 3, 5],
-      [6, 0, 0],
-    ]) {
-      const button = Array.from(calendar.querySelectorAll("button")).find(
-        (item) => item.textContent?.trim() === String(day),
+    const cell = (day: number) =>
+      Array.from(calendar.querySelectorAll("button")).find(
+        (item) => item.querySelector("em")?.textContent === String(day),
       )!;
-      expect(button).toHaveAttribute("data-level", String(level));
-      expect(button).toHaveAccessibleName(new RegExp(`${count} of 5 habits`));
-    }
-    const legend = screen.getByRole("group", { name: "Habits done legend" });
-    expect(within(legend).getByText("4+")).toBeInTheDocument();
-    expect(legend).toHaveTextContent("4 or more");
-    expect(legend).not.toHaveTextContent(/some|most|all/);
-  });
-  it("does not infer overflow or darkest color from a large eligible denominator", async () => {
-    useNovemberClock();
-    const today = journalToday(),
-      fixture = testVault();
-    await fixture.vault.update(() =>
-      history(100, `${today.slice(0, 7)}-01`, (i) => (i < 3 ? [today] : [])),
+    const fill = (day: number) =>
+      (cell(day).querySelector("s") as HTMLElement).style.width;
+    expect(cell(2)).toHaveAccessibleName(/4 of 6 habits/);
+    expect(fill(2)).toBe("calc((67 / 100) * var(--journal-bar))");
+    expect(cell(3)).toHaveAccessibleName(/2 of 6 habits/);
+    expect(fill(3)).toBe("calc((33 / 100) * var(--journal-bar))");
+    expect(fill(4)).toBe("calc((0 / 100) * var(--journal-bar))");
+    expect(cell(2)).toHaveTextContent("2");
+    expect(cell(2).querySelector(".journal-day-tip")).toHaveTextContent(
+      /2 · 4 of 6 habits/,
     );
-    const { container } = render(<JournalView vault={fixture.vault} />);
-    const selected = container.querySelector(
-      '.journal-calendar-days button[aria-current="date"]',
-    )!;
-    expect(selected).toHaveAttribute("data-level", "2");
-    expect(selected).toHaveAccessibleName(/3 of 100 habits/);
-    const legend = screen.getByRole("group", { name: "Habits done legend" });
-    expect(legend).toHaveTextContent("0, 1 to 2, 3, 4");
-    expect(within(legend).queryByText("4+")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Each day fills by the share of habits done/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Habits done legend" })).toBeNull();
   });
   it("removes the current and outgoing streak presentation in the same close turn", async () => {
     useNovemberClock();
