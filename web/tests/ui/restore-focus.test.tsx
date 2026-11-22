@@ -24,7 +24,11 @@ function storeWith(initial: Note[]) {
     subscribe: () => () => {},
     persistence: () => ({ status: "ready" }),
     close: vi.fn(),
-    create: vi.fn(),
+    create: vi.fn(async (input: { title: string }) => {
+      const n = { ...mk(String(notes.length + 1), input.title) };
+      notes = [n, ...notes];
+      return n;
+    }),
     update: vi.fn(),
     trash: vi.fn(async (id: string) => {
       const n = notes.find((x) => x.id === id)!;
@@ -67,4 +71,19 @@ it("returns focus to Import Markdown after the dialog closes", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Import Markdown" })).toBeNull());
   expect(screen.getByRole("button", { name: "Import Markdown" })).toHaveFocus();
+});
+
+it("moves focus to the list heading when an empty-state import finishes", async () => {
+  const { container } = render(<Workspace store={storeWith([])} session={session} onSignOut={async () => {}} />);
+  const trigger = await screen.findByRole("button", { name: "Import notes" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  (document.activeElement as HTMLElement | null)?.blur();
+  const file = { name: "a.md", size: 1, text: async () => "# a" };
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+  const dialog = await screen.findByRole("dialog", { name: "Import Markdown" });
+  fireEvent.click(dialog.querySelector<HTMLButtonElement>("button.primary")!);
+  await screen.findByText(/Imported 1 notes/);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Import notes" })).toBeNull());
+  await waitFor(() => expect(document.activeElement?.tagName).toBe("H1"));
 });

@@ -545,6 +545,7 @@ export function Workspace({
   // The control that started an import: the hidden file picker leaves focus on
   // body by the time the dialog opens, so the Dialog cannot capture it itself.
   const importReturnFocus = useRef<HTMLElement | null>(null);
+  const importFocusWatch = useRef(false);
   const notesPaneRef = useRef<HTMLElement>(null);
   const [focusAfterTrash, setFocusAfterTrash] = useState<{ id: string; index: number } | null>(null);
   const settingsJournalFocus = useRef<{
@@ -887,7 +888,25 @@ export function Workspace({
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = !!newDraft || selected !== null && current;
   useEffect(() => {
-    if (!focusAfterTrash || editing || module !== "notes") return;
+    // An import started from a control that unmounts (the empty-state button)
+    // lands focus on the list heading once the imported notes render.
+    const importTrigger = importReturnFocus.current;
+    if (imports) importFocusWatch.current = true;
+    else if (importFocusWatch.current && importTrigger) {
+      const active = document.activeElement;
+      if (!importTrigger.isConnected) {
+        importFocusWatch.current = false;
+        importReturnFocus.current = null;
+        if (!active || active === document.body) notesPaneRef.current?.querySelector<HTMLElement>("h1")?.focus();
+      } else if (active && active !== importTrigger && active !== document.body) {
+        importFocusWatch.current = false;
+        importReturnFocus.current = null;
+      }
+    }
+    if (!focusAfterTrash || editing) return;
+    // Trashed outside the Notes list (a note opened from another module): no row
+    // to land on, so drop the request rather than replay it on a later visit.
+    if (module !== "notes") { setFocusAfterTrash(null); return; }
     if (visible.some((n) => n.id === focusAfterTrash.id)) return;
     const rows = notesPaneRef.current?.querySelectorAll<HTMLElement>(".note-open");
     const target = rows?.length
@@ -1670,6 +1689,7 @@ export function Workspace({
       setSelected(null);
       await refresh();
     } catch (e) {
+      setFocusAfterTrash(null);
       setError(message(e));
     }
   }
