@@ -52,6 +52,7 @@
   gap: 12px;
 }
 .new-note-title {
+  overflow: hidden;
   font:
     500 28px/1.25 Geist,
     sans-serif;

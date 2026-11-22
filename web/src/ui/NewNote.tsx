@@ -23,6 +23,7 @@ import { useDesktop } from "../desktop/DesktopShell";
 import { createPortal } from "react-dom";
 import "../styles/new-note.css";
 import { CompactNoteTags } from "./CompactNoteTags";
+import { useAutoGrow } from "./useAutoGrow";
 
 const starters = [
   {
@@ -147,6 +148,7 @@ export function NewNote({
     );
   const title = useRef<HTMLTextAreaElement>(null),
     body = useRef<HTMLDivElement>(null);
+  useAutoGrow(title, state.value.title);
   const [tagOpen, setTagOpen] = useState(false),
     [tag, setTag] = useState(""),
     [starter, setStarter] = useState("");

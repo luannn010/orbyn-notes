@@ -9,6 +9,7 @@ import {
 import { createPortal, flushSync } from "react-dom";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { useDesktop } from "../desktop/DesktopShell";
+import { useAutoGrow } from "./useAutoGrow";
 import type { Tag } from "../library/contracts";
 import type { Note, NotesStore, NoteDocument } from "../domain/contracts";
 import type { EditorChangeTrace, EditorSourceCapture } from "./RichEditor";
@@ -226,6 +227,7 @@ export function NoteEditor({
     document: note.document,
     tags: note.tags,
   });
+  useAutoGrow(titleInput, draft.title);
   const [tagPending, setTagPending] = useState(false);
   const tagPendingRef = useRef(false);
   const tagPendingChanged = useCallback((pending: boolean) => {

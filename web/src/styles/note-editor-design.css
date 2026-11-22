@@ -89,6 +89,7 @@
   padding: 28px 40px 80px;
 }
 .editor-page .note-title {
+  overflow: hidden;
   font-size: 28px;
   line-height: 1.25;
   letter-spacing: -0.02em;
