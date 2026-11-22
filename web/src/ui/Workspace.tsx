@@ -542,6 +542,11 @@ export function Workspace({
   const prefs = usePreferences();
   const menuRef = useRef<HTMLButtonElement>(null);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  // The control that started an import: the hidden file picker leaves focus on
+  // body by the time the dialog opens, so the Dialog cannot capture it itself.
+  const importReturnFocus = useRef<HTMLElement | null>(null);
+  const notesPaneRef = useRef<HTMLElement>(null);
+  const [focusAfterTrash, setFocusAfterTrash] = useState<{ id: string; index: number } | null>(null);
   const settingsJournalFocus = useRef<{
     store: NotesStore;
     sourceOwner: NotesLibraryStore | undefined;
@@ -881,6 +886,16 @@ export function Workspace({
       : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = !!newDraft || selected !== null && current;
+  useEffect(() => {
+    if (!focusAfterTrash || editing || module !== "notes") return;
+    if (visible.some((n) => n.id === focusAfterTrash.id)) return;
+    const rows = notesPaneRef.current?.querySelectorAll<HTMLElement>(".note-open");
+    const target = rows?.length
+      ? rows[Math.max(0, Math.min(focusAfterTrash.index, rows.length - 1))]
+      : notesPaneRef.current?.querySelector<HTMLElement>("h1");
+    target?.focus();
+    setFocusAfterTrash(null);
+  });
   const splitNotes = !!desktop && !newDraft && roomForNoteList && !!editing && module === "notes" && !trash;
   const noteActors = Array.from(
     new Set(
@@ -1359,6 +1374,9 @@ export function Workspace({
       return;
     importOrigin.current = origin;
     importHeld.current = true;
+    const trigger = document.activeElement;
+    importReturnFocus.current =
+      trigger instanceof HTMLElement && trigger !== document.body ? trigger : null;
     setImportError("");
     if (origin === "setup") setSetupImportState("picking");
     fileRef.current?.click();
@@ -1637,6 +1655,7 @@ export function Workspace({
           acceptLibrary(result);
           setUndo(result.undo);
           setNotice("Note moved to Trash");
+          setFocusAfterTrash({ id: note.id, index: visible.findIndex((n) => n.id === note.id) });
           setSelected(null);
           selectedSnapshot.current = undefined;
         },
@@ -1647,6 +1666,7 @@ export function Workspace({
       const moved = await store.trash(note.id, note.revision);
       setUndo(moved);
       setNotice("Note moved to Trash");
+      setFocusAfterTrash({ id: note.id, index: visible.findIndex((n) => n.id === note.id) });
       setSelected(null);
       await refresh();
     } catch (e) {
@@ -2511,10 +2531,10 @@ export function Workspace({
           )}
           <div className="notes-workspace" data-split={splitNotes} hidden={module !== "notes" && !editing}>
           {module === "notes" && (!editing || !!desktop) && (
-            <section className="notes-library-pane" aria-label="Notes list" hidden={!!editing && !splitNotes}>
+            <section className="notes-library-pane" aria-label="Notes list" ref={notesPaneRef} hidden={!!editing && !splitNotes}>
               <header className="page-heading notes-library-heading">
                 <div>
-                  <h1 ref={notesHeadingRef}>
+                  <h1 ref={notesHeadingRef} tabIndex={-1}>
                     {linkedOnly
                       ? "Linked"
                       : trash
@@ -3120,6 +3140,7 @@ export function Workspace({
       {imports && (
         <Dialog
           title="Import Markdown"
+          returnFocusTo={importReturnFocus.current}
           onClose={() => {
             if (!importPending.current) cancelMarkdown();
           }}
