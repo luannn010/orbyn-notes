@@ -521,12 +521,66 @@
   .study-stat b {
     font-size: 20px;
   }
-  .study-table th,
-  .study-table td {
-    font-size: 11px;
+  .study-actions > .primary {
+    order: -1;
+    flex: 1 1 100%;
+    justify-content: center;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 12px;
+    font-size: 13.5px;
   }
-  .study-table th:first-child {
-    width: 35%;
+  .study-table,
+  .study-table tbody {
+    display: block;
+  }
+  .study-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .study-table tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px 44px 10px 12px;
+    border-top: 1px solid var(--line);
+  }
+  .study-table td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border-top: 0;
+    font-size: 12px;
+    min-width: 0;
+  }
+  .study-table td:first-child {
+    flex: 1 1 100%;
+    margin-bottom: 3px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .study-table td:not(:first-child):not(:has(.menu-anchor)) + td:not(:has(.menu-anchor))::before {
+    content: "\00b7";
+    margin: 0 6px;
+  }
+  .study-table td:last-child:has(.menu-anchor) {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    width: 36px;
+  }
+  .study-table .study-text-button {
+    min-height: 0;
+    padding: 2px 0;
+  }
+  .study-source {
+    padding: 2px 0;
+    font-size: 12px;
   }
   .study-flash {
     padding: 0;
