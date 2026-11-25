@@ -257,6 +257,8 @@ export function NoteEditor({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const duplicating = useRef(false);
+  const leavePending = useRef(false);
+  const lastSaveFailed = useRef(false);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [formattingTarget, setFormattingTarget] =
     useState<HTMLDivElement | null>(null);
@@ -324,6 +326,7 @@ export function NoteEditor({
     latest.current = next;
     generation.current++;
     dirtyRef.current = true;
+    lastSaveFailed.current = false;
     setDraft(next);
     setDirty(true);
     if (!conflict) setError("");
@@ -348,6 +351,7 @@ export function NoteEditor({
     if (readOnly) return;
     if (saving.current) return;
     saving.current = true;
+    lastSaveFailed.current = false;
     const version = generation.current;
     const snapshot = structuredClone(latest.current),
       savedBase = structuredClone(base.current);
@@ -411,6 +415,7 @@ export function NoteEditor({
           "code" in e &&
           (e.code === "source_codec_limit" || e.code === "source_limit"),
       );
+      lastSaveFailed.current = true;
       setError(message(e));
     } finally {
       clearTimeout(delayed);
@@ -477,13 +482,18 @@ export function NoteEditor({
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty, tagPending, sourceCapture, formatDraftPending]);
-  function leave(action: () => void) {
+  async function settleDraft(): Promise<boolean> {
+    if (conflict || lastSaveFailed.current) return false;
+    if (activeSave.current) await activeSave.current;
+    if (dirtyRef.current && !lastSaveFailed.current) await save();
+    return !dirtyRef.current && !saving.current;
+  }
+  async function leave(action: () => void) {
+    if (leavePending.current) return;
     if (
       formatDraftRef.current ||
-      dirty ||
       sourceIntent.current ||
       tagPendingRef.current ||
-      saving.current ||
       duplicating.current ||
       copyInFlight.current
     ) {
@@ -493,6 +503,19 @@ export function NoteEditor({
           : "Your latest changes are only in this window. Save or copy your text before leaving.",
       );
       return;
+    }
+    if (dirtyRef.current || saving.current) {
+      leavePending.current = true;
+      try {
+        if (!(await settleDraft())) {
+          setNavigationNotice(
+            "Your latest changes are only in this window. Save or copy your text before leaving.",
+          );
+          return;
+        }
+      } finally {
+        leavePending.current = false;
+      }
     }
     action();
   }
@@ -506,10 +529,10 @@ export function NoteEditor({
       setCopyError("Couldn’t copy text. Select your text and copy it.");
     }
   }
-  function duplicate() {
+  async function duplicate() {
     if (
       readOnly ||
-      dirtyRef.current ||
+      leavePending.current ||
       tagPendingRef.current ||
       formatDraftRef.current ||
       duplicating.current
@@ -517,17 +540,32 @@ export function NoteEditor({
       return;
     duplicating.current = true;
     setDuplicateBusy(true);
-    void store
-      .create({
-        ...latest.current,
-        title: `${latest.current.title || "Untitled note"} (copy)`,
-      })
-      .then(onSaved)
-      .catch((failure) => setError(message(failure)))
-      .finally(() => {
-        duplicating.current = false;
-        setDuplicateBusy(false);
-      });
+    try {
+      if ((dirtyRef.current || saving.current) && !(await settleDraft())) return;
+      onSaved(
+        await store.create({
+          ...latest.current,
+          title: `${latest.current.title || "Untitled note"} (copy)`,
+        }),
+      );
+    } catch (failure) {
+      setError(message(failure));
+    } finally {
+      duplicating.current = false;
+      setDuplicateBusy(false);
+    }
+  }
+  async function exportNote() {
+    if (
+      leavePending.current ||
+      tagPendingRef.current ||
+      formatDraftRef.current ||
+      duplicating.current ||
+      copyInFlight.current
+    )
+      return;
+    if ((dirtyRef.current || saving.current) && !(await settleDraft())) return;
+    onExport(base.current);
   }
   const actionBlocked = dirty || tagPending || formatDraftPending;
   const chrome = (
@@ -623,7 +661,8 @@ export function NoteEditor({
             label: "Duplicate",
             icon: <Copy size={14} aria-hidden="true" />,
             shortcut: `${modifier}D`,
-            disabled: readOnly || actionBlocked || duplicateBusy,
+            disabled:
+              readOnly || tagPending || formatDraftPending || duplicateBusy,
             onSelect: duplicate,
           },
           ...(noteLinks
@@ -675,9 +714,9 @@ export function NoteEditor({
           {
             label: "Export Markdown",
             icon: <Download size={14} aria-hidden="true" />,
-            disabled: actionBlocked,
+            disabled: tagPending || formatDraftPending,
             separatorBefore: true,
-            onSelect: () => onExport(base.current),
+            onSelect: () => void exportNote(),
           },
           { label: "Export PDF · Planned", disabled: true, onSelect: () => {} },
           {
