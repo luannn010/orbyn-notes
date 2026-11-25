@@ -22,6 +22,7 @@ import { Workspace } from "../../src/ui/Workspace";
 import { registerCloseGuard } from "../../src/desktop/closeGuard";
 import type { NoteExportIntent } from "../../src/links/contracts";
 import { buildDownload } from "../../src/ui/download";
+import { UnsupportedMarkdownExportError } from "../../src/transfer";
 const model = vi.hoisted(() => ({
   service: null as NoteLinkService | null,
   linkBoot: true,
@@ -248,4 +249,26 @@ it("rechecks note freshness before the native write", async () => {
   await act(async () => { release(); });
   expect(write).not.toHaveBeenCalled();
   expect(await screen.findByText("Couldn’t export notes. Your notes were not changed.")).toBeVisible();
+  expect(within(screen.getByRole("dialog", { name: "Export Markdown" })).getByRole("alert")).toHaveTextContent("Couldn’t export notes. Your notes were not changed.");
+});
+
+it("announces a known Markdown rejection inside the open export dialog and clears it on retry", async () => {
+  const f = fixture();
+  await waitFor(() => expect(f.nav()).toBeTypeOf("function"));
+  fireEvent.click(screen.getByRole("button", { name: /^A / }));
+  const failure = new UnsupportedMarkdownExportError("underline");
+  vi.mocked(f.service.prepareExport).mockRejectedValueOnce(failure);
+  fireEvent.click(screen.getByRole("button", { name: "Export this note" }));
+  const dialog = screen.getByRole("dialog", { name: "Export Markdown" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Export" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(failure.message.replace(/^unsupported_markdown_export: /, ""));
+  expect(native.save).not.toHaveBeenCalled();
+  const pending = held<NoteExportIntent>();
+  vi.mocked(f.service.prepareExport).mockReturnValueOnce(pending.promise);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Export" }));
+  await waitFor(() => expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument());
+  await act(async () => {
+    model.invalidate?.("closed");
+    pending.resolve({} as NoteExportIntent);
+  });
 });

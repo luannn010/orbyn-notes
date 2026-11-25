@@ -63,6 +63,7 @@ function document(tokens: Token[], filename: string): NoteDocument {
     );
   const root: NoteDocument = { type: "doc", content: [] };
   const stack: RichNode[] = [root];
+  const taskMarkers = new WeakMap<RichNode, RegExpExecArray>();
   const kinds: Record<string, string> = {
     paragraph_open: "paragraph",
     heading_open: "heading",
@@ -82,9 +83,21 @@ function document(tokens: Token[], filename: string): NoteDocument {
       parent.content!.push(node);
       stack.push(node);
     } else if (token.type.endsWith("_close")) stack.pop();
-    else if (token.type === "inline")
+    else if (token.type === "inline") {
+      const item = stack.at(-2);
+      if (
+        parent.type === "paragraph" &&
+        item?.type === "listItem" &&
+        item.content?.[0] === parent &&
+        stack.at(-3)?.type === "bulletList"
+      ) {
+        // Parsed text also contains escaped/marked literals. Only a source
+        // marker followed by whitespace or end-of-line admits a task item.
+        const marker = /^\[([ xX])\](?:[ \t]|(?=\n|$))/.exec(token.content);
+        if (marker) taskMarkers.set(item, marker);
+      }
       parent.content!.push(...inline(token.children ?? [], filename));
-    else if (["fence", "code_block"].includes(token.type))
+    } else if (["fence", "code_block"].includes(token.type))
       parent.content!.push({
         type: "codeBlock",
         attrs: { language: token.info.trim().split(/\s/)[0] || null },
@@ -102,7 +115,11 @@ function document(tokens: Token[], filename: string): NoteDocument {
       const groups: RichNode[] = [];
       for (const item of node.content ?? []) {
         const text = item.content?.[0]?.content?.[0];
-        const match = /^\[([ xX])\](?: |$)/.exec(text?.text ?? "");
+        const marker = taskMarkers.get(item);
+        const match =
+          marker && !text?.marks?.length && text?.text?.startsWith(marker[0])
+            ? marker
+            : null;
         const type = match ? "taskList" : "bulletList";
         if (match) {
           item.type = "taskItem";
@@ -239,9 +256,35 @@ function escapeMarkdownBodyText(
   text: string,
   before: string | undefined,
   after: string | undefined,
+  guardStart = false,
+  guardEnd = false,
 ): string {
+  let prefix = "",
+    suffix = "";
+  // An entity at a marked run's edge is punctuation in Markdown source. Fence
+  // its plain neighbor too so the adjacent mark delimiter can open or close.
+  if (guardStart && text.length) {
+    const point = text.codePointAt(0)!;
+    const first = String.fromCodePoint(point);
+    prefix = `&#${point};`;
+    before = first.at(-1);
+    text = text.slice(first.length);
+  }
+  if (guardEnd && text.length) {
+    let start = text.length - 1;
+    if (
+      start > 0 &&
+      /[\uDC00-\uDFFF]/.test(text[start]!) &&
+      /[\uD800-\uDBFF]/.test(text[start - 1]!)
+    )
+      start--;
+    const last = text.slice(start);
+    suffix = `&#${last.codePointAt(0)};`;
+    after = last[0];
+    text = text.slice(0, start);
+  }
   let offset = 0;
-  return text
+  const body = text
     .split("\n")
     .map((line, index) => {
       const escaped = escapeMarkdownText(line);
@@ -255,6 +298,7 @@ function escapeMarkdownBodyText(
       return `${previous && next && previous !== "\n" && next !== "\n" ? "\n" : "&#10;"}${escaped}`;
     })
     .join("");
+  return prefix + body + suffix;
 }
 
 type MarkdownLoss = "underline" | "adjacent lists" | "empty paragraphs";
@@ -391,13 +435,20 @@ function renderInline(
           );
         return reference(n);
       }
-      let text = bodyLines
-        ? escapeMarkdownBodyText(
-            n.text ?? "",
-            edge(nodes[index - 1], true),
-            edge(nodes[index + 1], false),
-          )
-        : escapeMarkdownText(n.text ?? "");
+      // Mark delimiters need non-whitespace edges; entities also retain the
+      // mark on a newline instead of introducing an unmarked soft-break node.
+      let text =
+        bodyLines && !n.marks?.length
+          ? escapeMarkdownBodyText(
+              n.text ?? "",
+              edge(nodes[index - 1], true),
+              edge(nodes[index + 1], false),
+              !!nodes[index - 1]?.marks?.length &&
+                !!nodes[index - 1]?.text?.endsWith("\n"),
+              !!nodes[index + 1]?.marks?.length &&
+                !!nodes[index + 1]?.text?.startsWith("\n"),
+            )
+          : escapeMarkdownText(n.text ?? "");
       let code: string | undefined;
       for (const mark of n.marks ?? []) {
         if (mark.type === "bold") text = `**${text}**`;

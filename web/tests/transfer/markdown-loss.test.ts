@@ -141,6 +141,30 @@ describe("Markdown loss reporting", () => {
     ).toEqual(imported.document);
   });
 
+  it.each(["bold", "italic", "strike"])(
+    "retains %s at a marked newline boundary",
+    (type) => {
+      for (const children of [
+        [
+          { type: "text", text: "a\n", marks: [{ type }] },
+          { type: "text", text: "b" },
+        ],
+        [
+          { type: "text", text: "a" },
+          { type: "text", text: "\nb", marks: [{ type }] },
+        ],
+      ]) {
+        const original = note([{ type: "paragraph", content: children }]);
+        const file = exportMarkdown([original])[0]!;
+        expect(file.content).toContain("&#10;");
+        expect(
+          parseMarkdown([{ name: file.filename, content: file.content }])[0]!
+            .document,
+        ).toEqual(original.document);
+      }
+    },
+  );
+
   it("retains literal newlines inside a heading instead of creating another block", () => {
     const original = note([
       {

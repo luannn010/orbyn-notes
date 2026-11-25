@@ -3,6 +3,43 @@ import type { Note } from "../../src/domain/contracts";
 import { exportMarkdown, parseMarkdown } from "../../src/transfer";
 
 describe("Markdown metadata and empty tasks", () => {
+  it.each([
+    ["- `[x]`", [{ type: "text", text: "[x]", marks: [{ type: "code" }] }]],
+    ["- **[x]**", [{ type: "text", text: "[x]", marks: [{ type: "bold" }] }]],
+    ["- \\[x]", [{ type: "text", text: "[x]" }]],
+    [
+      "- [x]**label**",
+      [
+        { type: "text", text: "[x]" },
+        { type: "text", text: "label", marks: [{ type: "bold" }] },
+      ],
+    ],
+  ])(
+    "keeps literal checkbox text as an ordinary bullet: %s",
+    (content, expected) => {
+      const result = parseMarkdown([
+        { name: "literal.md", content: content as string },
+      ])[0]!;
+      expect(result.document.content[0]!.type).toBe("bulletList");
+      expect(
+        result.document.content[0]!.content![0]!.content![0]!.content,
+      ).toEqual(expected);
+    },
+  );
+
+  it("recognizes a source task prefix before formatted content and preserves empty tasks", () => {
+    const result = parseMarkdown([
+      { name: "tasks.md", content: "- [x] **label**\n- [ ]" },
+    ])[0]!;
+    expect(result.document.content[0]!.type).toBe("taskList");
+    expect(
+      result.document.content[0]!.content![0]!.content![0]!.content,
+    ).toEqual([{ type: "text", text: "label", marks: [{ type: "bold" }] }]);
+    expect(
+      result.document.content[0]!.content![1]!.content![0]!.content,
+    ).toEqual([]);
+  });
+
   it("accepts empty frontmatter and retains the body", () => {
     const [result] = parseMarkdown([
       { name: "empty.md", content: "---\n---\nbody" },
