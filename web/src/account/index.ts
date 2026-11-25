@@ -20,6 +20,7 @@ import {
   readRecord,
   mutateRecord,
   signupRecovery,
+  UNCHANGED_RECORD,
 } from "../data/database";
 import type {
   DeviceRecord,
@@ -62,9 +63,16 @@ type VerifiedApproval = {
   code: string;
   snapshot: Uint8Array;
   signingKey: string;
+  initialGeneration?: number;
 };
 const APPROVAL_ZONE = "notes-local-approval";
 const APPROVAL_RECORD = "verified-checkpoint";
+function approvalSnapshotConflict(): AccountError {
+  return new AccountError(
+    "approval_snapshot_conflict",
+    "Merging approval with existing local data isn’t supported. Your saved data was not changed.",
+  );
+}
 export function createAccountService(options?: {
   engineUrl?: string;
 }): AccountService {
@@ -496,25 +504,82 @@ export function createAccountService(options?: {
   ): Promise<AccountSession> {
     // Durable local cryptographic evidence precedes the irreversible server effect.
     // If this aborts, the in-memory receipt survives so the consumed ceremony is not needed again.
-    await mutateRecord<DeviceRecord>("devices", current.email, (record) => {
-      assertOperation();
-      if (
-        !record ||
-        record.accountId !== current.accountId ||
-        record.deviceId !== current.deviceId
-      )
-        throw new AccountError(
-          "device_mismatch",
-          "This browser’s account device changed.",
-        );
-      return {
-        ...record,
-        verifiedTrust: true,
-        approvalCheckpointId: checkpoint.approvalId,
-        snapshot: checkpoint.snapshot,
-        generation: record.generation + 1,
-      };
-    });
+    const stored = await readRecord<DeviceRecord>("devices", current.email);
+    if (!stored)
+      throw new AccountError(
+        "keys_missing",
+        "This browser has no device keys.",
+      );
+    const secret = await wrappingSecret(stored.wrapKey);
+    try {
+      await mutateRecord<DeviceRecord>("devices", current.email, (record) => {
+        assertOperation();
+        if (
+          !record ||
+          record.accountId !== current.accountId ||
+          record.deviceId !== current.deviceId
+        )
+          throw new AccountError(
+            "device_mismatch",
+            "This browser’s account device changed.",
+          );
+        const keys = DeviceKeys.import(record.sealedKeys, secret);
+        let engine: SyncEngine | undefined;
+        try {
+          if (keys.signingKey() !== checkpoint.signingKey)
+            throw new AccountError(
+              "device_mismatch",
+              "This browser’s saved keys changed. Your saved data was not changed.",
+            );
+          const durable =
+            record.verifiedTrust &&
+            record.approvalCheckpointId === checkpoint.approvalId &&
+            record.snapshot;
+          if (
+            !durable &&
+            (record.snapshot ||
+              record.approvalCheckpointId ||
+              record.verifiedTrust ||
+              checkpoint.initialGeneration === undefined ||
+              !Number.isSafeInteger(record.generation) ||
+              record.generation < 0 ||
+              record.generation >= Number.MAX_SAFE_INTEGER ||
+              record.generation !== checkpoint.initialGeneration)
+          )
+            throw approvalSnapshotConflict();
+          engine = SyncEngine.restore(
+            keys,
+            durable ? record.snapshot! : checkpoint.snapshot,
+            secret,
+            Date.now(),
+          );
+          const raw = engine.record(APPROVAL_ZONE, APPROVAL_RECORD);
+          const proof = raw ? JSON.parse(raw) : null;
+          if (
+            proof?.record_type !== "approval_checkpoint" ||
+            proof.fields?.approvalId?.value !== checkpoint.approvalId ||
+            proof.fields?.code?.value !== checkpoint.code
+          )
+            throw new AccountError(
+              "approval_checkpoint_invalid",
+              "The saved device approval could not be restored.",
+            );
+          if (durable) return UNCHANGED_RECORD;
+        } finally {
+          engine?.free();
+          keys.free();
+        }
+        return {
+          ...record,
+          verifiedTrust: true,
+          approvalCheckpointId: checkpoint.approvalId,
+          snapshot: checkpoint.snapshot,
+          generation: record.generation + 1,
+        };
+      });
+    } finally {
+      secret.fill(0);
+    }
     let view = await activeDevice();
     if (view.device.state !== "trusted") {
       if (view.approval?.id !== checkpoint.approvalId)
@@ -923,6 +988,7 @@ export function createAccountService(options?: {
             "keys_missing",
             "This browser has no device keys.",
           );
+        if (stored.snapshot) throw approvalSnapshotConflict();
         const secret = await wrappingSecret(stored.wrapKey);
         let keys: DeviceKeys | undefined;
         try {
@@ -952,6 +1018,7 @@ export function createAccountService(options?: {
               code: verifiedCode,
               snapshot: ceremony.engine.snapshot(secret),
               signingKey: keys.signingKey(),
+              initialGeneration: stored.generation,
             };
             return await finishVerifiedApproval(current, verifiedApproval!);
           } finally {

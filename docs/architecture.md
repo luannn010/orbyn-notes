@@ -65,6 +65,11 @@ still requires successful OPAQUE authentication and a trusted server response,
 and never replaces an existing local device record. Established-device approval
 requires the engine's verified ceremony. A sealed approval checkpoint is committed
 before acknowledging its one-use code, so a failed subsequent write can retry.
+Approval retries validate the sealed checkpoint in the latest device snapshot
+and preserve that snapshot, including later edits and erase epochs. A first
+checkpoint write requires the captured device generation and no existing
+snapshot. Merging a new approval into existing local data is unsupported by the
+current engine interface; this path fails closed without replacing saved data.
 
 The production service worker precaches a versioned application-shell allowlist:
 HTML, JavaScript, CSS, fonts and WASM. It never caches account/API requests, notes,
