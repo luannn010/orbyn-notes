@@ -11,7 +11,7 @@ type Token = ReturnType<typeof parser.parse>[number];
 export const MAX_MARKDOWN_FILE_BYTES = 2_000_000;
 export const MAX_MARKDOWN_BATCH_BYTES = 10_000_000;
 export const MAX_MARKDOWN_FILES = 100;
-function inline(tokens: Token[]): RichNode[] {
+function inline(tokens: Token[], filename: string): RichNode[] {
   const nodes: RichNode[] = [];
   let marks: NonNullable<RichNode["marks"]> = [];
   for (const token of tokens) {
@@ -30,8 +30,10 @@ function inline(tokens: Token[]): RichNode[] {
     else if (token.type === "softbreak")
       nodes.push({ type: "text", text: "\n" });
     else if (token.type === "hardbreak") nodes.push({ type: "hardBreak" });
-    else if (token.type === "image" && token.content)
-      nodes.push({ type: "text", text: token.content });
+    else if (token.type === "image")
+      throw new Error(
+        `unsupported_image: ${JSON.stringify(filename)} contains an image, which is not supported yet. Keep the image and its URL separately before importing. Nothing was imported.`,
+      );
     else if (token.type.endsWith("_open")) {
       const kind: Record<string, string> = {
         strong_open: "bold",
@@ -81,7 +83,7 @@ function document(tokens: Token[], filename: string): NoteDocument {
       stack.push(node);
     } else if (token.type.endsWith("_close")) stack.pop();
     else if (token.type === "inline")
-      parent.content!.push(...inline(token.children ?? []));
+      parent.content!.push(...inline(token.children ?? [], filename));
     else if (["fence", "code_block"].includes(token.type))
       parent.content!.push({
         type: "codeBlock",
@@ -231,6 +233,47 @@ export function escapeMarkdownText(text: string): string {
       .replace(/\n/g, "&#10;")
   );
 }
+// Body lines can use readable soft breaks. Edges and consecutive newlines need
+// entities so Markdown does not trim them or split a single paragraph in two.
+function escapeMarkdownBodyText(
+  text: string,
+  before: string | undefined,
+  after: string | undefined,
+): string {
+  let offset = 0;
+  return text
+    .split("\n")
+    .map((line, index) => {
+      const escaped = escapeMarkdownText(line);
+      if (index === 0) {
+        offset = line.length;
+        return escaped;
+      }
+      const previous = text[offset - 1] ?? before;
+      const next = text[offset + 1] ?? after;
+      offset += line.length + 1;
+      return `${previous && next && previous !== "\n" && next !== "\n" ? "\n" : "&#10;"}${escaped}`;
+    })
+    .join("");
+}
+
+type MarkdownLoss = "underline" | "adjacent lists" | "empty paragraphs";
+const markdownLossMessages: Record<MarkdownLoss, string> = {
+  underline: "Markdown cannot preserve underline formatting.",
+  "adjacent lists": "Markdown can merge adjacent lists of the same kind.",
+  "empty paragraphs": "Markdown cannot preserve these empty paragraphs.",
+};
+export class UnsupportedMarkdownExportError extends Error {
+  constructor(reason: MarkdownLoss) {
+    super(
+      `unsupported_markdown_export: ${markdownLossMessages[reason]} Your notes were not changed.`,
+    );
+  }
+}
+type ReportMarkdownLoss = (reason: MarkdownLoss) => void;
+const rejectMarkdownLoss: ReportMarkdownLoss = (reason) => {
+  throw new UnsupportedMarkdownExportError(reason);
+};
 export function markdownCodeSpan(text: string): string {
   let longest = 0;
   for (const match of text.matchAll(/`+/g))
@@ -267,8 +310,7 @@ function inlineExtent(
     }
     const text = node.text ?? "";
     bytes += text.length * 6 + 4;
-    if (node.marks?.some((mark) => mark.type === "code"))
-      newlines += lineCount(text);
+    newlines += lineCount(text);
     for (const mark of node.marks ?? [])
       bytes +=
         4 +
@@ -331,9 +373,16 @@ function blockExtent(
 function renderInline(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
+  bodyLines = false,
 ): string {
+  const edge = (node: RichNode | undefined, last: boolean) => {
+    if (node?.type === "hardBreak") return "\n";
+    if (node?.type === "noteLink") return "\ufffc";
+    return last ? node?.text?.at(-1) : node?.text?.[0];
+  };
   return nodes
-    .map((n) => {
+    .map((n, index) => {
       if (n.type === "hardBreak") return "  \n";
       if (n.type === "noteLink") {
         if (!reference)
@@ -342,7 +391,13 @@ function renderInline(
           );
         return reference(n);
       }
-      let text = escapeMarkdownText(n.text ?? "");
+      let text = bodyLines
+        ? escapeMarkdownBodyText(
+            n.text ?? "",
+            edge(nodes[index - 1], true),
+            edge(nodes[index + 1], false),
+          )
+        : escapeMarkdownText(n.text ?? "");
       let code: string | undefined;
       for (const mark of n.marks ?? []) {
         if (mark.type === "bold") text = `**${text}**`;
@@ -351,7 +406,8 @@ function renderInline(
         else if (mark.type === "code") {
           code ??= markdownCodeSpan(n.text ?? "");
           text = code;
-        } else if (mark.type === "link") {
+        } else if (mark.type === "underline") reportLoss("underline");
+        else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
           text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
@@ -364,19 +420,31 @@ function renderInline(
 function renderBlocks(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
+  parent = "doc",
 ): string {
   return nodes
-    .map((n) => {
+    .map((n, index) => {
       const children = n.content ?? [];
+      if (
+        ["bulletList", "orderedList", "taskList"].includes(n.type) &&
+        nodes[index - 1]?.type === n.type
+      )
+        reportLoss("adjacent lists");
       switch (n.type) {
         case "paragraph":
-          return renderInline(children, reference);
+          if (
+            children.length === 0 &&
+            !(nodes.length === 1 && (parent === "doc" || parent === "taskItem"))
+          )
+            reportLoss("empty paragraphs");
+          return renderInline(children, reference, reportLoss, true);
         case "heading":
-          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children, reference)}`;
+          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children, reference, reportLoss)}`;
         case "horizontalRule":
           return "---";
         case "blockquote":
-          return renderBlocks(children, reference)
+          return renderBlocks(children, reference, reportLoss, n.type)
             .split("\n")
             .map((l) => `> ${l}`)
             .join("\n");
@@ -403,7 +471,12 @@ function renderBlocks(
                   : n.type === "taskList"
                     ? `- [${item.attrs?.checked ? "x" : " "}] `
                     : "- ";
-              return renderBlocks(item.content, reference)
+              return renderBlocks(
+                item.content,
+                reference,
+                reportLoss,
+                item.type,
+              )
                 .split("\n")
                 .map((line, i) =>
                   i === 0 ? prefix + line : " ".repeat(prefix.length) + line,
@@ -412,7 +485,7 @@ function renderBlocks(
             })
             .join("\n");
         default:
-          return renderBlocks(children, reference);
+          return renderBlocks(children, reference, reportLoss, n.type);
       }
     })
     .join("\n\n");
@@ -428,6 +501,7 @@ export function renderMarkdownSnapshot(
   notes: readonly Note[],
   reference?: (node: RichNode) => string,
   admission?: MarkdownAdmission,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
 ): Array<{ filename: string; content: string }> {
   return notes.map((note, index) => {
     admission?.admit(
@@ -444,7 +518,7 @@ export function renderMarkdownSnapshot(
         .replace(/[\uD800-\uDBFF]$/, "") || "Untitled";
     return {
       filename: `${name}-${index + (admission?.startIndex ?? 0) + 1}.md`,
-      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference)}\n`,
+      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference, reportLoss)}\n`,
     };
   });
 }

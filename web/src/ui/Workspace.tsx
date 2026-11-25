@@ -50,6 +50,7 @@ import { isDesktop } from "../desktop/window";
 import { openQuickNote, listenHandoff, replyHandoff } from "../desktop/capture";
 import { NotesMark } from "./NotesMark";
 import { buildDownload } from "./download";
+import { UnsupportedMarkdownExportError } from "../transfer";
 import { useDesktop } from "../desktop/DesktopShell";
 import { saveDesktopFile } from "../desktop/files";
 import { isLocalSession } from "../data/local";
@@ -1828,9 +1829,13 @@ export function Workspace({
       setDownload({ url: URL.createObjectURL(blob), name });
       setExportNotes(null);
       setNotice("Export prepared");
-    } catch {
+    } catch (failure) {
       if (ticket === exportGeneration.current)
-        setError("Couldn’t export notes. Your notes were not changed.");
+        setError(
+          failure instanceof UnsupportedMarkdownExportError
+            ? failure.message.replace(/^unsupported_markdown_export: /, "")
+            : "Couldn’t export notes. Your notes were not changed.",
+        );
     } finally {
       if (ticket === exportGeneration.current) {
         exportWorking.current = false;
