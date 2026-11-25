@@ -100,7 +100,7 @@ function document(tokens: Token[], filename: string): NoteDocument {
       const groups: RichNode[] = [];
       for (const item of node.content ?? []) {
         const text = item.content?.[0]?.content?.[0];
-        const match = /^\[([ xX])\] /.exec(text?.text ?? "");
+        const match = /^\[([ xX])\](?: |$)/.exec(text?.text ?? "");
         const type = match ? "taskList" : "bulletList";
         if (match) {
           item.type = "taskItem";
@@ -123,19 +123,25 @@ function document(tokens: Token[], filename: string): NoteDocument {
     ? root
     : { type: "doc", content: [{ type: "paragraph", content: [] }] };
 }
-function frontmatter(source: string): {
+function frontmatter(
+  source: string,
+  filename: string,
+): {
   body: string;
   title?: string;
   tags: string[];
 } {
   if (!source.startsWith("---\n")) return { body: source, tags: [] };
-  const end = source.indexOf("\n---\n", 4);
-  if (end < 0 || end > 10000)
+  const closing = /^---(?:\n|$)/gm;
+  closing.lastIndex = 4;
+  const delimiter = closing.exec(source);
+  const end = delimiter?.index ?? -1;
+  if (end < 0 || end - 1 > 10000)
     throw new Error(
-      "invalid_frontmatter: Use a closed title/tags front matter block.",
+      `invalid_frontmatter: ${JSON.stringify(filename)}: Use a closed title/tags front matter block.`,
     );
   const result: { body: string; title?: string; tags: string[] } = {
-    body: source.slice(end + 5),
+    body: source.slice(end + delimiter![0].length),
     tags: [],
   };
   const seen = new Set<string>();
@@ -144,7 +150,7 @@ function frontmatter(source: string): {
     const match = /^(title|tags):\s*(.*)$/.exec(line);
     if (!match || seen.has(match[1]!))
       throw new Error(
-        "invalid_frontmatter: Only title and tags are supported.",
+        `invalid_frontmatter: ${JSON.stringify(filename)}: Only title and tags are supported.`,
       );
     seen.add(match[1]!);
     let value: unknown;
@@ -152,16 +158,20 @@ function frontmatter(source: string): {
       value = JSON.parse(match[2]!);
     } catch {
       throw new Error(
-        "invalid_frontmatter: title and tags must use JSON strings and arrays.",
+        `invalid_frontmatter: ${JSON.stringify(filename)}: title and tags must use JSON strings and arrays.`,
       );
     }
     if (match[1] === "title") {
       if (typeof value !== "string")
-        throw new Error("invalid_frontmatter: Invalid title.");
+        throw new Error(
+          `invalid_frontmatter: ${JSON.stringify(filename)}: Invalid title.`,
+        );
       result.title = value;
     } else {
       if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
-        throw new Error("invalid_frontmatter: Invalid tags.");
+        throw new Error(
+          `invalid_frontmatter: ${JSON.stringify(filename)}: Invalid tags.`,
+        );
       result.tags = value;
     }
   }
@@ -190,6 +200,7 @@ export function parseMarkdown(
       throw new Error("invalid_file: Binary files cannot be imported.");
     const front = frontmatter(
       file.content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"),
+      file.name,
     );
     const doc = document(parser.parse(front.body, {}), file.name);
     const heading = doc.content.find((n) => n.type === "heading");
