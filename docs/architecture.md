@@ -53,6 +53,10 @@ does not delete saved keys or grant access to Notes; a verified session is still
 required before opening the store. Other bootstrap failures and local-workspace
 failures retain the existing retry screen.
 
+Lock invalidates account-request results and aborts their transport, including
+response-body reads. Operations remain serialized until cancellation settles;
+aborting a request does not undo any server-side effect.
+
 First-device trust is rooted in the account server. If verification succeeds but
 the local commit fails, the browser retains the original sealed signup keys for
 password-authenticated recovery. A verification-attempt marker selects those
