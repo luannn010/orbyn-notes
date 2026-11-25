@@ -807,19 +807,37 @@ export function RichEditor({
       const live = currentSlash(editor);
       if (!live) return;
       const rect = editor.view.coordsAtPos(live.to);
-      const width = Math.min(260, window.innerWidth - 16);
-      const below = window.innerHeight - rect.bottom - 8;
-      const above = rect.top - 8;
-      const flip = below < 240 && above > below;
-      const maxHeight = Math.max(0, flip ? above : below);
-      const height = Math.min(menuRef.current?.scrollHeight ?? 0, maxHeight);
+      // The visual viewport is what the on-screen keyboard shrinks, so measure
+      // against it instead of the layout viewport to keep the menu reachable.
+      const viewport = window.visualViewport,
+        gap = 8,
+        left = viewport?.offsetLeft ?? 0,
+        top = viewport?.offsetTop ?? 0,
+        width = viewport?.width ?? window.innerWidth,
+        height = viewport?.height ?? window.innerHeight,
+        right = left + width,
+        bottom = top + height;
+      const menu = menuRef.current,
+        ownWidth = Math.max(
+          0,
+          menu?.offsetWidth || Math.min(260, width - gap * 2),
+        ),
+        ownHeight = menu?.scrollHeight ?? 0;
+      const spaceBelow = Math.max(0, bottom - gap - rect.bottom),
+        spaceAbove = Math.max(0, rect.top - top - gap),
+        flip = ownHeight > spaceBelow && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(
+        0,
+        Math.min(flip ? spaceAbove : spaceBelow, height - gap * 2),
+      );
+      const rendered = Math.max(0, Math.min(ownHeight || maxHeight, maxHeight));
       setPosition({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+        left: Math.max(left + gap, Math.min(rect.left, right - ownWidth - gap)),
         top: Math.max(
-          8,
+          top + gap,
           Math.min(
-            flip ? rect.top - height : rect.bottom,
-            window.innerHeight - height - 8,
+            flip ? rect.top - rendered : rect.bottom,
+            bottom - gap - rendered,
           ),
         ),
         maxHeight,
@@ -828,9 +846,14 @@ export function RichEditor({
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
     };
   }, [editor, slash]);
   useEffect(() => {
