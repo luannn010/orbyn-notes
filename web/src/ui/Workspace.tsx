@@ -350,6 +350,19 @@ export function Workspace({
     setSourceUnavailable(null);
     setStudyEntry(null);
   });
+  const sourceCollections = sourceOwner ? sourceOwners.collections : null;
+  const deleteSourceEntries =
+    sourceOwner && sourceCollections
+      ? (entryIds: string[], expectedCollectionsEpoch: string) =>
+          import("../study/sourceStore").then(({ deleteStudyEntries }) =>
+            deleteStudyEntries(
+              sourceOwner,
+              sourceCollections,
+              entryIds,
+              expectedCollectionsEpoch,
+            ),
+          )
+      : undefined;
   const [libraryRead, setLibraryRead] = useState<LibraryReadResult | null>(
     null,
   );
@@ -2415,6 +2428,7 @@ export function Workspace({
                         ? (request) => void openSource(request)
                         : undefined
                     }
+                    onDeleteSourceEntries={deleteSourceEntries}
                     openEntry={studyEntry}
                     openClip={view === "clips" ? clipSearchRequest : null}
                     holdClipSearchOrigin={searchOrigin?.module === "clips"}

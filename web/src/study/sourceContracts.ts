@@ -164,6 +164,17 @@ export type SourceOwnerSnapshot = {
 };
 export interface SourceOwnerAccess {
   read(): Promise<SourceOwnerSnapshot>;
+  /**
+   * Deletes Study entries together with their source anchors in the library
+   * snapshot transaction. Anchors left without a Study entry are pruned at the
+   * same boundary; when every given entry is already gone, the call only
+   * performs that prune.
+   */
+  deleteEntries(
+    entryIds: readonly string[],
+    expectedCollectionsEpoch: string,
+    guard: () => void,
+  ): Promise<SourceOwnerSnapshot>;
   commit(
     command: SourceCommand,
     guard: () => void,

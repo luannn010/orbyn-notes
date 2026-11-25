@@ -19,7 +19,7 @@ import {
   emptyStudy,
   validateCollections,
 } from "../../src/collections/validation";
-import { createDeck, saveEntry } from "../../src/study/model";
+import { createDeck, deleteEntry, saveEntry } from "../../src/study/model";
 import { checkClose } from "../../src/desktop/closeGuard";
 import { Workspace } from "../../src/ui/Workspace";
 import { openCollectionsStore } from "../../src/collections/store";
@@ -88,7 +88,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function memoryStore(populated = false, sourceNoteId: string | null = null) {
+function memoryStore(
+  populated = false,
+  sourceNoteId: string | null = null,
+  anchoredSource = false,
+) {
   const at = new Date(Date.now() - 60_000);
   let study = emptyStudy("UTC");
   if (populated) {
@@ -101,11 +105,20 @@ function memoryStore(populated = false, sourceNoteId: string | null = null) {
       back: "In the cytoplasm",
       tags: [],
       source: sourceNoteId
-        ? {
-            noteId: sourceNoteId,
-            noteRevision: 1,
-            quote: "Glycolysis takes place in the cytoplasm.",
-          }
+        ? anchoredSource
+          ? {
+              version: 2,
+              noteId: sourceNoteId,
+              noteRevision: 1,
+              quote: "Glycolysis takes place in the cytoplasm.",
+              libraryEpoch: crypto.randomUUID(),
+              anchorId: crypto.randomUUID(),
+            }
+          : {
+              noteId: sourceNoteId,
+              noteRevision: 1,
+              quote: "Glycolysis takes place in the cytoplasm.",
+            }
         : null,
       revision: 1,
     };
@@ -706,5 +719,36 @@ describe("local Study", () => {
     await screen.findByRole("button", { name: "Show streak" });
     expect(state().study.preferences.showStreak).toBe(false);
     expect(screen.queryByText("Streak 0 days")).not.toBeInTheDocument();
+  });
+
+  it("deletes a card made from a note through the source owner that releases its anchor", async () => {
+    const { store, state } = memoryStore(true, crypto.randomUUID(), true),
+      entryId = state().study.entries[0]!.id;
+    const remove = vi.fn(async (entryIds: string[], expectedEpoch: string) => {
+      const current = state();
+      expect(entryIds).toEqual([entryId]);
+      expect(expectedEpoch).toBe(current.epoch);
+      return validateCollections({
+        ...current,
+        revision: current.revision + 1,
+        study: deleteEntry(current.study, entryId),
+      });
+    });
+    render(<StudyView store={store} onDeleteSourceEntries={remove} />);
+    await openDeck();
+    fireEvent.click(await screen.findByRole("button", { name: "Card menu" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete card" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete card?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete card" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+    expect(remove).toHaveBeenCalledWith([entryId], state().epoch);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Where does glycolysis take place?" }),
+    ).not.toBeInTheDocument();
+    // The fixture Collections writer never ran: the source owner owned the delete.
+    expect(state().study.entries).toHaveLength(1);
   });
 });
