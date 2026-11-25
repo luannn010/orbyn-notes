@@ -3,7 +3,6 @@ import { clozeProblem, scanClozeText, type ClozeProblem } from "./cloze";
 import { initialSchedule, nextSchedule, studyDay } from "./scheduler";
 
 const CLOZE_PROBLEMS: Record<ClozeProblem, string> = {
-  syntax: "Remove the stray {{ or }} that is not part of a blank.",
   unmatched: "Include each blank exactly once in the text.",
   duplicate: "Include each blank exactly once in the text.",
   answer: "Write the same answer after :: as the blank's answer.",
@@ -72,7 +71,7 @@ export function cardText(entry: StudyEntry, key: CardKey): { front: string; back
   if (entry.type === "cloze") {
     if (!key.startsWith("cloze:") || !entry.blanks.some(blank => `cloze:${blank.id}` === key)) throw new Error("card_missing: This blank no longer exists.");
     const answers = new Map(entry.blanks.map(blank => [blank.id, blank.answer]));
-    const markers = scanClozeText(entry.text).markers;
+    const markers = scanClozeText(entry.text);
     const render = (question: boolean) => {
       let output = "", cursor = 0;
       for (const marker of markers) {

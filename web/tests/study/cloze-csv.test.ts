@@ -105,10 +105,9 @@ describe("cloze answers with braces", () => {
   });
 
   it("parses {{c1::a}b}} as one blank with answer a}b", () => {
-    expect(scanClozeText("{{c1::a}b}}")).toEqual({
-      markers: [{ id: "c1", answer: "a}b", from: 0, to: 11 }],
-      residue: false,
-    });
+    expect(scanClozeText("{{c1::a}b}}")).toEqual([
+      { id: "c1", answer: "a}b", from: 0, to: 11 },
+    ]);
     const { state, deckId } = seed();
     const saved = saveEntry(
       state,
@@ -156,9 +155,28 @@ describe("cloze answers with braces", () => {
       blanks: [{ id: "c1", answer: "a}b" }],
     };
     expect(validateMakeCardDraft(draft)).toEqual(draft);
-    const broken = cloze(deckId, "{{c1}} {{", [{ id: "c1", answer: "a" }]);
-    expect(() => saveEntry(state, broken, at)).toThrow("cloze");
-    expect(() => validateMakeCardDraft({ ...draft, text: broken.text })).toThrow();
+    // Literal braces and unmatched {{ / }} in the text stay storable prose, so
+    // the model and the source draft must both keep accepting them.
+    const literal = cloze(deckId, "{{c1}} then {{{c2}}} and {{ done", [
+      { id: "c1", answer: "a" },
+      { id: "c2", answer: "b" },
+    ]);
+    const saved = saveEntry(state, literal, at);
+    expect(cardText(saved.entries[0]!, "cloze:c1")).toEqual({
+      front: "[...] then {b} and {{ done",
+      back: "a then {b} and {{ done",
+    });
+    expect(
+      validateMakeCardDraft({
+        ...draft,
+        text: literal.text,
+        blanks: literal.blanks,
+      }),
+    ).toMatchObject({ text: literal.text });
+    // An unknown marker id is still rejected everywhere.
+    const unknown = "{{c1}} {{other}}";
+    expect(() => saveEntry(state, cloze(deckId, unknown, [{ id: "c1", answer: "a" }]), at)).toThrow("cloze");
+    expect(() => validateMakeCardDraft({ ...draft, text: unknown })).toThrow();
   });
 });
 

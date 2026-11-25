@@ -10,9 +10,10 @@
  * closes at the first "}}": `{{c1::a}b}}` is one blank, id `c1`, answer `a}b`.
  * The editor stores answers in `blanks` and writes the placeholder form
  * `{{id}}`; the inline form `{{id::answer}}` is the same blank and its answer
- * must equal the stored one, so the two spellings can never disagree. Text
- * outside markers may contain single braces, but a leftover "{{" or "}}" stays
- * ambiguous and is rejected.
+ * must equal the stored one, so the two spellings can never disagree.
+ *
+ * Only well-formed markers are read. Braces elsewhere in the text stay literal
+ * prose: unmatched "{{" or "}}" must not make an otherwise valid card fail.
  */
 export type ClozeBlank = { id: string; answer: string };
 export type ClozeMarker = {
@@ -21,8 +22,7 @@ export type ClozeMarker = {
   from: number;
   to: number;
 };
-export type ClozeText = { markers: ClozeMarker[]; residue: boolean };
-export type ClozeProblem = "syntax" | "unmatched" | "duplicate" | "answer";
+export type ClozeProblem = "unmatched" | "duplicate" | "answer";
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 
@@ -37,8 +37,8 @@ function idUnit(unit: string): boolean {
   );
 }
 
-/** Scan cloze text once, left to right, and report marker spans plus residue. */
-export function scanClozeText(text: string): ClozeText {
+/** Scan cloze text once, left to right, and report its well-formed markers. */
+export function scanClozeText(text: string): ClozeMarker[] {
   const markers: ClozeMarker[] = [];
   // Once no "}}" exists at or after a position, no later inline answer can close.
   let closeFrom = Number.POSITIVE_INFINITY;
@@ -72,20 +72,7 @@ export function scanClozeText(text: string): ClozeText {
     }
     at++;
   }
-  let residue = false,
-    cursor = 0;
-  const ambiguous = (from: number, to: number) => {
-    const open = text.indexOf("{{", from);
-    if (open >= 0 && open < to) return true;
-    const close = text.indexOf("}}", from);
-    return close >= 0 && close < to;
-  };
-  for (const marker of markers) {
-    if (ambiguous(cursor, marker.from)) residue = true;
-    cursor = marker.to;
-  }
-  if (ambiguous(cursor, text.length)) residue = true;
-  return { markers, residue };
+  return markers;
 }
 
 /**
@@ -97,8 +84,7 @@ export function clozeProblem(
   text: string,
   blanks: readonly ClozeBlank[],
 ): ClozeProblem | null {
-  const { markers, residue } = scanClozeText(text);
-  if (residue) return "syntax";
+  const markers = scanClozeText(text);
   const answers = new Map<string, string>();
   for (const blank of blanks) if (!answers.has(blank.id)) answers.set(blank.id, blank.answer);
   const seen = new Set<string>();
