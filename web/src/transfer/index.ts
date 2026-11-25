@@ -317,12 +317,30 @@ function blockExtent(
   }
   return { bytes, newlines };
 }
+/** Whitespace at the edge of a marked run belongs outside its delimiters: a
+ * closing `**` after an encoded space is not right-flanking, so re-import would
+ * show the asterisks. */
+function splitEdgeWhitespace(text: string): {
+  leading: string;
+  core: string;
+  trailing: string;
+} {
+  const leading = /^[ \t]*/.exec(text)![0];
+  const rest = text.slice(leading.length);
+  const trailing = /[ \t]*$/.exec(rest)![0];
+  return { leading, core: rest.slice(0, rest.length - trailing.length), trailing };
+}
+/** A paragraph or heading edge would trim literal whitespace, so keep the
+ * existing entity form exactly there and leave interior spacing literal. */
+function escapeEdgeWhitespace(whitespace: string): string {
+  return whitespace.replace(/ /g, "&#32;").replace(/\t/g, "&#9;");
+}
 function renderInline(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
 ): string {
   return nodes
-    .map((n) => {
+    .map((n, index) => {
       if (n.type === "hardBreak") return "  \n";
       if (n.type === "noteLink") {
         if (!reference)
@@ -331,14 +349,22 @@ function renderInline(
           );
         return reference(n);
       }
-      let text = escapeMarkdownText(n.text ?? "");
+      const raw = n.text ?? "";
+      const marks = n.marks ?? [];
+      // A code span already keeps its own edge spaces through the fence padding.
+      const edge = marks.some((mark) => mark.type === "code")
+        ? null
+        : splitEdgeWhitespace(raw);
+      // Marking nothing but whitespace would emit an empty `****` run.
+      if (edge && edge.core === "") return escapeMarkdownText(raw);
+      let text = escapeMarkdownText(edge ? edge.core : raw);
       let code: string | undefined;
-      for (const mark of n.marks ?? []) {
+      for (const mark of marks) {
         if (mark.type === "bold") text = `**${text}**`;
         else if (mark.type === "italic") text = `*${text}*`;
         else if (mark.type === "strike") text = `~~${text}~~`;
         else if (mark.type === "code") {
-          code ??= markdownCodeSpan(n.text ?? "");
+          code ??= markdownCodeSpan(raw);
           text = code;
         } else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
@@ -346,7 +372,14 @@ function renderInline(
           text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
         }
       }
-      return text;
+      if (!edge) return text;
+      const leading =
+        index === 0 ? escapeEdgeWhitespace(edge.leading) : edge.leading;
+      const trailing =
+        index === nodes.length - 1
+          ? escapeEdgeWhitespace(edge.trailing)
+          : edge.trailing;
+      return leading + text + trailing;
     })
     .join("");
 }

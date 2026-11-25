@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { exportMarkdown, parseMarkdown } from "../../src/transfer";
-import type { Note } from "../../src/domain/contracts";
+import type { Note, NoteDocument } from "../../src/domain/contracts";
+
+const note = (document: NoteDocument): Note => ({
+  id: "fixture",
+  title: "Edge marks",
+  document,
+  tags: [],
+  createdAt: "2026-11-08T00:00:00Z",
+  updatedAt: "2026-11-08T00:00:00Z",
+  trashedAt: null,
+  revision: 1,
+});
 describe("Markdown transfer boundary", () => {
   it("keeps formatting and text when paragraphs start or end with a mark", () => {
     const result = parseMarkdown([{ name: "marks.md", content: "**Bold** and *italic* then ~~strike~~" }])[0]!;
@@ -9,6 +20,101 @@ describe("Markdown transfer boundary", () => {
     expect(nodes.filter(n => n.text).map(n => [n.text, n.marks?.map(m => m.type) ?? []])).toEqual([
       ["Bold", ["bold"]], [" and ", []], ["italic", ["italic"]], [" then ", []], ["strike", ["strike"]],
     ]);
+  });
+  it("keeps bold when the marked run ends with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "hello ", marks: [{ type: "bold" }] },
+              { type: "text", text: "world" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("**hello** world");
+    const reimported = parseMarkdown([
+      { name: exported.filename, content: exported.content },
+    ])[0]!;
+    const nodes = reimported.document.content[0]!.content!;
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe("hello world");
+    expect(
+      nodes
+        .filter((n) => n.text)
+        .map((n) => [n.text, n.marks?.map((m) => m.type) ?? []]),
+    ).toEqual([
+      ["hello", ["bold"]],
+      [" world", []],
+    ]);
+  });
+  it("keeps italic when the marked run ends with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "a" },
+              { type: "text", text: "lead ", marks: [{ type: "italic" }] },
+              { type: "text", text: "b" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("a*lead* b");
+    const reimported = parseMarkdown([
+      { name: exported.filename, content: exported.content },
+    ])[0]!;
+    expect(
+      reimported.document.content[0]!.content!.filter((n) => n.text).map((n) => [
+        n.text,
+        n.marks?.map((m) => m.type) ?? [],
+      ]),
+    ).toEqual([
+      ["a", []],
+      ["lead", ["italic"]],
+      [" b", []],
+    ]);
+  });
+  it("keeps strike when the marked run starts with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "a" },
+              { type: "text", text: " tail", marks: [{ type: "strike" }] },
+              { type: "text", text: "b" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("a ~~tail~~b");
+  });
+  it("still encodes whitespace at the paragraph edge of a marked run", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: " bold ", marks: [{ type: "bold" }] },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("&#32;**bold**&#32;");
   });
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
