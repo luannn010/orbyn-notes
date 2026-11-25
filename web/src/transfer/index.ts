@@ -429,7 +429,8 @@ export function renderMarkdownSnapshot(
       (note.title || "Untitled")
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
         .replace(/[. ]+$/g, "")
-        .slice(0, 100) || "Untitled";
+        .slice(0, 100)
+        .replace(/[\uD800-\uDBFF]$/, "") || "Untitled";
     return {
       filename: `${name}-${index + (admission?.startIndex ?? 0) + 1}.md`,
       content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference)}\n`,
