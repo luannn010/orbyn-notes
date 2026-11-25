@@ -8,7 +8,7 @@ describe("Unicode literal query contract", () => {
     ["Straße ẞ STRASSE", ["strasse", "ss"]],
     ["Σ σ ς", ["σ"]],
     ["I İ ı", ["i", "i\u0307", "ı"]],
-    ["CAFÉ cafe\u0301", ["café", "cafe\u0301"]],
+    ["CAFÉ cafe\u0301", ["café"]],
     ["\u{10400} \u{10428}", ["\u{10428}"]],
     ["ﬃ FFI <script>", ["ffi", "<script>"]],
   ])("folds %s with pinned default full mappings", (input, terms) => {
@@ -18,6 +18,11 @@ describe("Unicode literal query contract", () => {
     expect(compileSearchQuery("  Lisbon  LISBON \n costs ")?.raw).toBe("  Lisbon  LISBON \n costs ");
     expect(compileSearchQuery("word ".repeat(20))?.terms).toEqual(["word"]);
     expect(compileSearchQuery(" \t\n ")).toBe(null);
+  });
+  it("normalizes canonically equivalent queries to one NFC term", () => {
+    expect(compileSearchQuery("café")?.terms).toEqual(["café"]);
+    expect(compileSearchQuery("cafe\u0301")?.terms).toEqual(["café"]);
+    expect(compileSearchQuery("CAFÉ cafe\u0301")?.raw).toBe("CAFÉ cafe\u0301");
   });
   it("rejects oversized, incomplete or too-many-term input without truncation", () => {
     expect(compileSearchQuery("😀".repeat(100))?.raw.length).toBe(200);
@@ -54,6 +59,22 @@ describe("bounded literal matching and original scalar highlights", () => {
     expect(dotted.snippets[0]?.matches).toEqual([{ from: 1, to: 2 }]);
     const astral = await scan("\u{10428}", ["😀\u{10400}😀"]);
     expect(astral.snippets[0]?.matches).toEqual([{ from: 2, to: 4 }]);
+  });
+  it("matches canonically equivalent text in either normalization form", async () => {
+    const nfd = "cafe\u0301";
+    const composed = await scan("café", [nfd]);
+    expect(composed.mask).toBe(1);
+    expect(composed.snippets[0]).toEqual({ text: nfd, matches: [{ from: 0, to: 5 }], before: false, after: false });
+    const nfc = "café";
+    const decomposed = await scan("cafe\u0301", [nfc]);
+    expect(decomposed.mask).toBe(1);
+    expect(decomposed.snippets[0]).toEqual({ text: nfc, matches: [{ from: 0, to: 4 }], before: false, after: false });
+  });
+  it("keeps combining sequences inside one bounded chunk", async () => {
+    const chunked = await scan("é", ["x".repeat(4094) + "e\u0301"]);
+    expect(chunked.mask).toBe(1);
+    expect(chunked.snippets[0]?.matches).toEqual([{ from: 0, to: 2 }]);
+    expect(chunked.snippets[0]?.text).toBe("e\u0301");
   });
   it("matches across contiguous marked nodes and chunk splits but not semantic boundaries", async () => {
     expect((await scan("Straße", ["Stra", "ße"])).mask).toBe(1);

@@ -12,11 +12,15 @@ export type SearchExcerpt = Readonly<{
 export type TextSlice = Readonly<{ source: string; from: number; to: number }>;
 export type ChunkMatch = Readonly<{ mask: number; excerpt: SearchExcerpt | null }>;
 
-/** Descriptors only: the consumer reserves work before slicing/allocating. */
+/** Descriptors only: the consumer reserves work before slicing/allocating.
+ * Chunks end at a normalization cluster boundary where possible, so NFC is
+ * computed over the same text the caller meant. */
 export function* splitSearchText(source: string): Generator<TextSlice, void, void> {
   for (let from = 0; from < source.length; ) {
     let to = Math.min(from + 4095, source.length);
     if (to < source.length && high(source.charCodeAt(to - 1)) && low(source.charCodeAt(to))) to--;
+    if (to < source.length && to > from && continuesCluster(source.codePointAt(to)!))
+      to = clusterBoundary(source, from, to);
     yield { source, from, to };
     from = to;
   }
@@ -37,6 +41,79 @@ function prefix(term: string): readonly number[] {
     table[i] = size;
   }
   return table;
+}
+
+const marks = /\p{M}/u;
+const hangulVowel = (point: number) => point >= 0x1161 && point <= 0x1175;
+const hangulTrailing = (point: number) => point >= 0x11a8 && point <= 0x11c2;
+/** A code point that can continue the current NFC cluster. Canonical
+ * composition and ordering never cross a non-mark starter, except for Hangul
+ * vowel and trailing jamo. Marks with a zero combining class stay inside the
+ * cluster too: keeping more text together never changes canonical equivalence. */
+function continuesCluster(point: number): boolean {
+  return hangulVowel(point) || hangulTrailing(point) ||
+    (point >= 0x80 && marks.test(String.fromCodePoint(point)));
+}
+/** Moves a chunk end back to the start of the cluster that `to` falls inside,
+ * keeping base code units and their combining marks in one chunk. A cluster
+ * larger than the whole window cannot be split safely, so the bound wins. */
+function clusterBoundary(source: string, from: number, to: number): number {
+  let cut = to;
+  while (cut > from) {
+    const previous = cut - 1;
+    const start = low(source.charCodeAt(previous)) && previous > from &&
+      high(source.charCodeAt(previous - 1)) ? previous - 1 : previous;
+    cut = start;
+    if (!continuesCluster(source.codePointAt(cut)!)) return cut;
+  }
+  return to;
+}
+/** Start offsets of the clusters in text; the last cluster ends at text.length. */
+function clusterStarts(text: string): number[] {
+  const starts = [0];
+  for (let offset = 0; offset < text.length; ) {
+    const point = text.codePointAt(offset)!;
+    const size = point > 0xffff ? 2 : 1;
+    if (offset > 0 && !continuesCluster(point)) starts.push(offset);
+    offset += size;
+  }
+  return starts;
+}
+type NormalizedCluster = Readonly<{
+  text: string;
+  from: readonly number[];
+  to: readonly number[];
+}>;
+/** NFC of one cluster plus the original code-unit span of every normalized
+ * UTF16 unit. Per-code-point normalization is exact when it equals the whole
+ * cluster; when composition or reordering changed the result, each resulting
+ * unit maps to the whole cluster. */
+function normalizeCluster(original: string): NormalizedCluster {
+  const text = original.normalize("NFC");
+  const parts: { from: number; to: number; text: string }[] = [];
+  let joined = "";
+  for (let offset = 0; offset < original.length; ) {
+    const point = original.codePointAt(offset)!;
+    const size = point > 0xffff ? 2 : 1;
+    const part = original.slice(offset, offset + size).normalize("NFC");
+    parts.push({ from: offset, to: offset + size, text: part });
+    joined += part;
+    offset += size;
+  }
+  const from: number[] = [], to: number[] = [];
+  if (joined === text) {
+    for (const part of parts)
+      for (let unit = 0; unit < part.text.length; unit++) {
+        from.push(part.from);
+        to.push(part.to);
+      }
+  } else {
+    for (let unit = 0; unit < text.length; unit++) {
+      from.push(0);
+      to.push(original.length);
+    }
+  }
+  return { text, from, to };
 }
 
 /** KMP states span contiguous text nodes/chunks. A semantic atom that is not
@@ -97,32 +174,61 @@ export class LiteralMatcher {
     const admittedUnits = units + this.pendingHigh.length;
     const maximumFolded = admittedUnits * MAX_CASE_FOLD_UTF16_UNITS;
     const combinedBound = maximumFolded + this.tailFolded.length;
-    // Includes slicing, scalar folding, map construction, each linear KMP pass,
-    // bounded excerpt/range sorting and carry compaction. Actual settlement
-    // refunds the conservative Unicode/occurrence upper bound.
-    const reserve = admittedUnits * 12 + combinedBound * (40 + 12 * this.terms.length) + 100000;
+    // Includes slicing, normalization, scalar folding, map construction, each
+    // linear KMP pass, bounded excerpt/range sorting and carry compaction.
+    // Actual settlement refunds the conservative Unicode/occurrence upper bound.
+    const reserve = admittedUnits * 36 + combinedBound * (40 + 12 * this.terms.length) + 100000;
     yield { type: "reserve", bytes: reserve, visits: 1, scalars: admittedUnits };
     let text = this.pendingHigh + part.source.slice(part.from, part.to);
     this.pendingHigh = "";
-    if (!final && high(text.charCodeAt(text.length - 1))) {
+    if (!final && text.length > 0 && high(text.charCodeAt(text.length - 1))) {
       this.pendingHigh = text.slice(-1);
       text = text.slice(0, -1);
     }
     let folded = "", inputBytes = 0, foldedBytes = 0, scalars = 0;
     const from = this.tailFrom.slice(), to = this.tailTo.slice();
-    for (let offset = 0; offset < text.length; ) {
-      const point = text.codePointAt(offset)!;
-      const size = point > 0xffff ? 2 : 1;
-      const mapped = foldCodePoint(point);
-      folded += mapped;
-      inputBytes += utf8(point);
-      foldedBytes += bytes(mapped);
-      scalars++;
-      for (let i = 0; i < mapped.length; i++) {
-        from.push(this.tailText.length + offset);
-        to.push(this.tailText.length + offset + size);
+    const base = this.tailText.length;
+    const normalized = text.length === 0 ? "" : text.normalize("NFC");
+    if (normalized === text) {
+      for (let offset = 0; offset < text.length; ) {
+        const point = text.codePointAt(offset)!;
+        const size = point > 0xffff ? 2 : 1;
+        const mapped = foldCodePoint(point);
+        folded += mapped;
+        inputBytes += utf8(point);
+        foldedBytes += bytes(mapped);
+        scalars++;
+        for (let i = 0; i < mapped.length; i++) {
+          from.push(base + offset);
+          to.push(base + offset + size);
+        }
+        offset += size;
       }
-      offset += size;
+    } else {
+      const starts = clusterStarts(text);
+      for (let index = 0; index < starts.length; index++) {
+        const start = starts[index]!;
+        const end = starts[index + 1] ?? text.length;
+        const cluster = normalizeCluster(text.slice(start, end));
+        for (let offset = 0; offset < cluster.text.length; ) {
+          const point = cluster.text.codePointAt(offset)!;
+          const size = point > 0xffff ? 2 : 1;
+          const mapped = foldCodePoint(point);
+          folded += mapped;
+          foldedBytes += bytes(mapped);
+          for (let i = 0; i < mapped.length; i++) {
+            from.push(base + start + cluster.from[offset]!);
+            to.push(base + start + cluster.to[offset]!);
+          }
+          offset += size;
+        }
+        for (let offset = start; offset < end; ) {
+          const point = text.codePointAt(offset)!;
+          inputBytes += utf8(point);
+          scalars++;
+          offset += point > 0xffff ? 2 : 1;
+        }
+      }
     }
     const combined = this.tailText + text;
     const foldedOffset = this.tailFolded.length;
@@ -175,7 +281,7 @@ export class LiteralMatcher {
     this.tailTo = to.slice(keepFrom).map(value => value - keepOriginalFrom);
     this.consumed += text.length;
     const actual = inputBytes * 2 + foldedBytes + from.length * 8 + comparisons * 2 +
-      combined.length * 2 + this.tailText.length * 2 + ranges.length * 32 + 512;
+      combined.length * 2 + text.length * 2 + this.tailText.length * 2 + ranges.length * 32 + 512;
     yield { type: "settle", bytes: actual, visits: 1, scalars };
     return Object.freeze({ mask, excerpt });
   }
