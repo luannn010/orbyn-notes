@@ -223,6 +223,19 @@ export async function openCollectionsStore(
   let searchAdmission: ReturnType<typeof createSearchAdmission> | null = null;
   let observedEpoch: string | undefined;
   let persistence: PersistenceState = { status: "ready" };
+  let pendingWrites = 0,
+    pendingFailure: string | null = null;
+  function settleWrite(failure?: string) {
+    if (failure) pendingFailure = failure;
+    if (pendingWrites > 0) pendingWrites--;
+    if (pendingWrites > 0) return;
+    const message = pendingFailure;
+    pendingFailure = null;
+    persistence = message
+      ? { status: "failed", message }
+      : { status: "ready" };
+    notify();
+  }
   const listeners = new Set<() => void>();
   const epochListeners = new Set<(epoch: string) => void>();
   const closeListeners = new Set<() => void>();
@@ -442,6 +455,7 @@ export async function openCollectionsStore(
     )
       throw new Error("collections_invalid: Invalid mutation request.");
     assertOpen();
+    pendingWrites++;
     persistence = { status: "saving" };
     notify();
     try {
@@ -498,19 +512,13 @@ export async function openCollectionsStore(
         currentGuard,
       );
       assertOpen();
-      persistence = { status: "ready" };
       channel?.postMessage("changed");
-      notify();
+      settleWrite();
       assertOpen();
       return result;
     } catch (error) {
-      if (!closed) {
-        persistence = {
-          status: "failed",
-          message: "Collections could not be saved. Reload before retrying.",
-        };
-        notify();
-      }
+      if (!closed)
+        settleWrite("Collections could not be saved. Reload before retrying.");
       throw error;
     }
   }

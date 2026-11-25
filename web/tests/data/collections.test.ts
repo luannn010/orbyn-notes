@@ -348,6 +348,27 @@ describe("real WASM encrypted collections", () => {
     );
     expect(await store.read()).toEqual(committed);
   });
+  it("keeps the saving status until every overlapping write settles", async () => {
+    const store = await open();
+    const initial = await store.read();
+    const states: string[] = [];
+    store.subscribe(() => states.push(store.persistence().status));
+    const first = store.update(initial, deck);
+    const second = store.update(
+      { epoch: initial.epoch, revision: initial.revision + 1 },
+      (state) => state,
+    );
+    try {
+      await first;
+      expect(store.persistence().status).toBe("saving");
+      expect(states).toEqual(["saving", "saving"]);
+      await second;
+    } finally {
+      await second.catch(() => {});
+    }
+    expect(store.persistence().status).toBe("ready");
+    expect(states).toEqual(["saving", "saving", "ready"]);
+  });
   it("keeps review history immutable except for the one-way undo marker", async () => {
     const store = await open();
     const first = await store.update(await store.read(), card);
