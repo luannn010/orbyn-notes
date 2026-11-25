@@ -163,6 +163,24 @@ type NoteInput = {
   document: NoteDocument;
   tags: string[];
 };
+/** A tag is read back as a label, so keep the letters the user typed and only
+ * trim them, matching tagName(). Identity ignores case, so "a", "A" and " a"
+ * cannot all be stored. Lowercase is the dedupe key rather than full Unicode
+ * folding: "straße" and "STRASSE" read differently as tags, and stored legacy
+ * text may still hold lone surrogates, which a code-point fold rejects. */
+function normaliseTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const tag of tags) {
+    const name = tag.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(name);
+  }
+  return kept;
+}
 function validateInputMetadata(input: NoteInput): void {
   if (
     typeof input.title !== "string" ||
@@ -184,7 +202,7 @@ function inputForPolicy(input: NoteInput, policy: DocumentPolicy): NoteInput {
   return {
     title: input.title,
     document: inspectNoteDocument(input.document, policy).document,
-    tags: [...new Set(input.tags)],
+    tags: normaliseTags(input.tags),
   };
 }
 export function inspectNotes(

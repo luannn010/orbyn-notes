@@ -53,6 +53,15 @@ describe("Markdown transfer boundary", () => {
       ])[0],
     ).toEqual(imported);
   });
+  it("normalises front-matter tags once on import", () => {
+    const imported = parseMarkdown([
+      {
+        name: "tags.md",
+        content: '---\ntags: ["a", "A", " a", ""]\n---\n\nBody\n',
+      },
+    ])[0]!;
+    expect(imported.tags).toEqual(["a"]);
+  });
   it("treats HTML and javascript links as inert text", () => {
     const result = parseMarkdown([
       {
