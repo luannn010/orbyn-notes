@@ -266,11 +266,12 @@ function* cardField(
       else yield* plain(segment.answer, emit);
     }
     if ("source" in segment) {
-      for (let from = segment.from; from < segment.to;) {
-        const to = Math.min(segment.to, from + 4095);
-        yield* emit({ source: segment.source, from, to });
-        from = to;
-      }
+      for (const chunk of splitSearchText(
+        segment.source,
+        segment.from,
+        segment.to,
+      ))
+        yield* emit(chunk);
     }
   }
 }

@@ -15,11 +15,11 @@ export type ChunkMatch = Readonly<{ mask: number; excerpt: SearchExcerpt | null 
 /** Descriptors only: the consumer reserves work before slicing/allocating.
  * Chunks end at a normalization cluster boundary where possible, so NFC is
  * computed over the same text the caller meant. */
-export function* splitSearchText(source: string): Generator<TextSlice, void, void> {
-  for (let from = 0; from < source.length; ) {
-    let to = Math.min(from + 4095, source.length);
-    if (to < source.length && high(source.charCodeAt(to - 1)) && low(source.charCodeAt(to))) to--;
-    if (to < source.length && to > from && continuesCluster(source.codePointAt(to)!))
+export function* splitSearchText(source: string, start = 0, end = source.length): Generator<TextSlice, void, void> {
+  for (let from = start; from < end; ) {
+    let to = Math.min(from + 4095, end);
+    if (to < end && high(source.charCodeAt(to - 1)) && low(source.charCodeAt(to))) to--;
+    if (to < end && to > from && continuesCluster(source.codePointAt(to)!))
       to = clusterBoundary(source, from, to);
     yield { source, from, to };
     from = to;
@@ -48,10 +48,10 @@ const hangulVowel = (point: number) => point >= 0x1161 && point <= 0x1175;
 const hangulTrailing = (point: number) => point >= 0x11a8 && point <= 0x11c2;
 /** A code point that can continue the current NFC cluster. Canonical
  * composition and ordering never cross a non-mark starter, except for Hangul
- * vowel and trailing jamo. Marks with a zero combining class stay inside the
+ * vowel and trailing jamo and Kirat Rai vowel sign AA. Marks with a zero combining class stay inside the
  * cluster too: keeping more text together never changes canonical equivalence. */
 function continuesCluster(point: number): boolean {
-  return hangulVowel(point) || hangulTrailing(point) ||
+  return hangulVowel(point) || hangulTrailing(point) || point === 0x16d67 ||
     (point >= 0x80 && marks.test(String.fromCodePoint(point)));
 }
 /** Moves a chunk end back to the start of the cluster that `to` falls inside,
@@ -64,7 +64,7 @@ function clusterBoundary(source: string, from: number, to: number): number {
     const start = low(source.charCodeAt(previous)) && previous > from &&
       high(source.charCodeAt(previous - 1)) ? previous - 1 : previous;
     cut = start;
-    if (!continuesCluster(source.codePointAt(cut)!)) return cut;
+    if (!continuesCluster(source.codePointAt(cut)!)) return cut > from ? cut : to;
   }
   return to;
 }

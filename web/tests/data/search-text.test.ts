@@ -76,6 +76,17 @@ describe("bounded literal matching and original scalar highlights", () => {
     expect(chunked.snippets[0]?.matches).toEqual([{ from: 0, to: 2 }]);
     expect(chunked.snippets[0]?.text).toBe("e\u0301");
   });
+  it("advances past a normalization cluster larger than a chunk", () => {
+    const source = "e" + "\u0301".repeat(4095);
+    const chunks = splitSearchText(source);
+    const first = chunks.next().value!;
+    expect(first.to).toBeGreaterThan(first.from);
+    expect(chunks.next().value?.from).toBe(first.to);
+  });
+  it("matches canonical compositions whose second character is a letter", async () => {
+    const text = "\u{16D63}\u{16D67}";
+    expect((await scan(text, [text])).mask).toBe(1);
+  });
   it("matches across contiguous marked nodes and chunk splits but not semantic boundaries", async () => {
     expect((await scan("Straße", ["Stra", "ße"])).mask).toBe(1);
     expect((await scan("Straße", ["Stra", null, "ße"])).mask).toBe(0);

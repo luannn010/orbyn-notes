@@ -530,6 +530,32 @@ it("does not mark a display-only selected Cloze placeholder when identical liter
   expect(first.primary.text).toBe("[...] literal [...] second");
   expect(first.primary.matches).toEqual([{ from: 14, to: 19 }]);
 });
+it("matches a decomposed character across a cloze chunk boundary", async () => {
+  const f = await fixture(),
+    current = await f.collections.read();
+  const entry = current.study.entries.find((entry) => entry.type === "cloze")!;
+  await f.collections.update(current, (state) => ({
+    ...state,
+    study: saveEntry(
+      state.study,
+      {
+        ...entry,
+        type: "cloze",
+        revision: entry.revision + 1,
+        text: "x".repeat(4094) + "e\u0301 {{one}}",
+        blanks: [{ id: "one", answer: "answer" }],
+      },
+      new Date(),
+    ),
+  }));
+  const { index } = await build(f, "é");
+  const cards = await done(projectSearchPage(index, "card", 0, 50));
+  expect(
+    cards.some(
+      (hit) => hit.locator.kind === "card" && hit.locator.key === "cloze:one",
+    ),
+  ).toBe(true);
+});
 it("disposal terminates a held page iterator and rejects future readers", async () => {
   const f = await fixture(),
     { index } = await build(f, "common"),
