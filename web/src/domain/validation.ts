@@ -108,6 +108,19 @@ export function inspectNoteDocument(
       (typeof n.text !== "string" || n.text.length > 1000000)
     )
       throw new Error("invalid_document: Invalid text.");
+    if (n.type === "text") {
+      // ProseMirror refuses to load an empty text node, and the editor schema
+      // admits text only as the inline content of these parents.
+      if (!n.text) throw new Error("invalid_document: Invalid text.");
+      if (
+        parent !== "paragraph" &&
+        parent !== "heading" &&
+        parent !== "codeBlock"
+      )
+        throw new Error(
+          "invalid_document: A text node must be inside a paragraph, heading or code block.",
+        );
+    }
     if (
       n.attrs !== undefined &&
       (!n.attrs || typeof n.attrs !== "object" || Array.isArray(n.attrs))
@@ -118,6 +131,10 @@ export function inspectNoteDocument(
       (!Array.isArray(n.marks) ||
         n.marks.some(
           (m) =>
+            !m ||
+            typeof m !== "object" ||
+            Array.isArray(m) ||
+            typeof m.type !== "string" ||
             !["bold", "italic", "strike", "code", "link", "underline"].includes(
               m.type,
             ) ||
