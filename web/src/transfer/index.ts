@@ -301,9 +301,12 @@ function escapeMarkdownBodyText(
   return prefix + body + suffix;
 }
 
-type MarkdownLoss = "underline" | "adjacent lists" | "empty paragraphs";
+type MarkdownLoss =
+  "underline" | "adjacent lists" | "empty paragraphs" | "code line breaks";
 const markdownLossMessages: Record<MarkdownLoss, string> = {
   underline: "Markdown cannot preserve underline formatting.",
+  "code line breaks":
+    "Markdown cannot preserve code line breaks in inline code.",
   "adjacent lists": "Markdown can merge adjacent lists of the same kind.",
   "empty paragraphs": "Markdown cannot preserve these empty paragraphs.",
 };
@@ -455,6 +458,7 @@ function renderInline(
         else if (mark.type === "italic") text = `*${text}*`;
         else if (mark.type === "strike") text = `~~${text}~~`;
         else if (mark.type === "code") {
+          if (/[\r\n]/.test(n.text ?? "")) reportLoss("code line breaks");
           code ??= markdownCodeSpan(n.text ?? "");
           text = code;
         } else if (mark.type === "underline") reportLoss("underline");

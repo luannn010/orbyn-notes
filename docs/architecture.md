@@ -370,7 +370,8 @@ them; literal edge/consecutive newlines remain entities to retain their text.
 The shared label/source escaping contract is unchanged.
 
 This Markdown projection reports underline formatting, adjacent same-kind list
-boundaries and collapsed empty paragraphs as losses. Direct export rejects them with
+boundaries, collapsed empty paragraphs and line breaks inside inline code as losses.
+Direct export rejects them with
 an explicit reason. Authorized Notes bundles include readable Markdown, report
 these losses in README.txt and retain the exact documents in notes.json for
 manual recovery. A single empty document or empty task remains exportable.

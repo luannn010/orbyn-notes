@@ -53,6 +53,17 @@ const losses: Array<[string, RichNode[]]> = [
     ],
   ],
   ["empty paragraphs", [paragraph("Before"), paragraph(), paragraph("After")]],
+  ...["\n", "\r", "\r\n"].map((separator): [string, RichNode[]] => [
+    "code line breaks",
+    [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: `a${separator}b`, marks: [{ type: "code" }] },
+        ],
+      },
+    ],
+  ]),
   ...["bulletList", "orderedList", "taskList"].map(
     (type): [string, RichNode[]] => [
       "adjacent lists",
@@ -62,6 +73,24 @@ const losses: Array<[string, RichNode[]]> = [
 ];
 
 describe("Markdown loss reporting", () => {
+  it("keeps single-line code export lossless without a code-loss warning", () => {
+    const original = note([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "a ` b", marks: [{ type: "code" }] }],
+      },
+    ]);
+    const file = exportMarkdown([original])[0]!;
+    expect(
+      parseMarkdown([{ name: file.filename, content: file.content }])[0]!
+        .document,
+    ).toEqual(original.document);
+    expect(
+      renderNoteExport([original], projection).warnings.some((warning) =>
+        warning.includes("code line breaks"),
+      ),
+    ).toBe(false);
+  });
   it.each([
     "![alt](https://example.test/image.png)",
     "![](https://example.test/empty.png)",
