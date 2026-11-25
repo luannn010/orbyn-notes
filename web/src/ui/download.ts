@@ -15,9 +15,8 @@ export function buildDownload(
   }
   const files: Record<string, Uint8Array> = {};
   output.forEach((file, index) => {
-    files[
-      `${notes[index]?.trashedAt ? "Trash/" : ""}${index + 1}-${file.filename}`
-    ] = strToU8(file.content);
+    files[`${notes[index]?.trashedAt ? "Trash/" : ""}${file.filename}`] =
+      strToU8(file.content);
   });
   return {
     blob: new Blob([zipSync(files) as BlobPart], { type: "application/zip" }),
