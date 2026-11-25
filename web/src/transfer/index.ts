@@ -482,19 +482,24 @@ function renderInline(
         (linked && (!emphasis || whitespaceOnly))
         ? null
         : splitEdgeWhitespace(raw);
-      let text = escapeMarkdownText(whitespace ? whitespace.core : raw);
-      if (whitespace && whitespace.core === "") text = escapeMarkdownText(raw);
-      let code: string | undefined;
+      // A code span is literal source text, so it is the base the other marks
+      // wrap. Applying it inside the loop below replaced any `**`/`*`/`~~` or
+      // link already added, silently losing that formatting on export.
+      let text: string;
+      if (marks.some((mark) => mark.type === "code")) {
+        if (/[\r\n]/.test(raw)) reportLoss("code line breaks");
+        text = markdownCodeSpan(raw);
+      } else {
+        text = escapeMarkdownText(whitespace ? whitespace.core : raw);
+        if (whitespace && whitespace.core === "") text = escapeMarkdownText(raw);
+      }
       let linkHref: string | undefined;
       for (const mark of marks) {
+        if (mark.type === "code") continue;
         if (mark.type === "bold" && !whitespaceOnly) text = `**${text}**`;
         else if (mark.type === "italic" && !whitespaceOnly) text = `*${text}*`;
         else if (mark.type === "strike" && !whitespaceOnly) text = `~~${text}~~`;
-        else if (mark.type === "code") {
-          if (/[\r\n]/.test(raw)) reportLoss("code line breaks");
-          code ??= markdownCodeSpan(raw);
-          text = code;
-        } else if (mark.type === "underline") reportLoss("underline");
+        else if (mark.type === "underline") reportLoss("underline");
         else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
