@@ -47,6 +47,14 @@ devices receive no local grant, and explicit sign-out removes the grant. Browser
 data deletion removes the keys as well as the library; this beta has no synced or
 recoverable server copy. Exported Markdown is readable outside the app.
 
+Markdown file reading admits each file separately after the existing 100-file
+and 10 MB eligible-batch preflight. Files above 2 MB, unsupported extensions,
+read failures and parser or document-structure failures are named in the import
+review while valid files remain ready. Nothing is written until the user confirms.
+The atomic `parseMarkdown` API is unchanged for other callers; Workspace uses
+`readMarkdownFiles` to collect per-file results. Node/depth limits are retained,
+and admitted bytes remain charged even after a read or parse failure.
+
 First-device trust is rooted in the account server. If verification succeeds but
 the local commit fails, the browser retains the original sealed signup keys for
 password-authenticated recovery. A verification-attempt marker selects those

@@ -118,6 +118,10 @@ button.danger,
 .error {
   color: var(--red);
 }
+.markdown-import-error,
+.first-run-setup [role="alert"] {
+  overflow-wrap: anywhere;
+}
 button[aria-pressed="true"] {
   background: var(--sel);
 }
