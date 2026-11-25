@@ -30,6 +30,7 @@ import {
   progress,
 } from "../study/model";
 import { nextSchedule, studyDay } from "../study/scheduler";
+import { clozeProblem } from "../study/cloze";
 import { parseStudyCsv, importStudyCsv, exportStudyCsv } from "../study/csv";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { isDesktop } from "../desktop/window";
@@ -1902,14 +1903,10 @@ function CardForm({
         !blanks.length ||
         blanks.some(
           (blank) =>
-            !/^[A-Za-z0-9_-]+$/.test(blank.id) ||
-            !blank.answer.trim() ||
-            text.split(`{{${blank.id}}}`).length !== 2,
+            !/^[A-Za-z0-9_-]+$/.test(blank.id) || !blank.answer.trim(),
         ) ||
         new Set(blanks.map((blank) => blank.id)).size !== blanks.length ||
-        [...text.matchAll(/\{\{([^{}]+)\}\}/g)].some(
-          (match) => !blanks.some((blank) => blank.id === match[1]),
-        )
+        clozeProblem(text, blanks)
       ) {
         setValidation(
           "Give each blank a unique ID and answer, and use its {{ID}} once in the text.",

@@ -1,5 +1,13 @@
 import type { CardKey, Grade, ReviewCard, StudyEntry, StudyState } from "../collections/contracts";
+import { clozeProblem, scanClozeText, type ClozeProblem } from "./cloze";
 import { initialSchedule, nextSchedule, studyDay } from "./scheduler";
+
+const CLOZE_PROBLEMS: Record<ClozeProblem, string> = {
+  syntax: "Remove the stray {{ or }} that is not part of a blank.",
+  unmatched: "Include each blank exactly once in the text.",
+  duplicate: "Include each blank exactly once in the text.",
+  answer: "Write the same answer after :: as the blank's answer.",
+};
 
 function text(value: string, label: string, limit = 100_000) {
   if (typeof value !== "string" || !value.trim() || value.length > limit)
@@ -25,10 +33,9 @@ function keys(entry: StudyEntry): CardKey[] {
       for (const blank of entry.blanks) {
         if (!/^[A-Za-z0-9_-]{1,100}$/.test(blank.id) || ids.has(blank.id)) throw new Error("invalid_cloze: Each blank needs a unique identifier.");
         ids.add(blank.id); text(blank.answer, "cloze_answer");
-        if (entry.text.split(`{{${blank.id}}}`).length !== 2) throw new Error("invalid_cloze: Include each blank exactly once in the text.");
       }
-      if ([...entry.text.matchAll(/\{\{([^{}]+)\}\}/g)].some(match => !ids.has(match[1]!)))
-        throw new Error("invalid_cloze: Give every placeholder an answer.");
+      const problem = clozeProblem(entry.text, entry.blanks);
+      if (problem) throw new Error(`invalid_cloze: ${CLOZE_PROBLEMS[problem]}`);
       return entry.blanks.map(blank => `cloze:${blank.id}` as const);
     }
     default: throw new Error("invalid_card_type: Choose Basic, Reversed or Fill in the blank.");
@@ -64,7 +71,17 @@ export function deleteEntry(state: StudyState, entryId: string): StudyState {
 export function cardText(entry: StudyEntry, key: CardKey): { front: string; back: string } {
   if (entry.type === "cloze") {
     if (!key.startsWith("cloze:") || !entry.blanks.some(blank => `cloze:${blank.id}` === key)) throw new Error("card_missing: This blank no longer exists.");
-    const render = (question: boolean) => entry.text.replace(/\{\{([^{}]+)\}\}/g, (_, id: string) => question && key === `cloze:${id}` ? "[...]" : entry.blanks.find(blank => blank.id === id)?.answer ?? "[unavailable]");
+    const answers = new Map(entry.blanks.map(blank => [blank.id, blank.answer]));
+    const markers = scanClozeText(entry.text).markers;
+    const render = (question: boolean) => {
+      let output = "", cursor = 0;
+      for (const marker of markers) {
+        output += entry.text.slice(cursor, marker.from);
+        output += question && key === `cloze:${marker.id}` ? "[...]" : answers.get(marker.id) ?? "[unavailable]";
+        cursor = marker.to;
+      }
+      return output + entry.text.slice(cursor);
+    };
     return { front: render(true), back: render(false) };
   }
   if (!keys(entry).includes(key)) throw new Error("card_missing: This card direction no longer exists.");

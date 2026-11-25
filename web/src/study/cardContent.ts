@@ -184,10 +184,17 @@ function* parse(
     let literal = 0,
       open = -1,
       stage = 0,
-      length = 0;
+      length = 0,
+      idEnd = -1,
+      answerStart = -1;
     for (let from = 0; from < input.text.length;) {
       const to = Math.min(input.text.length, from + 4096),
-        found: { from: number; to: number; id: string }[] = [];
+        found: {
+          from: number;
+          to: number;
+          id: string;
+          answer: string | null;
+        }[] = [];
       yield* work(
         (to - from) * 40 + 128,
         1,
@@ -203,36 +210,73 @@ function* parse(
               if (unit === "{") {
                 stage = 2;
                 length = 0;
+                idEnd = -1;
+                answerStart = -1;
               } else {
                 stage = 0;
                 open = -1;
               }
             } else if (stage === 2) {
               if (unit === "}") stage = 3;
-              else if (unit === "{") {
+              else if (unit === ":") {
+                if (length) {
+                  idEnd = p;
+                  stage = 4;
+                } else {
+                  stage = 0;
+                  open = -1;
+                }
+              } else if (unit === "{") {
                 open = length === 0 ? p - 1 : p;
                 stage = length === 0 ? 2 : 1;
                 length = 0;
+                idEnd = -1;
+                answerStart = -1;
               } else if (length < 101) length++;
               else {
                 stage = 0;
                 open = -1;
               }
-            } else if (unit === "}" && length) {
+            } else if (stage === 3) {
+              if (unit === "}" && length) {
+                found.push({
+                  from: open,
+                  to: p + 1,
+                  id: input.text.slice(open + 2, p - 1),
+                  answer: null,
+                });
+                stage = 0;
+                open = -1;
+              } else if (unit === "{") {
+                open = p;
+                stage = 1;
+                length = 0;
+              } else {
+                stage = 0;
+                open = -1;
+              }
+            } else if (stage === 4) {
+              if (unit === ":") {
+                answerStart = p + 1;
+                stage = 5;
+              } else {
+                stage = 0;
+                open = -1;
+              }
+            } else if (stage === 5) {
+              if (unit === "}") stage = 6;
+            } else if (unit === "}") {
               found.push({
                 from: open,
                 to: p + 1,
-                id: input.text.slice(open + 2, p - 1),
+                id: input.text.slice(open + 2, idEnd),
+                answer: input.text.slice(answerStart, p - 1),
               });
               stage = 0;
               open = -1;
-            } else if (unit === "{") {
-              open = p;
-              stage = 1;
-              length = 0;
             } else {
-              stage = 0;
-              open = -1;
+              // A single "}" inside the inline answer is literal text.
+              stage = 5;
             }
           }
         },
@@ -241,6 +285,8 @@ function* parse(
       for (const marker of found) {
         const blank = yield* blanks.get(marker.id);
         if (!blank || blank.seen++) invalid();
+        // An inline answer is the same blank's answer, never a second one.
+        if (marker.answer !== null && marker.answer !== blank.answer) invalid();
         yield* work(32, 1, () =>
           literals.push({ from: literal, to: marker.from }),
         );
