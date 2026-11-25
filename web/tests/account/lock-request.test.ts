@@ -12,6 +12,7 @@ import {
   wrappingSecret,
 } from "../../src/data/database";
 import type { SignupRecord } from "../../src/data/database";
+import * as database from "../../src/data/database";
 
 beforeAll(async () => {
   initSync({
@@ -29,6 +30,42 @@ afterEach(() => {
   lock();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("does not start HTTP after a lock during sign-in preparation", async () => {
+  let preparing = () => {};
+  const atRead = new Promise<void>((resolve) => (preparing = resolve));
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const originalRead = database.readRecord;
+  vi.spyOn(database, "readRecord").mockImplementation(async (store, key) => {
+    if (store === "devices") {
+      preparing();
+      await gate;
+    }
+    return originalRead(store, key);
+  });
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(Response.json({ credential_response: "AA" }));
+  vi.stubGlobal("fetch", fetch);
+  const service = createAccountService({ engineUrl: "http://127.0.0.1:9999" });
+  const signingIn = service.signIn({
+    email: "synthetic-lock@example.test",
+    password: "Synthetic-password-only",
+  });
+  const result = signingIn.catch((error: unknown) => error);
+  try {
+    await atRead;
+    lock();
+    release();
+    const failure = await result;
+    expect(fetch.mock.calls.length).toBe(0);
+    expect(failure).toMatchObject({ code: "cancelled" });
+  } finally {
+    release();
+    await result;
+  }
 });
 
 it.each([200, 400])(

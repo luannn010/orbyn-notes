@@ -149,6 +149,7 @@ export function createAccountService(options?: {
     method = "POST",
     authenticated = false,
   ): Promise<T> {
+    assertOperation();
     if (!base)
       throw new AccountError(
         "engine_unavailable",
@@ -1030,7 +1031,6 @@ export function createAccountService(options?: {
               signingKey: keys.signingKey(),
               initialGeneration: stored.generation,
             };
-            return await finishVerifiedApproval(current, verifiedApproval!);
           } finally {
             ceremony.session.free();
             ceremony.engine.free();
@@ -1039,6 +1039,7 @@ export function createAccountService(options?: {
           keys?.free();
           secret.fill(0);
         }
+        return finishVerifiedApproval(current, verifiedApproval!);
       }),
     cancelDevice: () =>
       exclusive(async () => {

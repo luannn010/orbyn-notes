@@ -504,6 +504,51 @@ it("locks during approval preparation without consuming or double-freeing the ce
   }
 });
 
+it("releases approval preparation keys and secret before awaiting durable recovery", async () => {
+  const fixture = await ceremony();
+  const imported = vi.spyOn(DeviceKeys, "import");
+  const freed = vi.spyOn(DeviceKeys.prototype, "free");
+  const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+  const originalSecret = database.wrappingSecret;
+  let preparedSecret: Uint8Array | undefined;
+  vi.spyOn(database, "wrappingSecret").mockImplementation(async (key) => {
+    const secret = await originalSecret(key);
+    preparedSecret ??= secret;
+    return secret;
+  });
+  let recovering = () => {};
+  const atRecovery = new Promise<void>((resolve) => (recovering = resolve));
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const originalRead = database.readRecord;
+  let deviceReads = 0;
+  vi.spyOn(database, "readRecord").mockImplementation(async (store, key) => {
+    if (store === "devices" && ++deviceReads === 3) {
+      recovering();
+      await gate;
+    }
+    return originalRead(store, key);
+  });
+  const confirming = fixture.service.confirmDevice(fixture.sas);
+  const settled = confirming.catch((error: unknown) => error);
+  try {
+    await atRecovery;
+    expect(preparedSecret?.every((byte) => byte === 0)).toBe(true);
+    const preparationKeys = imported.mock.results[0]?.value;
+    expect(
+      freed.mock.instances.filter((instance) => instance === preparationKeys)
+        .length,
+    ).toBe(1);
+    expect(freeSession).toHaveBeenCalledTimes(1);
+    release();
+    expect(await settled).toMatchObject({ deviceState: "trusted" });
+  } finally {
+    release();
+    await settled;
+    fixture.close();
+  }
+});
+
 it("preserves a newer local note when retrying a cached approval checkpoint", async () => {
   const fixture = await ceremony();
   try {
