@@ -258,17 +258,20 @@ export async function openNotesStore(
     collections?: boolean;
     repair?: boolean;
     beforeStage?: () => void;
+    signal?: AbortSignal;
   }): Promise<T> {
     // Immutable invocation fence: adopting an erase result must not admit queued old work.
     const operationEpoch = handleEpoch,
       operationLockVersion = lockVersion();
     assertOpen();
+    options.signal?.throwIfAborted();
     if (options.change && legacyReadOnly && !options.legacyErase)
       throw new LibraryReadOnlyError();
     const secret = await wrappingSecret(initial.wrapKey);
     let result: T | undefined,
       resultingEpoch: string | null = null,
-      wrote = false;
+      wrote = false,
+      committed = false;
     let searchCandidate: {
       record: DeviceRecord;
       before?: DeviceRecord;
@@ -294,6 +297,7 @@ export async function openNotesStore(
     };
     try {
       guard();
+      options.signal?.throwIfAborted();
       function apply(
         record: DeviceRecord | undefined,
       ): DeviceRecord | typeof UNCHANGED_RECORD {
@@ -520,6 +524,7 @@ export async function openNotesStore(
             }
           }
           guard();
+          options.signal?.throwIfAborted();
           options.beforeStage?.();
           const changed = Boolean(options.change && !ctx.skipWrite);
           if (changed && !ctx.library) throw new LibraryReadOnlyError();
@@ -597,7 +602,13 @@ export async function openNotesStore(
           state = { status: "saving" };
           notify();
         }
-        await mutateRecord<DeviceRecord>("devices", identity.email, apply);
+        await mutateRecord<DeviceRecord>(
+          "devices",
+          identity.email,
+          apply,
+          options.signal,
+        );
+        committed = true;
         guard();
         if (options.erase && wrote) {
           handleEpoch = resultingEpoch;
@@ -623,13 +634,16 @@ export async function openNotesStore(
       return result as T;
     } catch (error) {
       if (options.change && !closed) {
-        state = {
-          status: "failed",
-          message:
-            error instanceof Error
-              ? error.message
-              : "The library could not be saved.",
-        };
+        state =
+          options.signal?.aborted && error === options.signal.reason && !committed
+            ? { status: "ready" }
+            : {
+                status: "failed",
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "The library could not be saved.",
+              };
         notify();
       }
       throw error;
@@ -1359,6 +1373,72 @@ export async function openNotesStore(
           syncMembership(writable(ctx), note, now);
         },
         project: (ctx) => findNote(ctx, id),
+      });
+    },
+    createBatch: async (entries, options) => {
+      const { signal, expectedEpoch } = options;
+      signal?.throwIfAborted();
+      uuid(expectedEpoch);
+      if (!Array.isArray(entries) || entries.length > 10)
+        throw new Error(
+          "import_batch_limit: Import at most 10 notes per transaction.",
+        );
+      const ids = new Set<string>();
+      let units = 0;
+      const checked = entries.map((entry) => {
+        noteId(entry.creationId);
+        if (ids.has(entry.creationId))
+          throw new Error("import_batch_invalid: Creation IDs must be distinct.");
+        ids.add(entry.creationId);
+        const input = validateInput(structuredClone(entry.input));
+        units += JSON.stringify(input).length;
+        if (entries.length > 1 && units > 1_000_000)
+          throw new Error(
+            "import_batch_limit: Split large imports into smaller transactions.",
+          );
+        return { id: entry.creationId, input };
+      });
+      return access({
+        signal,
+        change: (ctx) => {
+          const state = writable(ctx);
+          if (state.epoch !== expectedEpoch) throw new LibraryEpochError();
+          const current = new Map(ctx.notes.map((note) => [note.id, note]));
+          // Check every replay before adding any note to this transaction.
+          for (const entry of checked) {
+            const existing = current.get(entry.id);
+            if (
+              existing &&
+              (existing.revision !== 1 ||
+                existing.trashedAt ||
+                existing.title !== entry.input.title ||
+                !sameDocument(existing.document, entry.input.document) ||
+                JSON.stringify(existing.tags) !== JSON.stringify(entry.input.tags))
+            )
+              throw new RevisionConflictError(existing, {
+                ...existing,
+                ...entry.input,
+              });
+          }
+          const now = new Date().toISOString();
+          let added = false;
+          for (const entry of checked) {
+            if (current.has(entry.id)) continue;
+            const note: Note = {
+              ...entry.input,
+              id: entry.id,
+              createdAt: now,
+              updatedAt: now,
+              trashedAt: null,
+              revision: 1,
+            };
+            ctx.notes.push(note);
+            syncMembership(state, note, now);
+            added = true;
+          }
+          if (!added) ctx.skipWrite = true;
+        },
+        project: (ctx) => checked.map((entry) => findNote(ctx, entry.id)),
       });
     },
     update: async (id, patch, revision) => {
