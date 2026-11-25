@@ -331,20 +331,27 @@ function renderInline(
           );
         return reference(n);
       }
-      let text = escapeMarkdownText(n.text ?? "");
-      let code: string | undefined;
-      for (const mark of n.marks ?? []) {
-        if (mark.type === "bold") text = `**${text}**`;
-        else if (mark.type === "italic") text = `*${text}*`;
-        else if (mark.type === "strike") text = `~~${text}~~`;
-        else if (mark.type === "code") {
-          code ??= markdownCodeSpan(n.text ?? "");
-          text = code;
-        } else if (mark.type === "link") {
-          if (!safeHref(mark.attrs?.href))
-            throw new Error("unsafe_link: Invalid link.");
-          text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
-        }
+      // A code span is literal source text, so it is the base the other marks
+      // wrap. Applying it inline in the mark loop replaced the text and dropped
+      // any `**`/`*`/`~~` already added, silently losing formatting on export.
+      const marks = n.marks ?? [];
+      const usesCode = marks.some((mark) => mark.type === "code");
+      let text = usesCode
+        ? markdownCodeSpan(n.text ?? "")
+        : escapeMarkdownText(n.text ?? "");
+      // Fixed nesting keeps the output byte-stable for any mark ordering:
+      // emphasis inside, link outermost around the finished span.
+      const usesStrike = marks.some((mark) => mark.type === "strike");
+      const usesItalic = marks.some((mark) => mark.type === "italic");
+      const usesBold = marks.some((mark) => mark.type === "bold");
+      if (usesBold) text = `**${text}**`;
+      if (usesItalic) text = `*${text}*`;
+      if (usesStrike) text = `~~${text}~~`;
+      const link = marks.find((mark) => mark.type === "link");
+      if (link) {
+        if (!safeHref(link.attrs?.href))
+          throw new Error("unsafe_link: Invalid link.");
+        text = `[${text}](${String(link.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
       }
       return text;
     })
