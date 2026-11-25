@@ -704,3 +704,23 @@
 :root[data-motion="reduced"] .study-done-label {
   animation: none !important;
 }
+
+/*
+ * Windows High Contrast: the toast's edge is a box-shadow and the forecast
+ * bars are pure fills, so both disappear. System colours keep them visible
+ * without touching the Light, Dark and Dim themes.
+ */
+@media (forced-colors: active) {
+  .study-toast {
+    border: 1px solid CanvasText;
+  }
+
+  /* The bar height carries the value; keep the bar itself painted. */
+  .study-forecast i {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .study-forecast > div:first-child i {
+    background: Highlight;
+  }
+}

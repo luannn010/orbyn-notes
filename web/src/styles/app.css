@@ -1216,3 +1216,82 @@ dialog p {
 :root[data-motion="reduced"] .sidebar .nav {
   transition: color 150ms cubic-bezier(.4,0,.2,1), background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important;
 }
+
+/*
+ * Windows High Contrast: the user's theme replaces every author colour, so a
+ * control that relied on a translucent fill loses its boundary and its
+ * selected state. Restore both with system colours, which the theme maps to
+ * the user's own palette. Nothing outside this query is affected, so the
+ * Light, Dark and Dim themes are unchanged.
+ */
+@media (forced-colors: active) {
+  /* A control keeps a visible edge when its fill is replaced by Canvas. */
+  button {
+    border: 1px solid ButtonText;
+  }
+
+  /* Rows and inline text buttons already read as controls from their text. */
+  .note-open,
+  .sample-note-row,
+  .sample-clip-row,
+  .study-text-button,
+  .study-source {
+    border: 0;
+  }
+
+  /* Current and selected controls use the theme's Highlight pair. */
+  .nav.active,
+  button[aria-pressed="true"],
+  button[aria-current="page"],
+  button[aria-current="date"],
+  button[aria-selected="true"],
+  [role="option"][aria-selected="true"],
+  [data-active="true"] {
+    background: Highlight !important;
+    color: HighlightText !important;
+    /* Both colours still come from the user's theme; opting this one element
+       out keeps the pair rendering as a pair instead of two forced blocks. */
+    forced-color-adjust: none;
+  }
+
+  /* Labels, icons and counts inside a highlighted control follow its text. */
+  .nav.active :is(span, svg),
+  button[aria-pressed="true"] :is(span, small, b, strong, svg),
+  button[aria-current="page"] :is(span, small, b, strong, svg),
+  button[aria-current="date"] :is(span, small, b, strong, svg),
+  button[aria-selected="true"] :is(span, small, b, strong, svg),
+  [role="option"][aria-selected="true"] :is(span, small, b, strong, svg),
+  [data-active="true"] :is(span, small, b, strong, svg) {
+    color: inherit !important;
+  }
+
+  /* The moving highlight is a translucent layer; the active item carries the
+     cue above. */
+  .sidebar-selection-highlight {
+    display: none;
+  }
+
+  /* The avatar's coloured disc is forced away, so keep its outline. */
+  .sidebar-account-avatar {
+    border: 1px solid CanvasText;
+  }
+
+  /* Popovers draw their edge with a box-shadow, which forced colours remove. */
+  .action-menu,
+  .slash-menu {
+    border: 1px solid CanvasText;
+  }
+
+  /* Custom toggles paint their track and thumb with fills that forced colours
+     drop, so fall back to the native control, which always shows its state. */
+  .settings-row input[type="checkbox"] {
+    appearance: auto;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    background: none;
+  }
+  .settings-row input[type="checkbox"]::after {
+    content: none;
+  }
+}
