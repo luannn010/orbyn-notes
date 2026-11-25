@@ -13,6 +13,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("../../src/account", () => ({
   createAccountService: () => ({
+    close: () => {},
     current: async () => ({
       accountId: "synthetic-account",
       deviceId: "synthetic-device",

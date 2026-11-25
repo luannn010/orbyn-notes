@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createAccountService, subscribeLock } from "./account";
+import type { AccountServiceHandle } from "./account";
 import type { AccountService, AccountSession } from "./domain/contracts";
 import type { NotesLibraryStore } from "./library/contracts";
 import { AccountView, PendingDevice } from "./ui/AccountView";
@@ -57,13 +58,14 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
   );
   useEffect(() => {
     let active = true;
+    let created: AccountServiceHandle | null = null;
     setLoading(true);
     setError("");
     try {
-      const original = local ? null : createAccountService();
-      const account = original && isDesktop()
-        ? protectOperations(original, Object.keys(original))
-        : original;
+      created = local ? null : createAccountService();
+      const account = created && isDesktop()
+        ? protectOperations(created, Object.keys(created))
+        : created;
       setService(account);
       void (local ? openLocalSession(() => active) : account!.current())
         .then((s) => {
@@ -88,6 +90,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     }
     return () => {
       active = false;
+      created?.close();
     };
   }, [attempt, local]);
   useEffect(() => {

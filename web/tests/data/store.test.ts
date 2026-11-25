@@ -97,6 +97,22 @@ describe("real WASM sealed notes library", () => {
     a.close();
     b.close();
   });
+  it("recovers persistence status after a rejected revision conflict", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    await expect(
+      store.update(note.id, { title: "Stale writer" }, note.revision + 1),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    expect(store.persistence()).toEqual({ status: "ready" });
+    const updated = await store.update(
+      note.id,
+      { title: "Healthy again" },
+      note.revision,
+    );
+    expect(updated.title).toBe("Healthy again");
+    expect(store.persistence()).toEqual({ status: "ready" });
+    store.close();
+  });
   it("awaits transaction rollback and keeps the committed note on write failure", async () => {
     const store = await openNotesStore(identity);
     const note = await store.create(input);

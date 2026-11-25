@@ -65,9 +65,12 @@ type VerifiedApproval = {
 };
 const APPROVAL_ZONE = "notes-local-approval";
 const APPROVAL_RECORD = "verified-checkpoint";
+export type AccountServiceHandle = AccountService & {
+  close(): void;
+};
 export function createAccountService(options?: {
   engineUrl?: string;
-}): AccountService {
+}): AccountServiceHandle {
   const configured =
     options?.engineUrl ??
     (import.meta as ImportMeta & { env?: Record<string, string> }).env
@@ -123,7 +126,8 @@ export function createAccountService(options?: {
     verifiedApproval = undefined;
     verifiedEmail = undefined;
   }
-  onLock(discard);
+  const stopLock = onLock(discard);
+  let closed = false;
   async function request<T>(
     path: string,
     body?: unknown,
@@ -516,6 +520,13 @@ export function createAccountService(options?: {
     return value;
   }
   return {
+    // The owner releases the service when it stops driving this attempt.
+    close: () => {
+      if (closed) return;
+      closed = true;
+      stopLock();
+      discard();
+    },
     current: async () => {
       if (isLocking()) return null;
       // Retained local access is distinct from the HTTP bearer session, which is never persisted.
