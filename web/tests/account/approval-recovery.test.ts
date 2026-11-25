@@ -6,6 +6,7 @@ import {
   initSync,
   DeviceKeys,
   SyncEngine,
+  DeviceSession,
 } from "../../src/generated/wasm/orbyn_wasm.js";
 import { createAccountService } from "../../src/account";
 import { lock } from "../../src/account/session";
@@ -16,6 +17,7 @@ import {
   readRecord,
 } from "../../src/data/database";
 import type { SignupRecord, DeviceRecord } from "../../src/data/database";
+import * as database from "../../src/data/database";
 const accountId = "11111111-1111-4111-8111-111111111111",
   deviceId = "22222222-2222-4222-8222-222222222222",
   approverId = "33333333-3333-4333-8333-333333333333",
@@ -278,7 +280,105 @@ it("never checkpoints trust or grants access for a human code that WASM rejects"
     expect(
       (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
     ).not.toBe(true);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({
+      code: "approval_missing",
+    });
   } finally {
+    fixture.close();
+  }
+});
+
+it.each(["device-read", "wrapping-secret"])(
+  "retries the same approval after a pre-checkpoint %s failure",
+  async (failurePoint) => {
+    const fixture = await ceremony();
+    const finish = vi.spyOn(SyncEngine.prototype, "finishApproval");
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+    try {
+      const originalRead = database.readRecord;
+      let reads = 0;
+      const read = vi
+        .spyOn(database, "readRecord")
+        .mockImplementation(async (store, key) => {
+          if (
+            failurePoint === "device-read" &&
+            store === "devices" &&
+            ++reads === 2
+          )
+            throw new Error("Synthetic pre-checkpoint device read failure");
+          return originalRead(store, key);
+        });
+      const secret = vi.spyOn(database, "wrappingSecret");
+      if (failurePoint === "wrapping-secret")
+        secret.mockRejectedValueOnce(
+          new Error("Synthetic pre-checkpoint HMAC failure"),
+        );
+      await expect(
+        fixture.service.confirmDevice(fixture.sas),
+      ).rejects.toBeInstanceOf(Error);
+      read.mockRestore();
+      secret.mockRestore();
+      expect(await readRecord("access", "active")).toBeUndefined();
+      expect(
+        (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
+      ).not.toBe(true);
+      expect(fixture.posts()).toBe(0);
+      const consumedBeforeRetry = finish.mock.calls.length;
+      const retry = await fixture.service
+        .confirmDevice(fixture.sas)
+        .catch((error) => error);
+      expect(retry).toMatchObject({ deviceState: "trusted" });
+      expect(consumedBeforeRetry).toBe(0);
+      expect(finish).toHaveBeenCalledTimes(1);
+      expect(fixture.posts()).toBe(1);
+      expect(freeSession).toHaveBeenCalledTimes(1);
+      expect(freeEngine).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+it("locks during approval preparation without consuming or double-freeing the ceremony", async () => {
+  const fixture = await ceremony();
+  const finish = vi.spyOn(SyncEngine.prototype, "finishApproval");
+  const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+  const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+  let preparing = () => {};
+  const atSecret = new Promise<void>((resolve) => (preparing = resolve));
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const originalSecret = database.wrappingSecret;
+  const secret = vi
+    .spyOn(database, "wrappingSecret")
+    .mockImplementationOnce(async (key) => {
+      preparing();
+      await gate;
+      return originalSecret(key);
+    });
+  const confirming = fixture.service.confirmDevice(fixture.sas);
+  const cancelled = expect(confirming).rejects.toMatchObject({
+    code: "cancelled",
+  });
+  try {
+    await atSecret;
+    lock();
+    release();
+    await cancelled;
+    expect(finish.mock.calls.length).toBe(0);
+    expect(freeSession).toHaveBeenCalledTimes(1);
+    expect(freeEngine).toHaveBeenCalledTimes(1);
+    expect(fixture.posts()).toBe(0);
+    expect(await readRecord("access", "active")).toBeUndefined();
+    expect(
+      (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
+    ).not.toBe(true);
+  } finally {
+    release();
+    secret.mockRestore();
     fixture.close();
   }
 });

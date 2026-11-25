@@ -916,27 +916,26 @@ export function createAccountService(options?: {
             "Confirm the matching digits on your trusted device first.",
           );
         const ceremony = approval;
-        approval = undefined;
+        // Prepare fallible local reads before consuming the one-use ceremony.
+        const stored = await readRecord<DeviceRecord>("devices", current.email);
+        if (!stored)
+          throw new AccountError(
+            "keys_missing",
+            "This browser has no device keys.",
+          );
+        const secret = await wrappingSecret(stored.wrapKey);
+        let keys: DeviceKeys | undefined;
         try {
-          const verifiedCode = ceremony.engine.finishApproval(
-            ceremony.session,
-            JSON.stringify(view.approval),
-            code,
-            Date.now() / 1000,
-          );
-          const stored = await readRecord<DeviceRecord>(
-            "devices",
-            current.email,
-          );
-          if (!stored)
-            throw new AccountError(
-              "keys_missing",
-              "This browser has no device keys.",
-            );
-          const secret = await wrappingSecret(stored.wrapKey);
-          let keys: DeviceKeys | undefined;
+          keys = DeviceKeys.import(stored.sealedKeys, secret);
+          assertOperation();
+          approval = undefined;
           try {
-            keys = DeviceKeys.import(stored.sealedKeys, secret);
+            const verifiedCode = ceremony.engine.finishApproval(
+              ceremony.session,
+              JSON.stringify(view.approval),
+              code,
+              Date.now() / 1000,
+            );
             ceremony.engine.createZoneKey(APPROVAL_ZONE);
             const stamp = JSON.parse(ceremony.engine.tick(Date.now()));
             ceremony.engine.stage(
@@ -954,14 +953,14 @@ export function createAccountService(options?: {
               snapshot: ceremony.engine.snapshot(secret),
               signingKey: keys.signingKey(),
             };
+            return await finishVerifiedApproval(current, verifiedApproval!);
           } finally {
-            keys?.free();
-            secret.fill(0);
+            ceremony.session.free();
+            ceremony.engine.free();
           }
-          return await finishVerifiedApproval(current, verifiedApproval!);
         } finally {
-          ceremony.session.free();
-          ceremony.engine.free();
+          keys?.free();
+          secret.fill(0);
         }
       }),
     cancelDevice: () =>
