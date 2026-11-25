@@ -47,6 +47,12 @@ devices receive no local grant, and explicit sign-out removes the grant. Browser
 data deletion removes the keys as well as the library; this beta has no synced or
 recoverable server copy. Exported Markdown is readable outside the app.
 
+An account-mode local grant rejected as `local_access_invalid` returns to the
+existing signed-out entry so password authentication remains available. This
+does not delete saved keys or grant access to Notes; a verified session is still
+required before opening the store. Other bootstrap failures and local-workspace
+failures retain the existing retry screen.
+
 First-device trust is rooted in the account server. If verification succeeds but
 the local commit fails, the browser retains the original sealed signup keys for
 password-authenticated recovery. A verification-attempt marker selects those
