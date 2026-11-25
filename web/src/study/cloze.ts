@@ -1,6 +1,7 @@
 /**
- * One cloze grammar, shared by the card model, card rendering, source drafts,
- * stored-state validation and the card editor:
+ * One cloze grammar, shared by the card model, source drafts, stored-state
+ * validation and the card editor; the streaming card reader implements the same
+ * marker grammar.
  *
  *   marker := "{{" id ( "::" answer )? "}}"
  *   id     := [A-Za-z0-9_-]{1,100}
@@ -13,7 +14,8 @@
  * must equal the stored one, so the two spellings can never disagree.
  *
  * Only well-formed markers are read. Braces elsewhere in the text stay literal
- * prose: unmatched "{{" or "}}" must not make an otherwise valid card fail.
+ * prose for validation: unmatched "{{" or "}}" must not make an otherwise valid
+ * card fail.
  */
 export type ClozeBlank = { id: string; answer: string };
 export type ClozeMarker = {
