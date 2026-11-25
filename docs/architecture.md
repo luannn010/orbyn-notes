@@ -70,6 +70,8 @@ and preserve that snapshot, including later edits and erase epochs. A first
 checkpoint write requires the captured device generation and no existing
 snapshot. Merging a new approval into existing local data is unsupported by the
 current engine interface; this path fails closed without replacing saved data.
+Cancelling an approval completes the local lock when the server confirms it is
+already expired (`410 approval_expired`); other cancellation failures remain errors.
 
 The production service worker precaches a versioned application-shell allowlist:
 HTML, JavaScript, CSS, fonts and WASM. It never caches account/API requests, notes,

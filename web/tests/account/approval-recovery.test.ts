@@ -9,7 +9,7 @@ import {
   DeviceSession,
 } from "../../src/generated/wasm/orbyn_wasm.js";
 import { createAccountService } from "../../src/account";
-import { lock } from "../../src/account/session";
+import { lock, lockVersion } from "../../src/account/session";
 import {
   newWrappingKey,
   wrappingSecret,
@@ -43,7 +43,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.stubGlobal("indexedDB", new IDBFactory());
 });
-async function ceremony() {
+async function ceremony(
+  cancelResponse = async (): Promise<Response> =>
+    new Response(null, { status: 204 }),
+) {
   const pendingKeys = DeviceKeys.create(),
     trustedKeys = DeviceKeys.create();
   const wrapKey = await newWrappingKey();
@@ -135,6 +138,7 @@ async function ceremony() {
         posts++;
         return Response.json({ ...pendingDevice, state: "trusted" });
       }
+      if (url.endsWith("/cancel")) return cancelResponse();
       throw new Error("Unexpected synthetic HTTP path");
     }),
   );
@@ -271,6 +275,113 @@ it("restores sealed verified approval after reload when server acknowledgement s
     expect(await fresh.pendingDevice()).toEqual({ status: "trusted" });
     expect((await fresh.current())?.deviceState).toBe("trusted");
     expect(fixture.posts()).toBe(1);
+  } finally {
+    fixture.close();
+  }
+});
+
+it.each([204, 410])(
+  "completes local approval cancellation for HTTP %i",
+  async (status) => {
+    const fixture = await ceremony(async () =>
+      status === 204
+        ? new Response(null, { status })
+        : Response.json({ code: "approval_expired" }, { status }),
+    );
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+    try {
+      const stored = await readRecord<DeviceRecord>("devices", email);
+      const before = lockVersion();
+      await expect(fixture.service.cancelDevice()).resolves.toBeUndefined();
+      expect(lockVersion()).toBe(before + 1);
+      expect(await fixture.service.current()).toBeNull();
+      expect(await readRecord("devices", email)).toEqual(stored);
+      expect(await readRecord("access", "active")).toBeUndefined();
+      expect(freeSession).toHaveBeenCalledTimes(1);
+      expect(freeEngine).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+it.each([
+  [401, "approval_expired"],
+  [500, "approval_expired"],
+  [410, "other_failure"],
+  [404, "not_found"],
+  [0, "network_error"],
+] as const)(
+  "preserves cancellation failure for HTTP %i / %s",
+  async (status, code) => {
+    const fixture = await ceremony(async () => {
+      if (!status) throw new TypeError("Synthetic offline");
+      return Response.json({ code }, { status });
+    });
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    try {
+      const stored = await readRecord<DeviceRecord>("devices", email);
+      const before = lockVersion();
+      await expect(fixture.service.cancelDevice()).rejects.toMatchObject({
+        code,
+      });
+      expect(lockVersion()).toBe(before);
+      expect((await fixture.service.current())?.deviceState).toBe("pending");
+      expect(await readRecord("devices", email)).toEqual(stored);
+      expect(freeSession.mock.calls.length).toBe(0);
+    } finally {
+      lock();
+      fixture.close();
+    }
+  },
+);
+
+it("does not swallow a stale approval-expired cancellation response after lock", async () => {
+  let atServer = () => {};
+  const requested = new Promise<void>((resolve) => (atServer = resolve));
+  let respond = (_value: Response) => {};
+  const fixture = await ceremony(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+        atServer();
+      }),
+  );
+  const cancelling = fixture.service.cancelDevice();
+  const cancelled = expect(cancelling).rejects.toMatchObject({
+    code: "cancelled",
+  });
+  try {
+    await requested;
+    lock();
+    const before = lockVersion();
+    respond(Response.json({ code: "approval_expired" }, { status: 410 }));
+    await cancelled;
+    expect(lockVersion()).toBe(before);
+  } finally {
+    fixture.close();
+  }
+});
+
+it("fences a lock between an expired HTTP result and the cancellation catch", async () => {
+  const fixture = await ceremony(async () => {
+    const response = Response.json(
+      { code: "approval_expired" },
+      { status: 410 },
+    );
+    vi.spyOn(response, "json").mockImplementation(async () => {
+      queueMicrotask(() => queueMicrotask(() => lock()));
+      return { code: "approval_expired" };
+    });
+    return response;
+  });
+  try {
+    const before = lockVersion();
+    await expect(fixture.service.cancelDevice()).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(lockVersion()).toBe(before + 1);
   } finally {
     fixture.close();
   }

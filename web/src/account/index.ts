@@ -67,6 +67,15 @@ type VerifiedApproval = {
 };
 const APPROVAL_ZONE = "notes-local-approval";
 const APPROVAL_RECORD = "verified-checkpoint";
+class AccountResponseError extends AccountError {
+  constructor(
+    code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(code, message);
+  }
+}
 function approvalSnapshotConflict(): AccountError {
   return new AccountError(
     "approval_snapshot_conflict",
@@ -232,9 +241,10 @@ export function createAccountService(options?: {
             "The account service requires a sign-up proof. Please try again later.",
           email_unverified: "Verify your email before signing in.",
         };
-        throw new AccountError(
+        throw new AccountResponseError(
           code,
           messages[code] ?? "The account request failed. Please retry.",
+          response.status,
         );
       }
       if (response.status === 204) return undefined as T;
@@ -1032,13 +1042,24 @@ export function createAccountService(options?: {
       }),
     cancelDevice: () =>
       exclusive(async () => {
-        if (approval)
-          await request(
-            `/v1/devices/approvals/${approval.view.id}/cancel`,
-            {},
-            "POST",
-            true,
-          );
+        if (approval) {
+          try {
+            await request(
+              `/v1/devices/approvals/${approval.view.id}/cancel`,
+              {},
+              "POST",
+              true,
+            );
+          } catch (error) {
+            if (!(
+              error instanceof AccountResponseError &&
+              error.status === 410 &&
+              error.code === "approval_expired"
+            ))
+              throw error;
+          }
+        }
+        assertOperation();
         lock();
       }),
     signOut: async () => {
