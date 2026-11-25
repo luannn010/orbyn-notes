@@ -1213,9 +1213,6 @@ dialog p {
   }
 }
 :root[data-motion="reduced"] .sidebar-selection-highlight { transition: none !important; }
-:root[data-motion="reduced"] .sidebar .nav {
-  transition: color 150ms cubic-bezier(.4,0,.2,1), background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important;
-}
 
 /*
  * Windows High Contrast: the user's theme replaces every author colour, so a
@@ -1294,4 +1291,7 @@ dialog p {
   .settings-row input[type="checkbox"]::after {
     content: none;
   }
+}
+:root[data-motion="reduced"] .sidebar .nav {
+  transition: color 150ms cubic-bezier(.4,0,.2,1), background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important;
 }
