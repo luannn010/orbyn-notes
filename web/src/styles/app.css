@@ -1222,6 +1222,7 @@ dialog p {
 }
 
 /* Phone tap targets: buttons, fields and selects reach at least 44x44 CSS px.
+   Notes designs f7e322f7: editor, phones-notes, st-review-phone.
    Scoped to the phone layout so desktop sizing is unchanged. The keyboard-only
    skip link and checkboxes inside their clickable label are left as they are. */
 @media (max-width: 899px) {
@@ -1250,6 +1251,10 @@ dialog p {
   body .editor-format-toolbar .editor-format-more,
   body .editor-format-toolbar .editor-format-view button,
   body .editor-format-menu button,
+  body .study-selection-toolbar > button,
+  body .link-popover button,
+  body .editor-format-notice button,
+  body .slash-menu > button,
   body .clips-view button,
   body .study-view button,
   body .journal-view .journal-actions button,
@@ -1281,6 +1286,7 @@ dialog p {
 
   body .study-view .menu-anchor > button,
   body .study-view .study-review-heading button,
+  body .study-blank-fields > button,
   body .editor-format-quick .editor-format-icon {
     min-width: 44px;
   }
