@@ -366,7 +366,7 @@ it("cancels the actual file-selection operation without completing setup or leav
   expect(f.store.create).not.toHaveBeenCalled();
   expect(f.preference.isDismissed()).toBe(false);
 });
-it("identifies a table file in a mixed batch without creating any notes", async () => {
+it("identifies a table file while keeping valid Markdown ready without creating notes before confirmation", async () => {
   const f = fixture();
   fireEvent.click(
     within(await setup()).getByRole("button", { name: "Import notes" }),
@@ -379,13 +379,11 @@ it("identifies a table file in a mixed batch without creating any notes", async 
       ],
     },
   });
-  const dialog = await setup();
-  await waitFor(() => expect(dialog).toHaveTextContent(/table\.md/));
+  const dialog = await screen.findByRole("dialog", { name: "Import Markdown" });
+  expect(dialog).toHaveTextContent(/table\.md/);
   expect(dialog).toHaveTextContent(/Convert the table to text/);
-  expect(dialog).toHaveTextContent(/Nothing was imported/);
-  expect(
-    screen.queryByRole("dialog", { name: "Import Markdown" }),
-  ).not.toBeInTheDocument();
+  expect(dialog).toHaveTextContent("1 files ready. Original files remain untouched.");
+  expect(within(dialog).getByRole("button", { name: "Import remaining" })).toBeEnabled();
   expect(f.store.create).not.toHaveBeenCalled();
   expect(f.notes).toHaveLength(0);
 });
@@ -490,7 +488,7 @@ it("keeps invalid Markdown selection on the import step with no writes, completi
   });
   const dialog = await setup();
   await within(dialog).findByRole("alert");
-  expect(dialog).toHaveTextContent("Choose Markdown files up to 2 MB each.");
+  expect(dialog).toHaveTextContent("wrong.txt: Choose a Markdown file.");
   expect(dialog).toHaveTextContent("Step 2 of 3");
   expect(f.store.create).not.toHaveBeenCalled();
   expect(f.preference.isDismissed()).toBe(false);

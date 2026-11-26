@@ -39,6 +39,7 @@ function setHash(hash: string) {
 const hash = () => "#note/v1/" + encodeNoteReference(target).split("/v1/")[1];
 vi.mock("../../src/account", () => ({
   createAccountService: () => ({
+    close: () => {},
     current: async () => fixture.session,
     signOut: async () => {
       fixture.lock?.();

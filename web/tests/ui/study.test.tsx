@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StudyView } from "../../src/ui/StudyView";
+import { SourceError } from "../../src/study/sourceContracts";
 import type {
   CollectionsState,
   CollectionsStore,
@@ -719,6 +720,44 @@ describe("local Study", () => {
     await screen.findByRole("button", { name: "Show streak" });
     expect(state().study.preferences.showStreak).toBe(false);
     expect(screen.queryByText("Streak 0 days")).not.toBeInTheDocument();
+  });
+
+  it("reopens with a fresh owner when deleting a source card reports revocation", async () => {
+    const old = memoryStore(true, crypto.randomUUID(), true);
+    const fresh = memoryStore();
+    const remove = vi
+      .fn()
+      .mockRejectedValue(new SourceError("source_revoked", "Workspace erased"));
+    const reopen = vi.fn(() => rerender(<StudyView store={fresh.store} />));
+    const { rerender } = render(
+      <StudyView
+        store={old.store}
+        onDeleteSourceEntries={remove}
+        onReopen={reopen}
+      />,
+    );
+    await openDeck();
+    fireEvent.click(await screen.findByRole("button", { name: "Card menu" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Delete card" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Delete card?" });
+    const readsBefore = vi.mocked(old.store.read).mock.calls.length;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete card" }));
+    expect(
+      await screen.findByText("Study is no longer available."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Where does glycolysis take place?"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete card" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(reopen).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(fresh.store.read).toHaveBeenCalled());
+    expect(vi.mocked(old.store.read).mock.calls).toHaveLength(readsBefore);
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it("deletes a card made from a note through the source owner that releases its anchor", async () => {

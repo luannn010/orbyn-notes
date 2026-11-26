@@ -18,7 +18,7 @@ const account = vi.hoisted(() => ({
 vi.mock("../../src/account", () => ({
   createAccountService: () => {
     account.create();
-    return { current: account.current, signIn: account.signIn };
+    return { close: () => {}, current: account.current, signIn: account.signIn };
   },
   subscribeLock: () => () => {},
 }));
