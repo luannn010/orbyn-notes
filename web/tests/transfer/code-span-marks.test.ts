@@ -184,6 +184,32 @@ const textNode = (text: string, marks: Mark[] = []): RichNode => ({
   marks,
 });
 it.each([
+  [true, "\u00a0"],
+  [false, "\u00a0"],
+  [true, "\u0085"],
+  [false, "\u0085"],
+])(
+  "round trips non-ASCII whitespace at an emphasis edge",
+  (before, whitespace) => {
+    const children = before
+      ? [textNode(whitespace, [bold, link]), textNode("x", [bold, link, code])]
+      : [textNode("x", [bold, link, code]), textNode(whitespace, [bold, link])];
+    const file = exportMarkdown([
+      note({
+        type: "doc",
+        content: [{ type: "paragraph", content: children }],
+      }),
+    ])[0]!;
+    const parsed = parseMarkdown([
+      { name: file.filename, content: file.content },
+    ])[0]!;
+    expect(
+      ranges(parsed.document.content[0]!.content ?? []),
+      file.content,
+    ).toEqual(ranges(children));
+  },
+);
+it.each([
   ["code then plain", [textNode("a", [bold, code]), textNode("b", [bold])]],
   [
     "partial overlap",
