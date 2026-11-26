@@ -499,7 +499,16 @@ export async function openNotesStore(
               ctx.library.noteLinks = [...rows.values()].filter((row) =>
                 ids.has(row.noteId),
               );
-              validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              try {
+                validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              } catch (error) {
+                if (
+                  error instanceof NoteLinkError &&
+                  error.code === "note_link_limit"
+                )
+                  rejectChange(error);
+                throw error;
+              }
             }
           }
           // Central tag operations revise Notes outside changeNote, but retain
