@@ -22,20 +22,26 @@ function phoneTouchTargetBlock(source: string) {
 
 it("declares 44px phone touch targets in the mobile media query", () => {
   const block = phoneTouchTargetBlock(css);
-  expect(block).toMatch(/min-height:\s*44px/);
-  expect(block).toMatch(/min-width:\s*44px/);
+  const rules = [...block.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]+)\}/g)].map((match) => ({
+    selectors: match[1]!.split(",").map((selector) => selector.trim()),
+    declarations: match[2]!,
+  }));
   for (const selector of [
     ".account-card button",
     ".mobile-header > button",
     ".sidebar .nav",
     ".note-editor-header .menu-anchor > button",
     ".editor-format-toolbar .editor-format-icon",
+    ".slash-menu > button",
     ".action-menu button",
     ".clips-view button",
     ".study-view button",
     ".journal-view .journal-actions button",
     ".new-note-tile",
   ]) {
-    expect(block).toContain(selector);
+    expect(rules.some((rule) => rule.selectors.includes(`body ${selector}`) && /min-height:\s*44px/.test(rule.declarations)), selector).toBe(true);
+  }
+  for (const selector of [".study-view .study-review-heading button", ".editor-format-toolbar .editor-format-icon"]) {
+    expect(rules.some((rule) => rule.selectors.includes(`body ${selector}`) && /min-width:\s*44px/.test(rule.declarations)), selector).toBe(true);
   }
 });

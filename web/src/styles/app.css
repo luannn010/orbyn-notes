@@ -1250,6 +1250,7 @@ dialog p {
   body .editor-format-toolbar .editor-format-more,
   body .editor-format-toolbar .editor-format-view button,
   body .editor-format-menu button,
+  body .slash-menu > button,
   body .clips-view button,
   body .study-view button,
   body .journal-view .journal-actions button,
