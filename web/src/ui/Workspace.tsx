@@ -122,6 +122,14 @@ const CollectionsHost = lazy(() =>
   })),
 );
 type Imported = ReturnType<typeof parseMarkdown>;
+/** Everything the mobile drawer's Tab trap may focus, in document order. A trap
+ * that queries only inputs and buttons lets Tab escape past links and selects. */
+export const DRAWER_FOCUSABLE =
+  'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+export function drawerFocusables(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE));
+}
 export function Workspace({
   store,
   session,
@@ -807,10 +815,10 @@ export function Workspace({
         setDrawer(false);
       }
       if (e.key === "Tab") {
-        const controls = Array.from(
-          drawerRef.current?.querySelectorAll<HTMLElement>("input,button") ??
-            [],
-        );
+        // Links and other focusables belong in the trap: querying only inputs
+        // and buttons skipped the sample-data and download links, so Tab could
+        // leave the drawer.
+        const controls = drawerFocusables(drawerRef.current);
         const first = controls[0],
           last = controls[controls.length - 1];
         if (e.shiftKey && document.activeElement === first) {

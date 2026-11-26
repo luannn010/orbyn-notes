@@ -97,15 +97,16 @@ function document(tokens: Token[], filename: string): NoteDocument {
         if (marker) taskMarkers.set(item, marker);
       }
       parent.content!.push(...inline(token.children ?? [], filename));
-    } else if (["fence", "code_block"].includes(token.type))
+    } else if (["fence", "code_block"].includes(token.type)) {
+      // A fence holding only a blank line yields "\n" and would leave an empty
+      // text node, which the editor schema cannot load.
+      const text = token.content.replace(/\n$/, "");
       parent.content!.push({
         type: "codeBlock",
         attrs: { language: token.info.trim().split(/\s/)[0] || null },
-        content: token.content
-          ? [{ type: "text", text: token.content.replace(/\n$/, "") }]
-          : [],
+        content: text ? [{ type: "text", text }] : [],
       });
-    else if (token.type === "hr")
+    } else if (token.type === "hr")
       parent.content!.push({ type: "horizontalRule" });
   }
   function tasks(nodes: RichNode[]): RichNode[] {
@@ -209,6 +210,10 @@ export function parseMarkdown(
       !/\.(?:md|markdown|mdown)$/i.test(file.name)
     )
       throw new Error("invalid_file: Choose Markdown files.");
+    if (!file.content.trim())
+      throw new Error(
+        `invalid_file: ${JSON.stringify(file.name)} is empty. Nothing was imported.`,
+      );
     const size = new TextEncoder().encode(file.content).length;
     total += size;
     if (size > MAX_MARKDOWN_FILE_BYTES || total > MAX_MARKDOWN_BATCH_BYTES)
