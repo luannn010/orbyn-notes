@@ -50,6 +50,7 @@ import { isDesktop } from "../desktop/window";
 import { openQuickNote, listenHandoff, replyHandoff } from "../desktop/capture";
 import { NotesMark } from "./NotesMark";
 import { buildDownload } from "./download";
+import { UnsupportedMarkdownExportError } from "../transfer";
 import { useDesktop } from "../desktop/DesktopShell";
 import { saveDesktopFile } from "../desktop/files";
 import { isLocalSession } from "../data/local";
@@ -237,6 +238,7 @@ export function Workspace({
       result: NoteExportResult;
     } | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
   useEffect(
     () => () => {
       exportGeneration.current++;
@@ -287,6 +289,7 @@ export function Workspace({
     exportReceipt.current = null;
     exportWorking.current = false;
     setExportBusy(false);
+    setExportError("");
     setDownload(null);
     setExportNotes(null);
     setLinkAdmission(null);
@@ -548,6 +551,7 @@ export function Workspace({
   const [exportNotes, setExportNotes] = useState<Note[] | null>(null);
   const [archiveExport, setArchiveExport] = useState(false);
   function requestExport(values: Note[], archive = false) {
+    setExportError("");
     setArchiveExport(archive);
     setExportNotes(values);
   }
@@ -1848,8 +1852,9 @@ export function Workspace({
   }
   async function prepareExport() {
     if (!exportNotes || exportWorking.current) return;
+    setExportError("");
     if (sourceOwner && !links.service) {
-      setError(
+      setExportError(
         "Note links aren’t ready. Wait for them to open, then try exporting again.",
       );
       return;
@@ -1893,9 +1898,13 @@ export function Workspace({
       setDownload({ url: URL.createObjectURL(blob), name });
       setExportNotes(null);
       setNotice("Export prepared");
-    } catch {
+    } catch (failure) {
       if (ticket === exportGeneration.current)
-        setError("Couldn’t export notes. Your notes were not changed.");
+        setExportError(
+          failure instanceof UnsupportedMarkdownExportError
+            ? failure.message.replace(/^unsupported_markdown_export: /, "")
+            : "Couldn’t export notes. Your notes were not changed.",
+        );
     } finally {
       if (ticket === exportGeneration.current) {
         exportWorking.current = false;
@@ -3238,6 +3247,7 @@ export function Workspace({
             if (!exportWorking.current) setExportNotes(null);
           }}
         >
+          {exportError && <p role="alert">{exportError}</p>}
           <p>
             Exported files are readable copies. Anyone with them can read your
             notes. Notes Markdown export does not include Study, Journal, Clips,

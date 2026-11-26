@@ -381,6 +381,20 @@ and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
 
 ## Shared formatting and Markdown source controls
 
+Markdown import rejects images with the source filename instead of discarding
+their URLs. Paragraph exports use readable soft breaks where Markdown preserves
+them; literal edge/consecutive newlines remain entities to retain their text.
+The shared label/source escaping contract is unchanged.
+
+This Markdown projection reports underline formatting, adjacent same-kind list
+boundaries, collapsed empty paragraphs and line breaks inside inline code as losses.
+Direct export rejects them with
+an explicit reason. Authorized Notes bundles include readable Markdown, report
+these losses in README.txt and retain the exact documents in notes.json for
+manual recovery. A single empty document or empty task remains exportable.
+Loss detection runs during the existing render traversal; output admission counts
+soft-break indentation and retains the existing work limits.
+
 `EditorFormatting` owns formatting popovers and a transient Markdown source draft;
 `markdownSource` converts only supported structured content and preserves the note's
 already-admitted references. Unsupported content is rejected rather than flattened.
