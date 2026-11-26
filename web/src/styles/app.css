@@ -421,7 +421,12 @@ small {
   min-height: 150px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 8px;
+}
+.grid .note-open h2,
+.grid .note-open p {
+  margin: 0;
 }
 .grid .metadata {
   margin-top: auto;
