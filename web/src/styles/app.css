@@ -1220,3 +1220,89 @@ dialog p {
 :root[data-motion="reduced"] .sidebar .nav {
   transition: color 150ms cubic-bezier(.4,0,.2,1), background-color 150ms cubic-bezier(.4,0,.2,1), box-shadow 150ms cubic-bezier(.4,0,.2,1) !important;
 }
+
+/* Phone tap targets: buttons, fields and selects reach at least 44x44 CSS px.
+   Notes designs f7e322f7: editor, phones-notes, st-review-phone.
+   Scoped to the phone layout so desktop sizing is unchanged. The keyboard-only
+   skip link and checkboxes inside their clickable label are left as they are. */
+@media (max-width: 899px) {
+  body .account-card button,
+  body .first-run-setup button,
+  body dialog button,
+  body .mobile-header > button,
+  body .sidebar-account,
+  body .sidebar-account-create,
+  body .sidebar .search,
+  body .sidebar .nav,
+  body .notes-library-toolbar > button,
+  body .notes-library-toolbar .library-sort select,
+  body .notes-library-view > button,
+  body .library-empty-actions button,
+  body .note-row .library-row-actions button,
+  body .new-note-breadcrumb button,
+  body .new-note-tile,
+  body .compact-tags-hash,
+  body .compact-tags-text,
+  body .note-header-breadcrumb button,
+  body .note-editor-header .note-header-action button,
+  body .note-editor-header .menu-anchor > button,
+  body .editor-format-toolbar .editor-format-icon,
+  body .editor-format-toolbar .editor-format-style,
+  body .editor-format-toolbar .editor-format-more,
+  body .editor-format-toolbar .editor-format-view button,
+  body .editor-format-menu button,
+  body .study-selection-toolbar > button,
+  body .link-popover button,
+  body .editor-format-notice button,
+  body .slash-menu > button,
+  body .clips-view button,
+  body .study-view button,
+  body .journal-view .journal-actions button,
+  body .journal-view .journal-habits-heading > button,
+  body .journal-view .journal-habits > button,
+  body .journal-view .journal-prompt button,
+  body .action-menu button {
+    min-height: 44px;
+  }
+
+  body input:not([type="checkbox"]):not([type="radio"]),
+  body select,
+  body textarea {
+    min-height: 44px;
+  }
+
+  /* Field and menu rules with their own minimum win on specificity. */
+  body .note-editor-header .action-menu button,
+  body .editor-page .note-title,
+  body .new-note-title {
+    min-height: 44px;
+  }
+
+  /* More specific component rules otherwise override the phone minimum. */
+  body .study-view .study-table .study-text-button,
+  body .editor-format-quick .editor-format-icon {
+    min-height: 44px;
+  }
+
+  body .study-view .menu-anchor > button,
+  body .study-view .study-review-heading button,
+  body .study-blank-fields > button,
+  body .editor-format-quick .editor-format-icon {
+    min-width: 44px;
+  }
+
+  /* Icon-only controls keep a square 44x44 footprint. */
+  body .mobile-header > button,
+  body .sidebar-account-create,
+  body .note-row .library-row-actions button,
+  body .compact-tags-hash,
+  body .note-editor-header .note-header-action button,
+  body .note-editor-header .menu-anchor > button,
+  body .editor-format-toolbar .editor-format-icon,
+  body .editor-format-toolbar .editor-format-more,
+  body .editor-format-toolbar .editor-format-view button,
+  body .notes-library-view > button,
+  body .journal-view .journal-actions button {
+    min-width: 44px;
+  }
+}
