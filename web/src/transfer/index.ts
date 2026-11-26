@@ -424,6 +424,23 @@ function blockExtent(
   }
   return { bytes, newlines };
 }
+/** Whitespace at the edge of a marked run belongs outside its delimiters: a
+ * closing `**` after an encoded space is not right-flanking, so re-import would
+ * show the asterisks. */
+function splitEdgeWhitespace(text: string): {
+  leading: string;
+  core: string;
+  trailing: string;
+} {
+  const leading = /^[ \t]*/.exec(text)![0];
+  const rest = text.slice(leading.length);
+  const trailing = /[ \t]*$/.exec(rest)![0];
+  return { leading, core: rest.slice(0, rest.length - trailing.length), trailing };
+}
+/** Markdown trims literal whitespace at block and hard-break line edges. */
+function escapeEdgeWhitespace(whitespace: string): string {
+  return whitespace.replace(/ /g, "&#32;").replace(/\t/g, "&#9;");
+}
 function renderInline(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
@@ -445,37 +462,58 @@ function renderInline(
           );
         return reference(n);
       }
-      // Mark delimiters need non-whitespace edges; entities also retain the
-      // mark on a newline instead of introducing an unmarked soft-break node.
-      let text =
-        bodyLines && !n.marks?.length
-          ? escapeMarkdownBodyText(
-              n.text ?? "",
-              edge(nodes[index - 1], true),
-              edge(nodes[index + 1], false),
-              !!nodes[index - 1]?.marks?.length &&
-                !!nodes[index - 1]?.text?.endsWith("\n"),
-              !!nodes[index + 1]?.marks?.length &&
-                !!nodes[index + 1]?.text?.startsWith("\n"),
-            )
-          : escapeMarkdownText(n.text ?? "");
+      const raw = n.text ?? "";
+      const marks = n.marks ?? [];
+      const guardStart = !!nodes[index - 1]?.marks?.length &&
+        !!nodes[index - 1]?.text?.endsWith("\n");
+      const guardEnd = !!nodes[index + 1]?.marks?.length &&
+        !!nodes[index + 1]?.text?.startsWith("\n");
+      // Preserve the body serializer's neighboring-newline behavior.
+      if (bodyLines && !marks.length && (raw.includes("\n") || guardStart || guardEnd))
+        return escapeMarkdownBodyText(raw, edge(nodes[index - 1], true),
+          edge(nodes[index + 1], false), guardStart, guardEnd);
+      const emphasis = marks.some((mark) =>
+        ["bold", "italic", "strike"].includes(mark.type),
+      );
+      const linked = marks.some((mark) => mark.type === "link");
+      const whitespaceOnly = /^[ \t]*$/.test(raw);
+      // Link labels retain their full linked range; code spans retain their own padding.
+      const whitespace = marks.some((mark) => mark.type === "code") ||
+        (linked && (!emphasis || whitespaceOnly))
+        ? null
+        : splitEdgeWhitespace(raw);
+      let text = escapeMarkdownText(whitespace ? whitespace.core : raw);
+      if (whitespace && whitespace.core === "") text = escapeMarkdownText(raw);
       let code: string | undefined;
-      for (const mark of n.marks ?? []) {
-        if (mark.type === "bold") text = `**${text}**`;
-        else if (mark.type === "italic") text = `*${text}*`;
-        else if (mark.type === "strike") text = `~~${text}~~`;
+      let linkHref: string | undefined;
+      for (const mark of marks) {
+        if (mark.type === "bold" && !whitespaceOnly) text = `**${text}**`;
+        else if (mark.type === "italic" && !whitespaceOnly) text = `*${text}*`;
+        else if (mark.type === "strike" && !whitespaceOnly) text = `~~${text}~~`;
         else if (mark.type === "code") {
-          if (/[\r\n]/.test(n.text ?? "")) reportLoss("code line breaks");
-          code ??= markdownCodeSpan(n.text ?? "");
+          if (/[\r\n]/.test(raw)) reportLoss("code line breaks");
+          code ??= markdownCodeSpan(raw);
           text = code;
         } else if (mark.type === "underline") reportLoss("underline");
         else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
-          text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+          const href = String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29");
+          if (whitespace && whitespace.core !== "") linkHref = href;
+          else text = `[${text}](${href})`;
         }
       }
-      return text;
+      if (!whitespace || whitespace.core === "") return text;
+      const leading =
+        linked || index === 0 || edge(nodes[index - 1], true) === "\n"
+          ? escapeEdgeWhitespace(whitespace.leading)
+          : whitespace.leading;
+      const trailing =
+        linked || index === nodes.length - 1 || edge(nodes[index + 1], false) === "\n"
+          ? escapeEdgeWhitespace(whitespace.trailing)
+          : whitespace.trailing;
+      const label = leading + text + trailing;
+      return linkHref === undefined ? label : `[${label}](${linkHref})`;
     })
     .join("");
 }

@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { exportMarkdown, parseMarkdown } from "../../src/transfer";
-import type { Note } from "../../src/domain/contracts";
+import type { Note, NoteDocument } from "../../src/domain/contracts";
+
+const note = (document: NoteDocument): Note => ({
+  id: "fixture",
+  title: "Edge marks",
+  document,
+  tags: [],
+  createdAt: "2026-11-08T00:00:00Z",
+  updatedAt: "2026-11-08T00:00:00Z",
+  trashedAt: null,
+  revision: 1,
+});
 describe("Markdown transfer boundary", () => {
   it("keeps formatting and text when paragraphs start or end with a mark", () => {
     const result = parseMarkdown([{ name: "marks.md", content: "**Bold** and *italic* then ~~strike~~" }])[0]!;
@@ -9,6 +20,166 @@ describe("Markdown transfer boundary", () => {
     expect(nodes.filter(n => n.text).map(n => [n.text, n.marks?.map(m => m.type) ?? []])).toEqual([
       ["Bold", ["bold"]], [" and ", []], ["italic", ["italic"]], [" then ", []], ["strike", ["strike"]],
     ]);
+  });
+  it("keeps bold when the marked run ends with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "hello ", marks: [{ type: "bold" }] },
+              { type: "text", text: "world" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("**hello** world");
+    const reimported = parseMarkdown([
+      { name: exported.filename, content: exported.content },
+    ])[0]!;
+    const nodes = reimported.document.content[0]!.content!;
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe("hello world");
+    expect(
+      nodes
+        .filter((n) => n.text)
+        .map((n) => [n.text, n.marks?.map((m) => m.type) ?? []]),
+    ).toEqual([
+      ["hello", ["bold"]],
+      [" world", []],
+    ]);
+  });
+  it("keeps italic when the marked run ends with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "a" },
+              { type: "text", text: "lead ", marks: [{ type: "italic" }] },
+              { type: "text", text: "b" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("a*lead* b");
+    const reimported = parseMarkdown([
+      { name: exported.filename, content: exported.content },
+    ])[0]!;
+    expect(
+      reimported.document.content[0]!.content!.filter((n) => n.text).map((n) => [
+        n.text,
+        n.marks?.map((m) => m.type) ?? [],
+      ]),
+    ).toEqual([
+      ["a", []],
+      ["lead", ["italic"]],
+      [" b", []],
+    ]);
+  });
+  it("keeps strike when the marked run starts with a space", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "a" },
+              { type: "text", text: " tail", marks: [{ type: "strike" }] },
+              { type: "text", text: "b" },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("a ~~tail~~b");
+  });
+  it("still encodes whitespace at the paragraph edge of a marked run", () => {
+    const exported = exportMarkdown([
+      note({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: " bold ", marks: [{ type: "bold" }] },
+            ],
+          },
+        ],
+      }),
+    ])[0]!;
+    expect(exported.content).toContain("&#32;**bold**&#32;");
+  });
+  it.each([
+    { name: "plain", before: { type: "text", text: "hello " }, after: { type: "text", text: " world" } },
+    { name: "marked", before: { type: "text", text: "hello ", marks: [{ type: "bold" }] }, after: { type: "text", text: " world", marks: [{ type: "italic" }] } },
+    { name: "whitespace-only", before: { type: "text", text: " " }, after: { type: "text", text: " " } },
+  ])("preserves $name whitespace beside hard breaks", ({ before, after }) => {
+    const exported = exportMarkdown([note({
+      type: "doc", content: [{ type: "paragraph", content: [
+        { type: "text", text: "start " }, before, { type: "hardBreak" }, after,
+        { type: "text", text: " end" },
+      ] }],
+    })])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    const nodes = imported.document.content[0]!.content!;
+    expect(nodes.map((n) => n.type === "hardBreak" ? "\n" : n.text ?? "").join(""))
+      .toBe(`start ${before.text}\n${after.text} end`);
+    if (before.marks) {
+      expect(nodes.find((n) => n.text === "hello")?.marks).toEqual(before.marks);
+      expect(nodes.find((n) => n.text === "world")?.marks).toEqual(after.marks);
+    }
+    expect(exported.content).toContain("start ");
+    expect(exported.content).toContain(" end");
+  });
+  it.each([" ", " linked "])("retains link text and destination for %j", (text) => {
+    const href = "https://example.test";
+    const exported = exportMarkdown([note({ type: "doc", content: [{
+      type: "paragraph", content: [{ type: "text", text, marks: [{ type: "link", attrs: { href } }] }],
+    }] })])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    expect(imported.document.content[0]!.content).toEqual([
+      { type: "text", text, marks: [{ type: "link", attrs: { href } }] },
+    ]);
+  });
+  it("keeps a whitespace-only styled link and validates its destination", () => {
+    const make = (href: string) => note({ type: "doc", content: [{
+      type: "paragraph", content: [{ type: "text", text: " ", marks: [
+        { type: "bold" }, { type: "link", attrs: { href } },
+      ] }],
+    }] });
+    expect(() => exportMarkdown([make("javascript:alert(1)")])).toThrow();
+    const exported = exportMarkdown([make("https://example.test")])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    expect(imported.document.content[0]!.content).toEqual([
+      { type: "text", text: " ", marks: [{ type: "link", attrs: { href: "https://example.test" } }] },
+    ]);
+  });
+  it("preserves marked trailing spaces before an adjacent soft newline", () => {
+    const exported = exportMarkdown([note({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "hello  ", marks: [{ type: "bold" }] },
+      { type: "text", text: "\nworld" },
+    ] }] })])[0]!;
+    const nodes = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!.document.content[0]!.content!;
+    expect(nodes.some((n) => n.type === "hardBreak")).toBe(false);
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe("hello  \nworld");
+  });
+  it.each([false, true])("keeps linked edge spaces with bold, link first: %s", (linkFirst) => {
+    const link = { type: "link", attrs: { href: "https://example.test" } };
+    const bold = { type: "bold" };
+    const exported = exportMarkdown([note({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: " linked ", marks: linkFirst ? [link, bold] : [bold, link] },
+    ] }] })])[0]!;
+    const nodes = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!.document.content[0]!.content!;
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe(" linked ");
+    expect(nodes.every((n) => n.marks?.some((m) => m.type === "link" && m.attrs?.href === link.attrs.href))).toBe(true);
+    expect(nodes.find((n) => n.text === "linked")?.marks?.some((m) => m.type === "bold")).toBe(true);
   });
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
