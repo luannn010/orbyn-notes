@@ -483,6 +483,7 @@ export async function openCollectionsStore(
     pendingWrites++;
     publishPersistence(true);
     let result: CollectionsState;
+    let committed = false;
     try {
       result = await access(
         (current) => {
@@ -536,6 +537,7 @@ export async function openCollectionsStore(
         false,
         currentGuard,
       );
+      committed = true;
       assertOpen();
       channel?.postMessage("changed");
     } catch (error) {
@@ -545,7 +547,8 @@ export async function openCollectionsStore(
       throw error;
     } finally {
       pendingWrites--;
-      publishPersistence();
+      // A committed revision is observable even while other writes keep saving.
+      publishPersistence(committed);
     }
     assertOpen();
     return result;

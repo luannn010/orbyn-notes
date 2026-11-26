@@ -395,7 +395,7 @@ describe("real WASM encrypted collections", () => {
     try {
       await first;
       expect(store.persistence().status).toBe("saving");
-      expect(states).toEqual(["saving", "saving"]);
+      expect(states).toEqual(["saving", "saving", "saving"]);
       releaseSecond();
       await second;
     } finally {
@@ -404,7 +404,7 @@ describe("real WASM encrypted collections", () => {
       signing.mockRestore();
     }
     expect(store.persistence().status).toBe("ready");
-    expect(states).toEqual(["saving", "saving", "ready"]);
+    expect(states).toEqual(["saving", "saving", "saving", "ready"]);
   });
   it("keeps a refresh failure after overlapping successful writes, then recovers on read", async () => {
     const store = await open(),
@@ -617,6 +617,54 @@ describe("real WASM encrypted collections", () => {
       firstGate.resume();
       secondGate.resume();
       await Promise.allSettled([first, second]);
+    }
+  });
+  it("announces a committed revision while another write remains pending", async () => {
+    const store = await open(),
+      initial = await store.read(),
+      real = database.wrappingSecret;
+    const firstGate = preparationGate(real),
+      secondGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(firstGate.run)
+      .mockImplementationOnce(secondGate.run);
+    const first = store.update(initial, deck),
+      second = store.update(
+        { epoch: initial.epoch, revision: initial.revision + 1 },
+        (state) => state,
+      );
+    const observed: { revision: number; status: string }[] = [],
+      reads: Promise<void>[] = [];
+    try {
+      await Promise.all([firstGate.started, secondGate.started]);
+      store.subscribe(() => {
+        const status = store.persistence().status;
+        reads.push(
+          store.read().then((state) => {
+            observed.push({ revision: state.revision, status });
+          }),
+        );
+      });
+      firstGate.resume();
+      const saved = await first;
+      await Promise.all(reads);
+      expect(store.persistence().status).toBe("saving");
+      expect(observed).toEqual([
+        { revision: saved.revision, status: "saving" },
+      ]);
+      secondGate.resume();
+      const final = await second;
+      await Promise.all(reads);
+      expect(observed).toEqual([
+        { revision: saved.revision, status: "saving" },
+        { revision: final.revision, status: "ready" },
+      ]);
+      expect(reads).toHaveLength(2);
+    } finally {
+      firstGate.resume();
+      secondGate.resume();
+      await Promise.allSettled([first, second]);
+      await Promise.allSettled(reads);
     }
   });
   it("does not notify again when a subscriber reads unchanged persistence", async () => {
