@@ -1251,6 +1251,12 @@ dialog p {
     forced-color-adjust: none;
   }
 
+  :is(.nav.active, button[aria-pressed="true"], button[aria-current="page"],
+    button[aria-current="date"], button[aria-selected="true"],
+    [role="option"][aria-selected="true"], [data-active="true"]):focus-visible {
+    outline-color: CanvasText;
+  }
+
   /* Labels, icons and counts inside a highlighted control follow its text. */
   .nav.active :is(span, svg),
   button[aria-pressed="true"] :is(span, small, b, strong, svg),

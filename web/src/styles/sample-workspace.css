@@ -642,6 +642,9 @@
     color: HighlightText;
     forced-color-adjust: none;
   }
+  .sample-nav.active:focus-visible {
+    outline-color: CanvasText;
+  }
   .sample-nav.active small {
     color: inherit;
   }
