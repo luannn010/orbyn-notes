@@ -274,6 +274,7 @@ export function Workspace({
     setSetupOpen(false);
     setImports(null);
     setImporting(false);
+    setImportStopping(false);
     setSetupImportState("idle");
     clearSourceRoute();
     setStudyEntry(null);

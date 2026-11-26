@@ -16,6 +16,19 @@ import {
   MarkdownImportFailure,
 } from "../../src/ui/markdownImport";
 
+const linkScope = vi.hoisted(() => ({
+  invalidate: null as ((reason: "epoch" | "closed") => void) | null,
+}));
+vi.mock("../../src/ui/noteLinkOwner", () => ({
+  useNoteLinkOwner: (
+    _owner: unknown,
+    invalidate: (reason: "epoch" | "closed") => void,
+  ) => {
+    linkScope.invalidate = invalidate;
+    return { service: null, error: "", bootSettled: false, retry: vi.fn() };
+  },
+}));
+
 beforeEach(() => {
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
@@ -258,4 +271,65 @@ it("keeps Cancel reachable while a sequential import is pending and counts its l
   expect(
     screen.getByText("Import stopped. Imported 1 of 2 notes."),
   ).toBeVisible();
+});
+
+it("resets Cancel after a stopping import loses its scope", async () => {
+  let finish!: (note: Note) => void;
+  const create = vi.fn(
+    () =>
+      new Promise<Note>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const store = {
+    list: vi.fn(async () => []),
+    subscribe: () => () => {},
+    create,
+  } as unknown as NotesStore;
+  const { container } = render(
+    <Workspace
+      store={store}
+      session={{
+        accountId: "test",
+        deviceId: "test",
+        email: "fixture@example.test",
+        deviceState: "trusted",
+      }}
+      onSignOut={async () => {}}
+    />,
+  );
+  await screen.findByRole("button", { name: /All notes/ });
+  const picker = container.querySelector('input[type="file"]')!;
+  const selectFile = (name: string) =>
+    fireEvent.change(picker, {
+      target: {
+        files: [{
+          name: `${name}.md`,
+          size: 10,
+          text: async () => `# ${name}\nbody`,
+        }],
+      },
+    });
+  selectFile("first");
+  const dialog = await screen.findByRole("dialog", { name: "Import Markdown" });
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Import remaining" }),
+  );
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(
+    within(dialog).getByRole("button", { name: "Stopping…" }),
+  ).toBeDisabled();
+
+  act(() => linkScope.invalidate!("epoch"));
+  await act(async () => {
+    finish(noteFor({ input: input("first"), creationId: "late-result" }));
+  });
+  expect(
+    screen.queryByRole("dialog", { name: "Import Markdown" }),
+  ).not.toBeInTheDocument();
+  selectFile("second");
+  const next = await screen.findByRole("dialog", { name: "Import Markdown" });
+  expect(within(next).getByRole("button", { name: "Cancel" })).toBeEnabled();
+  expect(create).toHaveBeenCalledOnce();
 });
