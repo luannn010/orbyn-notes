@@ -559,7 +559,7 @@ it("matches a decomposed character across a cloze chunk boundary", async () => {
         ...entry,
         type: "cloze",
         revision: entry.revision + 1,
-        text: "x".repeat(4094) + "e\u0301 {{one}}",
+        text: "x".repeat(4090) + "e\u0301 {{one}}",
         blanks: [{ id: "one", answer: "answer" }],
       },
       new Date(),

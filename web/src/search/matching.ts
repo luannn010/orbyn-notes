@@ -44,11 +44,11 @@ const hangulVowel = (point: number) => point >= 0x1161 && point <= 0x1175;
 const hangulTrailing = (point: number) => point >= 0x11a8 && point <= 0x11c2;
 /** A code point that can continue the current NFC cluster. Canonical
  * composition and ordering never cross a non-mark starter, except for Hangul
- * vowel and trailing jamo and Kirat Rai vowel sign AA. Marks with a zero combining class stay inside the
- * cluster too: keeping more text together never changes canonical equivalence. */
+ * vowel and trailing jamo and Kirat Rai vowel signs AA and O. U+034F blocks
+ * composition and reordering, so it is a safe boundary despite being a mark. */
 function continuesCluster(point: number): boolean {
-  return hangulVowel(point) || hangulTrailing(point) || point === 0x16d67 ||
-    (point >= 0x80 && marks.test(String.fromCodePoint(point)));
+  return hangulVowel(point) || hangulTrailing(point) || point === 0x16d67 || point === 0x16d68 ||
+    (point !== 0x034f && point >= 0x80 && marks.test(String.fromCodePoint(point)));
 }
 /** Start offsets of the clusters in text; the last cluster ends at text.length. */
 function clusterStarts(text: string): number[] {

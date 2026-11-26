@@ -93,6 +93,11 @@ describe("bounded literal matching and original scalar highlights", () => {
   it("matches canonical compositions whose second character is a letter", async () => {
     const text = "\u{16D63}\u{16D67}";
     expect((await scan(text, [text])).mask).toBe(1);
+    expect((await scan("\u{16D6A}", ["\u{16D63}\u{16D68}"])).mask).toBe(1);
+    expect((await scan("\u{16D6A}", ["\u{16D63}", "\u{16D68}"])).mask).toBe(1);
+  });
+  it("scans long runs of combining grapheme joiners with safe boundaries", async () => {
+    expect((await scan("needle", ["needle " + "\u034f".repeat(4097)])).mask).toBe(1);
   });
   it("matches across contiguous marked nodes and chunk splits but not semantic boundaries", async () => {
     expect((await scan("e", ["e", null, "q"])).mask).toBe(1);
