@@ -145,6 +145,15 @@ rendered front/back text and tags as independent rows. Import creates new Basic
 cards; original card types, scheduling history and source anchors are not
 restored. CSV is not a complete Study backup or Anki history transfer.
 
+Cloze validation, card content and search share one incremental marker scanner.
+Markers use `{{id}}` or `{{id::answer}}`, with 1–100 ASCII letters, digits,
+underscores or hyphens in the ID. Inline answers are literal until the first
+`}}` and must equal the saved blank answer; malformed or unmatched braces remain
+prose. Unknown, duplicate or missing blanks are rejected. Streaming consumers
+reserve before scanning or comparing at most 4096 UTF-16 units per operation.
+CSV diagnostics count CR, LF and CRLF as physical line endings, including inside
+quoted fields, while preserving the quoted field contents.
+
 The Study settings form borrows that same account-lifetime Collections owner.
 An explicit Save patches only edited preference keys under epoch/revision checks;
 conflicts retain raw edits and require a deliberate reload before retry. An

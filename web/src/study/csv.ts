@@ -3,16 +3,16 @@ import { cardText } from "./model";
 import { initialSchedule } from "./scheduler";
 
 const MAX_BYTES = 10_000_000;
-/** RFC-style quoted CSV. Parse and validate the whole input before creating cards. */
+/** RFC-style quoted CSV. Parse and validate every row, naming its line, before creating cards. */
 export function parseStudyCsv(source: string): { front: string; back: string; tags: string[] }[] {
   if (new TextEncoder().encode(source).length > MAX_BYTES || source.includes("\0")) throw new Error("invalid_csv: Choose a text CSV file up to 10 MB.");
   source = source.replace(/^\uFEFF/, "");
-  const rows: string[][] = [];
-  let row: string[] = [], field = "", quoted = false, closed = false;
+  const rows: { values: string[]; line: number }[] = [];
+  let row: string[] = [], field = "", quoted = false, closed = false, line = 1, rowLine = 1;
   const finishField = () => { row.push(field); field = ""; closed = false; };
   const finishRow = () => {
     finishField();
-    if (row.some(value => value.trim())) rows.push(row);
+    if (row.some(value => value.trim())) rows.push({ values: row, line: rowLine });
     row = [];
     if (rows.length > 10001) throw new Error("csv_limit: Import at most 10,000 rows.");
   };
@@ -22,33 +22,42 @@ export function parseStudyCsv(source: string): { front: string; back: string; ta
       if (char === '"') {
         if (source[i + 1] === '"') { field += '"'; i++; }
         else { quoted = false; closed = true; }
-      } else field += char;
+      } else {
+        field += char;
+        // A newline inside a quoted field still moves the physical line number.
+        if (char === "\r" || (char === "\n" && source[i - 1] !== "\r")) line++;
+      }
     } else if (char === '"' && !field && !closed) quoted = true;
     else if (char === ",") finishField();
     else if (char === "\n" || char === "\r") {
       if (char === "\r" && source[i + 1] === "\n") i++;
       finishRow();
+      line++;
+      rowLine = line;
     } else {
-      if (closed || char === '"') throw new Error("invalid_csv: Check the quoted fields in this file.");
+      if (closed || char === '"') throw new Error(`invalid_csv: Row ${rowLine} has a quote that is not part of a quoted field.`);
       field += char;
     }
-    if (field.length > 200_000 || row.length > 3) throw new Error("invalid_csv: Expected Front, Back and optional Tags columns.");
+    if (field.length > 200_000) throw new Error(`invalid_csv: Row ${rowLine} has a field longer than 200,000 characters.`);
+    if (row.length > 3) throw new Error(`invalid_csv: Row ${rowLine} has more than three columns; use Front, Back and optional Tags.`);
   }
-  if (quoted) throw new Error("invalid_csv: A quoted field was not closed.");
+  if (quoted) throw new Error(`invalid_csv: Row ${rowLine} has a quoted field that is not closed.`);
   if (field || row.length || closed) finishRow();
-  const header = rows.shift()?.map(value => value.trim().toLowerCase());
+  const header = rows.shift()?.values.map(value => value.trim().toLowerCase());
   if (!header || header[0] !== "front" || header[1] !== "back" || (header.length !== 2 && !(header.length === 3 && header[2] === "tags")))
     throw new Error("invalid_csv: Start with Front,Back or Front,Back,Tags headers.");
   if (!rows.length) throw new Error("empty_csv: This file has no cards to import.");
-  return rows.map((values, index) => {
-    if (values.length !== header.length || !values[0]?.trim() || !values[1]?.trim() || values[0].length > 100_000 || values[1].length > 100_000)
-      throw new Error(`invalid_csv: Row ${index + 2} needs a question and an answer, each up to 100,000 characters.`);
+  return rows.map(({ values, line: rowNumber }) => {
+    if (values.length !== header.length)
+      throw new Error(`invalid_csv: Row ${rowNumber} has ${values.length} columns but the header has ${header.length}.`);
+    if (!values[0]?.trim() || !values[1]?.trim() || values[0].length > 100_000 || values[1].length > 100_000)
+      throw new Error(`invalid_csv: Row ${rowNumber} needs a question and an answer, each up to 100,000 characters.`);
     let tags: unknown = [];
     if (values[2]?.trim()) {
-      try { tags = JSON.parse(values[2]); } catch { throw new Error(`invalid_csv: Row ${index + 2} Tags must be a JSON list, such as ["biology"].`); }
+      try { tags = JSON.parse(values[2]); } catch { throw new Error(`invalid_csv: Row ${rowNumber} Tags must be a JSON list, such as ["biology"].`); }
     }
     if (!Array.isArray(tags) || tags.length > 100 || tags.some(tag => typeof tag !== "string" || !tag.trim() || tag.length > 100))
-      throw new Error(`invalid_csv: Check the tags on row ${index + 2}.`);
+      throw new Error(`invalid_csv: Check the tags on row ${rowNumber}.`);
     return { front: values[0], back: values[1], tags: [...new Set(tags as string[])] };
   });
 }

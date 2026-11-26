@@ -56,6 +56,37 @@ function golden(input: CardContentInput) {
   } as StudyEntry;
   return cardText(entry, input.key);
 }
+it.each([4095, 4094, 4093, 4092, 4091, 4090, 4086, 4085])(
+  "keeps cloze grammar across a 4096-unit scan boundary after %i literal units",
+  async (padding) => {
+    const input: CardContentInput = {
+      type: "cloze", key: "cloze:one",
+      text: "x".repeat(padding) + "{{one::a}b}} {{!}} {{ done",
+      blanks: [{ id: "one", answer: "a}b" }],
+    };
+    const reader = await done(buildCardContent(input));
+    try {
+      const expected = golden(input);
+      expect((await all(reader, "front")).text).toBe(expected.front);
+      expect((await all(reader, "back")).text).toBe(expected.back);
+    } finally { disposeCardContent(reader); }
+  },
+);
+it("compares a long inline answer in bounded reservations and rejects a late mismatch", async () => {
+  const answer = "a{b}c".repeat(4000);
+  const input: CardContentInput = {
+    type: "cloze", key: "cloze:one", text: `{{one::${answer}}}`,
+    blanks: [{ id: "one", answer }],
+  };
+  const reader = await done(buildCardContent(input));
+  try {
+    expect((await all(reader, "front")).text).toBe("[...]");
+    expect((await all(reader, "back")).text).toBe(answer);
+  } finally { disposeCardContent(reader); }
+  await expect(done(buildCardContent({ ...input,
+    blanks: [{ id: "one", answer: answer.slice(0, -1) + "x" }],
+  }))).rejects.toThrow("Invalid card content");
+});
 it.each<CardContentInput>([
   {
     type: "basic",
@@ -226,6 +257,15 @@ it("captures only whitelisted scalars before suspension, without retaining calle
     disposeCardContent(reader);
   }
 });
+it.each(["{{one}} {{", "{{{one}}{"])("retains admitted unmatched braces as prose: %s", async (text) => {
+  const input: CardContentInput = { type: "cloze", key: "cloze:one", text,
+    blanks: [{ id: "one", answer: "A" }] };
+  const reader = await done(buildCardContent(input));
+  try {
+    expect((await all(reader, "front")).text).toBe(golden(input).front);
+    expect((await all(reader, "back")).text).toBe(golden(input).back);
+  } finally { disposeCardContent(reader); }
+});
 it("rejects mismatched directions, corrupt markers/memberships and producer-bound overflow", async () => {
   const cases: unknown[] = [
     { type: "basic", key: "reversed:reverse", front: "f", back: "b" },
@@ -249,16 +289,6 @@ it("rejects mismatched directions, corrupt markers/memberships and producer-boun
       },
       {
         text: "{{one}} {{other}}",
-        key: "cloze:one",
-        blanks: [{ id: "one", answer: "A" }],
-      },
-      {
-        text: "{{one}} {{",
-        key: "cloze:one",
-        blanks: [{ id: "one", answer: "A" }],
-      },
-      {
-        text: "{{{one}}{",
         key: "cloze:one",
         blanks: [{ id: "one", answer: "A" }],
       },

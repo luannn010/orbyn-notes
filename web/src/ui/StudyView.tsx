@@ -30,6 +30,7 @@ import {
   progress,
 } from "../study/model";
 import { nextSchedule, studyDay } from "../study/scheduler";
+import { clozeProblem } from "../study/cloze";
 import { parseStudyCsv, importStudyCsv, exportStudyCsv } from "../study/csv";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { isDesktop } from "../desktop/window";
@@ -129,6 +130,7 @@ export function StudyView({
   onSearchReaderResult,
   onReturnToSearch,
   accountId,
+  onDeleteSourceEntries,
   covered = false,
   onReopen,
 }: {
@@ -143,6 +145,10 @@ export function StudyView({
   onSearchReaderResult?: SearchReaderResult;
   onReturnToSearch?: () => void;
   accountId?: string;
+  onDeleteSourceEntries?: (
+    entryIds: string[],
+    expectedCollectionsEpoch: string,
+  ) => Promise<CollectionsState>;
 }) {
   const headingLive = useRef(heading);
   headingLive.current = heading;
@@ -653,24 +659,18 @@ export function StudyView({
       surface.current?.focus({ preventScroll: true });
   }, [session?.id]);
 
-  async function commit(
-    change: (state: StudyState) => StudyState,
+  async function commitOperation(
+    expected: CollectionsState,
+    operation: () => Promise<CollectionsState>,
     failure: string,
   ): Promise<CollectionsState | null> {
-    const expected = current.current;
     const ownerTicket = ownerGeneration.current;
-    if (!expected || working.current || conflict || !ownerCurrent(ownerTicket))
-      return null;
+    if (working.current || conflict || !ownerCurrent(ownerTicket)) return null;
     working.current = true;
     setBusy(true);
     setError("");
     try {
-      const value = await trackOperation(() =>
-        store.update(expected, (state) => ({
-          ...state,
-          study: change(state.study),
-        })),
-      );
+      const value = await trackOperation(operation);
       if (
         !ownerCurrent(ownerTicket) ||
         current.current?.epoch !== expected.epoch
@@ -686,6 +686,15 @@ export function StudyView({
         current.current?.epoch !== expected.epoch
       )
         return null;
+      if (
+        typeof cause === "object" &&
+        cause !== null &&
+        "code" in cause &&
+        cause.code === "source_revoked"
+      ) {
+        clearPrivate(true);
+        return null;
+      }
       const changed =
         cause instanceof CollectionsRevisionConflictError ||
         (typeof cause === "object" &&
@@ -709,6 +718,38 @@ export function StudyView({
         setBusy(false);
       }
     }
+  }
+  function commit(
+    change: (state: StudyState) => StudyState,
+    failure: string,
+  ): Promise<CollectionsState | null> {
+    const expected = current.current;
+    return expected
+      ? commitOperation(
+          expected,
+          () =>
+            store.update(expected, (state) => ({
+              ...state,
+              study: change(state.study),
+            })),
+          failure,
+        )
+      : Promise.resolve(null);
+  }
+  function deleteCard(entry: StudyEntry): Promise<CollectionsState | null> {
+    const expected = current.current,
+      remove = onDeleteSourceEntries,
+      anchored = !!entry.source && "version" in entry.source;
+    return anchored && expected && remove
+      ? commitOperation(
+          expected,
+          () => remove([entry.id], expected.epoch),
+          "Couldn’t delete this card. Try again.",
+        )
+      : commit(
+          (state) => deleteEntry(state, entry.id),
+          "Couldn’t delete this card. Try again.",
+        );
   }
   function openForm(next: Form) {
     setError("");
@@ -1750,10 +1791,7 @@ export function StudyView({
                 className="danger"
                 onClick={async () => {
                   const ownerTicket = ownerGeneration.current;
-                  const value = await commit(
-                    (state) => deleteEntry(state, form.entry.id),
-                    "Couldn’t delete this card. Try again.",
-                  );
+                  const value = await deleteCard(form.entry);
                   if (value && ownerCurrent(ownerTicket)) closeForm();
                 }}
               >
@@ -1919,14 +1957,10 @@ function CardForm({
         !blanks.length ||
         blanks.some(
           (blank) =>
-            !/^[A-Za-z0-9_-]+$/.test(blank.id) ||
-            !blank.answer.trim() ||
-            text.split(`{{${blank.id}}}`).length !== 2,
+            !/^[A-Za-z0-9_-]+$/.test(blank.id) || !blank.answer.trim(),
         ) ||
         new Set(blanks.map((blank) => blank.id)).size !== blanks.length ||
-        [...text.matchAll(/\{\{([^{}]+)\}\}/g)].some(
-          (match) => !blanks.some((blank) => blank.id === match[1]),
-        )
+        clozeProblem(text, blanks)
       ) {
         setValidation(
           "Give each blank a unique ID and answer, and use its {{ID}} once in the text.",

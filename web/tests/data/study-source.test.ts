@@ -19,14 +19,14 @@ import type { DeviceRecord } from "../../src/data/database";
 import { openNotesStore } from "../../src/data";
 import { openCollectionsStore } from "../../src/collections/store";
 import { protectOperations } from "../../src/desktop/closeGuard";
-import { createStudySourceService } from "../../src/study/sourceStore";
+import { createStudySourceService, deleteStudyEntries } from "../../src/study/sourceStore";
 import { studySourceOwner } from "../../src/library/store";
 import {
   fingerprintSourceDocument,
   captureSourceSelection,
 } from "../../src/study/sourceCodec";
 import { createNoteSchema } from "../../src/editor/schema";
-import { createDeck, gradeCard } from "../../src/study/model";
+import { createDeck, deleteEntry, gradeCard } from "../../src/study/model";
 import type { NoteDocument } from "../../src/domain/contracts";
 import type {
   MakeCardDraft,
@@ -773,3 +773,70 @@ it("bounds many short annotations in a large nested document before batch mappin
     ).title,
   ).toBe("Metadata remains editable");
 }, 15000);
+
+it("removes a deleted source card's anchor without staling the note's other anchors", async () => {
+  const f = await setup(),
+    first = (await f.make()).saved,
+    second = (await f.make()).saved,
+    state = await f.collections.read();
+  expect(
+    (await studySourceOwner(f.notes).read()).library.anchors,
+  ).toHaveLength(2);
+  const committed = await deleteStudyEntries(
+    f.notes,
+    f.collections,
+    [first.entryId],
+    state.epoch,
+  );
+  expect(committed.study.entries.map((entry) => entry.id)).toEqual([
+    second.entryId,
+  ]);
+  expect(
+    committed.study.cards.every((card) => card.entryId === second.entryId),
+  ).toBe(true);
+  expect(committed.revision).toBe(state.revision + 1);
+  const anchors = (await studySourceOwner(f.notes).read()).library.anchors;
+  expect(anchors.map((anchor) => anchor.entryId)).toEqual([second.entryId]);
+  expect(await f.service.resolve(second.entryId)).toMatchObject({
+    status: "attached",
+  });
+  expect(
+    (await f.service.annotations(f.note.id)).map(
+      (annotation) => annotation.entryId,
+    ),
+  ).toEqual([second.entryId]);
+  const third = (await f.make()).saved;
+  expect(
+    (await studySourceOwner(f.notes).read()).library.anchors.map(
+      (anchor) => anchor.entryId,
+    ),
+  ).toEqual([second.entryId, third.entryId]);
+  const undo = await f.service.prepareUndo(
+    await f.expected(),
+    first.receipt.operationId,
+  );
+  await expect(f.service.commit(undo)).rejects.toThrow(
+    "source_undo_unavailable",
+  );
+});
+it("prunes an anchor orphaned by an earlier card deletion at the next source card", async () => {
+  const f = await setup(),
+    first = (await f.make()).saved,
+    state = await f.collections.read();
+  // A build that deleted the entry without its anchor left this stored state.
+  await f.collections.update(state, (current) => ({
+    ...current,
+    study: deleteEntry(current.study, first.entryId),
+  }));
+  expect(
+    (await studySourceOwner(f.notes).read()).library.anchors.map(
+      (anchor) => anchor.entryId,
+    ),
+  ).toEqual([first.entryId]);
+  const second = (await f.make()).saved;
+  expect(
+    (await studySourceOwner(f.notes).read()).library.anchors.map(
+      (anchor) => anchor.entryId,
+    ),
+  ).toEqual([second.entryId]);
+});
