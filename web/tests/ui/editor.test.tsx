@@ -107,7 +107,7 @@ describe("draft durability", () => {
 });
 
 // Integration review regressions: navigation and recovery must not discard drafts.
-it("continues autosave after immediate Back without inventing a save failure", async () => {
+it("continues autosave after immediate Back and navigates once the save settles", async () => {
   const update = vi.fn().mockImplementation(async (_id, patch) => ({
     ...initial,
     ...patch,
@@ -119,10 +119,15 @@ it("continues autosave after immediate Back without inventing a save failure", a
   });
   fireEvent.click(screen.getByText("← Back to notes"));
   expect(back).not.toHaveBeenCalled();
-  expect(screen.queryByText("Couldn’t save")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/Save or copy your text before leaving/),
+  ).not.toBeInTheDocument();
   await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-  await screen.findByText("Saved in this browser");
+  await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
   expect(screen.queryByText("Couldn’t save")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/Save or copy your text before leaving/),
+  ).not.toBeInTheDocument();
 });
 it("requires confirmation and supports Cancel before discarding an unsaved conflict draft", async () => {
   HTMLDialogElement.prototype.showModal = function () {

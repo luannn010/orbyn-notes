@@ -27,7 +27,6 @@ type Form = {
   color: TagColor;
   target: string;
 };
-// design: notes/tags
 // Tags frame, design revision f53ac93. Compare local calendar days across DST.
 function lastUsedLabel(timestamp: number, now = new Date()) {
   const edited = new Date(timestamp);
@@ -43,6 +42,7 @@ function lastUsedLabel(timestamp: number, now = new Date()) {
       : { day: "numeric", month: "short" },
   )}`;
 }
+// design: notes/tags
 export function TagsView({
   library,
   heading,
@@ -60,6 +60,7 @@ export function TagsView({
   reload: () => Promise<unknown>;
   onOpenTag: (name: string) => void;
 }) {
+  // design: notes/library-tags-edit
   const [form, setForm] = useState<Form | null>(null);
   const [discard, setDiscard] = useState(false);
   const headingRef = useRouteHeading(

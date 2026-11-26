@@ -63,8 +63,12 @@ export function clipUrl(value: unknown): {
 } {
   text(value, CLIP_LIMITS.url);
   if (!safeHref(value)) invalid();
+  // The raw text before the first path/query/fragment delimiter is the
+  // authority as other parsers may read it, so a backslash there is ambiguous
+  // (it can hide a host). A backslash after "/", "?" or "#" cannot.
   const authority = /^https?:\/\/([^/?#]*)/i.exec(value)?.[1];
-  if (!authority || authority.includes("@") || value.includes("\\")) invalid();
+  if (!authority || authority.includes("@") || authority.includes("\\"))
+    invalid();
   let url: URL;
   try {
     url = new URL(value);

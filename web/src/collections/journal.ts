@@ -1,5 +1,6 @@
 import type { NoteDocument } from "../domain/contracts";
 import { validateDocument } from "../domain/validation";
+import { foldCodePoint } from "../search/unicodeCaseFolding";
 import type { JournalEnvelope } from "./contracts";
 import { validateJournalEnvelope } from "./validation";
 
@@ -73,9 +74,27 @@ export function writeJournalEntry(data: JournalData, day: string, document: Note
   next.entries.push(entry);
   return validateJournalData(next);
 }
+/** A habit counts on a day from the day it was added through its archive day.
+ * The day view, the month history and completions all use this one window. */
+function habitTrackedOn(habit: Habit, day: string): boolean {
+  return habit.createdOn <= day && (!habit.archivedOn || habit.archivedOn >= day);
+}
+/** Habit names compare like the app's other user text: trimmed and fully case
+ * folded as in search/text.ts. Search applies no Unicode normalisation, so nor
+ * does this key; trimmed stored names are what saveHabit writes. */
+function habitNameKey(name: string): string {
+  const trimmed = name.trim();
+  let key = "";
+  for (let offset = 0; offset < trimmed.length; ) {
+    const point = trimmed.codePointAt(offset)!;
+    key += foldCodePoint(point);
+    offset += point > 0xffff ? 2 : 1;
+  }
+  return key;
+}
 export function setHabitCompletion(data: JournalData, day: string, habitId: string, done: boolean, at: Date): JournalData {
   date(day);
-  if (!data.habits.some(habit => habit.id === habitId && habit.createdOn <= day && (!habit.archivedOn || habit.archivedOn >= day))) throw new Error("habit_missing: This habit is unavailable for this date.");
+  if (!data.habits.some(habit => habit.id === habitId && habitTrackedOn(habit, day))) throw new Error("habit_missing: This habit is unavailable for this date.");
   const next = structuredClone(data);
   next.completions = next.completions.filter(item => item.date !== day || item.habitId !== habitId);
   next.completions.push({ date: day, habitId, done, updatedAt: at.toISOString() });
@@ -90,6 +109,9 @@ export function saveHabit(data: JournalData, name: string, at: Date, habitId?: s
   if (!name.trim() || name.length > 200) throw new Error("invalid_habit: Enter a habit name up to 200 characters.");
   const next = structuredClone(data), habit = next.habits.find(item => item.id === habitId);
   if (habitId && !habit) throw new Error("habit_missing: This habit no longer exists.");
+  const key = habitNameKey(name);
+  if (next.habits.some(item => item.id !== habitId && item.archivedAt === null && habitNameKey(item.name) === key))
+    throw new Error("invalid_habit: This habit name is already in use.");
   if (habit) { habit.name = name.trim(); habit.revision++; }
   else {
     if (next.habits.length >= 100) throw new Error("habit_limit: You can keep up to 100 habits, including archived habits.");
@@ -115,8 +137,10 @@ export function journalMonth(data: JournalData, year: number, month: number) {
   return Array.from({ length: days }, (_, i) => {
     const day = `${year}-${String(month).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
     const entry = entries.get(day) ?? null, done = completions.get(day) ?? new Set<string>();
-    const relevant = data.habits.filter(habit => done.has(habit.id) || habit.createdOn <= day && (!habit.archivedOn || habit.archivedOn >= day));
-    return { date: day, entry: entry ? structuredClone(entry) : null, written: !!entry && hasText(entry.document.content), habitsCompleted: done.size, habitTotal: relevant.length };
+    // Same basis as the day view: only habits tracked on this day count, so an
+    // archived or not-yet-added habit's stray completion cannot inflate history.
+    const tracked = data.habits.filter(habit => habitTrackedOn(habit, day));
+    return { date: day, entry: entry ? structuredClone(entry) : null, written: !!entry && hasText(entry.document.content), habitsCompleted: tracked.filter(habit => done.has(habit.id)).length, habitTotal: tracked.length };
   });
 }
 

@@ -58,6 +58,26 @@ async function open() {
   handles.add(store);
   return store;
 }
+function preparationGate(real: typeof database.wrappingSecret) {
+  let entered!: () => void, resume!: () => void, fail!: (error: Error) => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const released = new Promise<void>((resolve, reject) => {
+    resume = resolve;
+    fail = reject;
+  });
+  return {
+    started,
+    resume,
+    fail,
+    run: async (key: CryptoKey) => {
+      entered();
+      await released;
+      return real(key);
+    },
+  };
+}
 function deck(
   state: CollectionsState,
   title = "Private synthetic deck",
@@ -340,7 +360,9 @@ describe("real WASM encrypted collections", () => {
       "notification failure",
     );
     broadcast.mockRestore();
+    expect(store.persistence().status).toBe("failed");
     const committed = await store.read();
+    expect(store.persistence().status).toBe("failed");
     expect(committed.revision).toBe(1);
     expect(committed.study.decks).toHaveLength(1);
     await expect(store.update(initial, deck)).rejects.toBeInstanceOf(
@@ -355,8 +377,11 @@ describe("real WASM encrypted collections", () => {
     store.subscribe(() => states.push(store.persistence().status));
     const sign = crypto.subtle.sign.bind(crypto.subtle);
     let releaseSecond!: () => void;
-    const gate = new Promise<void>((resolve) => { releaseSecond = resolve; });
-    const signing = vi.spyOn(crypto.subtle, "sign")
+    const gate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const signing = vi
+      .spyOn(crypto.subtle, "sign")
       .mockImplementationOnce((...args) => sign(...args))
       .mockImplementationOnce(async (...args) => {
         await gate;
@@ -380,6 +405,255 @@ describe("real WASM encrypted collections", () => {
     }
     expect(store.persistence().status).toBe("ready");
     expect(states).toEqual(["saving", "saving", "ready"]);
+  });
+  it("keeps a refresh failure after overlapping successful writes, then recovers on read", async () => {
+    const store = await open(),
+      initial = await store.read();
+    const real = database.wrappingSecret;
+    const firstGate = preparationGate(real),
+      secondGate = preparationGate(real),
+      refreshGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(firstGate.run)
+      .mockImplementationOnce(secondGate.run)
+      .mockImplementationOnce(refreshGate.run);
+    const first = store.update(initial, deck);
+    const second = store.update(
+      { epoch: initial.epoch, revision: initial.revision + 1 },
+      (state) => state,
+    );
+    const refresh = store.read();
+    const rejected = expect(refresh).rejects.toThrow(
+      "Synthetic refresh failure",
+    );
+    try {
+      await Promise.all([
+        firstGate.started,
+        secondGate.started,
+        refreshGate.started,
+      ]);
+      refreshGate.fail(new Error("Synthetic refresh failure"));
+      await rejected;
+      expect(store.persistence().status).toBe("saving");
+      firstGate.resume();
+      await first;
+      expect(store.persistence().status).toBe("saving");
+      secondGate.resume();
+      await second;
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Collections could not be refreshed.",
+      });
+      await store.read();
+      expect(store.persistence()).toEqual({ status: "ready" });
+    } finally {
+      firstGate.resume();
+      secondGate.resume();
+      refreshGate.resume();
+      await Promise.allSettled([first, second, refresh]);
+    }
+  });
+  it("does not let an older successful read erase a newer refresh failure", async () => {
+    const store = await open(),
+      real = database.wrappingSecret;
+    const oldGate = preparationGate(real),
+      newGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(oldGate.run)
+      .mockImplementationOnce(newGate.run);
+    const older = store.read();
+    await oldGate.started;
+    const newer = store.read();
+    const rejected = expect(newer).rejects.toThrow("Newer refresh failure");
+    try {
+      await newGate.started;
+      newGate.fail(new Error("Newer refresh failure"));
+      await rejected;
+      expect(store.persistence().status).toBe("failed");
+      oldGate.resume();
+      await older;
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Collections could not be refreshed.",
+      });
+      await store.read();
+      expect(store.persistence().status).toBe("ready");
+    } finally {
+      oldGate.resume();
+      newGate.resume();
+      await Promise.allSettled([older, newer]);
+    }
+  });
+  it("ignores an older refresh failure after a newer successful read", async () => {
+    const store = await open(),
+      gate = preparationGate(database.wrappingSecret);
+    vi.spyOn(database, "wrappingSecret").mockImplementationOnce(gate.run);
+    const older = store.read();
+    const rejected = expect(older).rejects.toThrow("Older refresh failure");
+    try {
+      await gate.started;
+      await store.read();
+      gate.fail(new Error("Older refresh failure"));
+      await rejected;
+      expect(store.persistence()).toEqual({ status: "ready" });
+    } finally {
+      gate.resume();
+      await Promise.allSettled([older]);
+    }
+  });
+  it("owns broadcast refresh errors separately and still announces successful refreshes", async () => {
+    const nativeListen = BroadcastChannel.prototype.addEventListener;
+    let receive!: () => Promise<void>;
+    vi.spyOn(BroadcastChannel.prototype, "addEventListener").mockImplementation(
+      function (this: BroadcastChannel, type, listener, options) {
+        if (
+          this.name === `orbyn-notes-library:${identity.accountId}` &&
+          type === "message" &&
+          typeof listener === "function"
+        ) {
+          receive = async () => {
+            await listener.call(
+              this,
+              new MessageEvent("message", { data: "changed" }),
+            );
+          };
+        }
+        return nativeListen.call(this, type, listener, options);
+      },
+    );
+    const store = await open(),
+      initial = await store.read(),
+      real = database.wrappingSecret;
+    const writeGate = preparationGate(real),
+      refreshGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(writeGate.run)
+      .mockImplementationOnce(refreshGate.run);
+    const write = store.update(initial, deck),
+      refresh = receive();
+    try {
+      await Promise.all([writeGate.started, refreshGate.started]);
+      refreshGate.fail(new Error("Broadcast refresh failure"));
+      await refresh;
+      expect(store.persistence().status).toBe("saving");
+      writeGate.resume();
+      await write;
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Collections could not be refreshed.",
+      });
+      const changed = vi.fn();
+      store.subscribe(changed);
+      await receive();
+      expect(store.persistence().status).toBe("ready");
+      expect(changed).toHaveBeenCalledOnce();
+      changed.mockClear();
+      await receive();
+      expect(changed).toHaveBeenCalledOnce();
+    } finally {
+      writeGate.resume();
+      refreshGate.resume();
+      await Promise.allSettled([write, refresh]);
+    }
+  });
+  it("keeps a write-wave failure through other writes and reads until a new wave succeeds", async () => {
+    const store = await open(),
+      initial = await store.read(),
+      real = database.wrappingSecret;
+    const failingGate = preparationGate(real),
+      successfulGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(failingGate.run)
+      .mockImplementationOnce(successfulGate.run);
+    const failing = store.update(initial, (state) => state),
+      successful = store.update(initial, deck);
+    const rejected = expect(failing).rejects.toThrow("Synthetic write failure");
+    try {
+      await Promise.all([failingGate.started, successfulGate.started]);
+      failingGate.fail(new Error("Synthetic write failure"));
+      await rejected;
+      expect(store.persistence().status).toBe("saving");
+      await store.read();
+      expect(store.persistence().status).toBe("saving");
+      successfulGate.resume();
+      const saved = await successful;
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Collections could not be saved. Reload before retrying.",
+      });
+      await store.read();
+      expect(store.persistence().status).toBe("failed");
+      await store.update(saved, (state) => state);
+      expect(store.persistence().status).toBe("ready");
+    } finally {
+      failingGate.resume();
+      successfulGate.resume();
+      await Promise.allSettled([failing, successful]);
+    }
+  });
+  it("allows the second invoked write to settle first without reporting ready early", async () => {
+    const store = await open(),
+      initial = await store.read(),
+      real = database.wrappingSecret;
+    const firstGate = preparationGate(real),
+      secondGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(firstGate.run)
+      .mockImplementationOnce(secondGate.run);
+    const first = store.update(
+      { epoch: initial.epoch, revision: initial.revision + 1 },
+      (state) => state,
+    );
+    const second = store.update(initial, deck);
+    try {
+      await Promise.all([firstGate.started, secondGate.started]);
+      secondGate.resume();
+      await second;
+      expect(store.persistence().status).toBe("saving");
+      firstGate.resume();
+      await first;
+      expect(store.persistence().status).toBe("ready");
+    } finally {
+      firstGate.resume();
+      secondGate.resume();
+      await Promise.allSettled([first, second]);
+    }
+  });
+  it("does not notify again when a subscriber reads unchanged persistence", async () => {
+    const store = await open(),
+      initial = await store.read();
+    const states: string[] = [],
+      reads: Promise<CollectionsState>[] = [];
+    store.subscribe(() => {
+      states.push(store.persistence().status);
+      reads.push(store.read());
+    });
+    await store.update(initial, deck);
+    await Promise.all(reads);
+    expect(states).toEqual(["saving", "ready"]);
+  });
+  it("suppresses late write and refresh publication after close", async () => {
+    const store = await open(),
+      initial = await store.read(),
+      real = database.wrappingSecret;
+    const writeGate = preparationGate(real),
+      readGate = preparationGate(real);
+    vi.spyOn(database, "wrappingSecret")
+      .mockImplementationOnce(writeGate.run)
+      .mockImplementationOnce(readGate.run);
+    const changed = vi.fn();
+    store.subscribe(changed);
+    const write = store.update(initial, deck),
+      read = store.read();
+    const writeRejected = expect(write).rejects.toThrow("closed"),
+      readRejected = expect(read).rejects.toThrow("closed");
+    await Promise.all([writeGate.started, readGate.started]);
+    store.close();
+    changed.mockClear();
+    writeGate.resume();
+    readGate.resume();
+    await Promise.all([writeRejected, readRejected]);
+    expect(changed).not.toHaveBeenCalled();
   });
   it("keeps review history immutable except for the one-way undo marker", async () => {
     const store = await open();

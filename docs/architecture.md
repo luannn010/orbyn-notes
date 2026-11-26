@@ -47,6 +47,24 @@ devices receive no local grant, and explicit sign-out removes the grant. Browser
 data deletion removes the keys as well as the library; this beta has no synced or
 recoverable server copy. Exported Markdown is readable outside the app.
 
+Markdown file reading admits each file separately after the existing 100-file
+and 10 MB eligible-batch preflight. Files above 2 MB, unsupported extensions,
+read failures and parser or document-structure failures are named in the import
+review while valid files remain ready. Nothing is written until the user confirms.
+The atomic `parseMarkdown` API is unchanged for other callers; Workspace uses
+`readMarkdownFiles` to collect per-file results. Node/depth limits are retained,
+and admitted bytes remain charged even after a read or parse failure.
+
+An account-mode local grant rejected as `local_access_invalid` returns to the
+existing signed-out entry so password authentication remains available. This
+does not delete saved keys or grant access to Notes; a verified session is still
+required before opening the store. Other bootstrap failures and local-workspace
+failures retain the existing retry screen.
+
+Lock invalidates account-request results and aborts their transport, including
+response-body reads. Operations remain serialized until cancellation settles;
+aborting a request does not undo any server-side effect.
+
 First-device trust is rooted in the account server. If verification succeeds but
 the local commit fails, the browser retains the original sealed signup keys for
 password-authenticated recovery. A verification-attempt marker selects those
@@ -55,6 +73,13 @@ still requires successful OPAQUE authentication and a trusted server response,
 and never replaces an existing local device record. Established-device approval
 requires the engine's verified ceremony. A sealed approval checkpoint is committed
 before acknowledging its one-use code, so a failed subsequent write can retry.
+Approval retries validate the sealed checkpoint in the latest device snapshot
+and preserve that snapshot, including later edits and erase epochs. A first
+checkpoint write requires the captured device generation and no existing
+snapshot. Merging a new approval into existing local data is unsupported by the
+current engine interface; this path fails closed without replacing saved data.
+Cancelling an approval completes the local lock when the server confirms it is
+already expired (`410 approval_expired`); other cancellation failures remain errors.
 
 The production service worker precaches a versioned application-shell allowlist:
 HTML, JavaScript, CSS, fonts and WASM. It never caches account/API requests, notes,
@@ -63,6 +88,30 @@ than replacing a running editor. IndexedDB schema changes require separate
 compatibility review; changing the shell cache does not migrate user data.
 
 ## Library and local collections
+
+The Notes store optionally supports atomic creation batches of up to ten notes.
+Multi-note batches admit at most one million serialized input UTF-16 units;
+an individually valid larger note can be created alone. Every entry carries a
+stable creation ID and the original library epoch. Exact retries return the
+existing notes without another encrypted write; conflicting IDs reject the
+whole batch. Existing metadata, link-index and source-anchor maintenance remains
+inside the library writer.
+
+Markdown import validates the complete selection before writing, captures its
+original epoch and retains creation IDs for retries. It uses chunks of at most
+ten notes and one million serialized input units (larger valid notes run alone),
+also bounded by existing link-scanner work limits. Stores without the optional
+batch capability use sequential creation with the same stable IDs. The review
+dialog yields between chunks and keeps Cancel available. Cancellation retains
+operation guards until settlement and counts a late committed chunk. An
+uncertain result retains the remaining plan and warns that the final batch may
+already be saved; retries do not allocate replacement IDs.
+
+Batch cancellation aborts the IndexedDB transaction before commit. Its terminal
+event determines whether the batch committed or was cancelled; a late abort
+cannot turn a committed write into cancellation. A post-commit notification
+failure remains an uncertain result and can be retried with the same creation
+IDs and epoch. Other store mutations keep their existing contracts.
 
 The library writer owns `notes-local` and `notes-library-v1` in the same encrypted
 snapshot transaction. Its catalog records pins, exact tag names/colors, bounded
@@ -95,6 +144,15 @@ the stored local timezone and day-start boundary. CSV transfer handles the
 rendered front/back text and tags as independent rows. Import creates new Basic
 cards; original card types, scheduling history and source anchors are not
 restored. CSV is not a complete Study backup or Anki history transfer.
+
+Cloze validation, card content and search share one incremental marker scanner.
+Markers use `{{id}}` or `{{id::answer}}`, with 1–100 ASCII letters, digits,
+underscores or hyphens in the ID. Inline answers are literal until the first
+`}}` and must equal the saved blank answer; malformed or unmatched braces remain
+prose. Unknown, duplicate or missing blanks are rejected. Streaming consumers
+reserve before scanning or comparing at most 4096 UTF-16 units per operation.
+CSV diagnostics count CR, LF and CRLF as physical line endings, including inside
+quoted fields, while preserving the quoted field contents.
 
 The Study settings form borrows that same account-lifetime Collections owner.
 An explicit Save patches only edited preference keys under epoch/revision checks;
@@ -364,6 +422,20 @@ and `empty-library` (blob 706a8d07e5ccfb77850f4a490ab38e0c90a31a04).
 
 ## Shared formatting and Markdown source controls
 
+Markdown import rejects images with the source filename instead of discarding
+their URLs. Paragraph exports use readable soft breaks where Markdown preserves
+them; literal edge/consecutive newlines remain entities to retain their text.
+The shared label/source escaping contract is unchanged.
+
+This Markdown projection reports underline formatting, adjacent same-kind list
+boundaries, collapsed empty paragraphs and line breaks inside inline code as losses.
+Direct export rejects them with
+an explicit reason. Authorized Notes bundles include readable Markdown, report
+these losses in README.txt and retain the exact documents in notes.json for
+manual recovery. A single empty document or empty task remains exportable.
+Loss detection runs during the existing render traversal; output admission counts
+soft-break indentation and retains the existing work limits.
+
 `EditorFormatting` owns formatting popovers and a transient Markdown source draft;
 `markdownSource` converts only supported structured content and preserves the note's
 already-admitted references. Unsupported content is rejected rather than flattened.
@@ -395,8 +467,15 @@ and data export are unavailable in the sample.
 
 ## Compact tag editing
 
-The owner-approved compact design uses one hashtag action and a comma-separated
-inline field in saved notes and normal New Note creation. A newly typed comma
+The `library-tag-pills`, `library-tag-pills-filtered` and
+`library-tag-pills-narrow` frames (Orbyn Design revision `8644e10d`) show
+individual hashtags in the desktop note picker and below the note title.
+Activating a saved pill uses the guarded workspace tag filter and focuses the
+library heading. The picker row has separate controls for opening, pinning,
+and filtering. An unsaved new note displays its tags without navigation.
+
+Add tags and Edit tags open the existing comma-separated inline field in saved
+notes and normal New Note creation. A newly typed comma
 followed by a space confirms complete tags and keeps focus ready for the next.
 Tab applies the unfinished tag and focuses the writing area; Enter and blur also
 apply through the existing revision-checked save. Escape discards unfinished text

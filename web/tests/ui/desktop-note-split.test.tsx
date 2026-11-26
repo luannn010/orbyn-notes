@@ -62,12 +62,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function fixture(update?: NotesStore["update"]) {
+function fixture(update?: NotesStore["update"], tags: string[][] = []) {
   const notes: Note[] = ["First", "Second"].map((title, i) => ({
     id: `note-${i}`,
     title,
     document: { type: "doc", content: [{ type: "paragraph" }] },
-    tags: [],
+    tags: tags[i] ?? [],
     revision: 1,
     createdAt: "2026-11-15T00:00:00Z",
     updatedAt: "2026-11-15T00:00:00Z",
@@ -263,5 +263,41 @@ it("uses a single creation pane and restores the library when an untouched draft
   expect(
     await screen.findByRole("region", { name: "Notes list" }),
   ).toBeVisible();
+  expect(unexpected).not.toHaveBeenCalled();
+});
+
+it("filters by the exact tag from the desktop picker and the note metadata", async () => {
+  const { unexpected } = fixture(undefined, [
+    ["work, play", "Ideas"],
+    ["Ideas"],
+  ]);
+  fireEvent.click(await screen.findByRole("button", { name: /^First/ }));
+  await screen.findByLabelText("Note title");
+  const list = screen.getByRole("region", { name: "Notes list" });
+  fireEvent.click(
+    within(list).getByRole("button", { name: "Show notes tagged work, play" }),
+  );
+  expect(
+    await within(list).findByRole("heading", { name: "# work, play" }),
+  ).toHaveFocus();
+  expect(
+    within(list).queryByRole("button", { name: /^Second/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(within(list).getByRole("button", { name: /^First/ }));
+  const noteTags = await screen.findByRole("group", {
+    name: "Current note tags",
+  });
+  expect(
+    within(noteTags).getByRole("button", {
+      name: "Show notes tagged work, play",
+    }),
+  ).toHaveAttribute("aria-current", "true");
+  fireEvent.click(
+    within(noteTags).getByRole("button", { name: "Show notes tagged Ideas" }),
+  );
+  expect(
+    await within(list).findByRole("heading", { name: "# Ideas" }),
+  ).toHaveFocus();
+  expect(within(list).getByRole("button", { name: /^Second/ })).toBeVisible();
   expect(unexpected).not.toHaveBeenCalled();
 });

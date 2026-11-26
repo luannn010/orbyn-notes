@@ -42,6 +42,46 @@ it("filters case-insensitively while retaining editor focus and dismisses unchan
   expect(screen.queryByRole("listbox")).toBeNull();
 });
 
+function selectedOption() {
+  return screen.getByRole("option", { selected: true }).textContent;
+}
+
+it("moves the active command with the arrow keys and wraps at both ends", async () => {
+  const { editor, user } = await setup();
+  await user.type(editor, "/");
+  expect(selectedOption()).toBe("Paragraph");
+  await user.keyboard("{ArrowDown}");
+  expect(selectedOption()).toBe("Heading");
+  await user.keyboard("{ArrowDown}");
+  expect(selectedOption()).toBe("Bulleted list");
+  await user.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}");
+  expect(selectedOption()).toBe("Web link");
+  await user.keyboard("{ArrowDown}");
+  expect(selectedOption()).toBe("Paragraph");
+  expect(document.activeElement).toBe(editor);
+});
+
+it("inserts the arrow-selected command on Enter", async () => {
+  const { editor, user } = await setup();
+  await user.type(editor, "/");
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(editor.querySelector("h2")?.textContent).toBe("");
+  expect(editor.textContent).toBe("");
+  expect(screen.queryByRole("listbox")).toBeNull();
+});
+
+it("closes on Escape without inserting the active command", async () => {
+  const { editor, user, change } = await setup();
+  await user.type(editor, "/to");
+  expect(selectedOption()).toBe("To-do list");
+  const writes = change.mock.calls.length;
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(editor.textContent).toBe("/to");
+  expect(editor.querySelector("ul")).toBeNull();
+  expect(change).toHaveBeenCalledTimes(writes);
+});
+
 it("shows no matches without an active descendant", async () => {
   const { editor, user } = await setup();
   await user.type(editor, "/xyz");

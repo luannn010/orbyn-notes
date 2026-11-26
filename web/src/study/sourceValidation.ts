@@ -1,3 +1,4 @@
+import { clozeProblem, type ClozeBlank } from "./cloze";
 import { SourceError } from "./sourceContracts";
 import type {
   AnchoredStudySource,
@@ -210,6 +211,7 @@ export function validateMakeCardDraft(value: unknown): MakeCardDraft {
     )
       invalid();
     const ids = new Set<string>();
+    const answers: ClozeBlank[] = [];
     for (const blank of row.blanks) {
       const b = object(blank, ["id", "answer"]);
       if (
@@ -220,18 +222,9 @@ export function validateMakeCardDraft(value: unknown): MakeCardDraft {
         invalid();
       ids.add(b.id);
       text(b.answer, true);
+      answers.push({ id: b.id, answer: b.answer });
     }
-    const matches = [...row.text.matchAll(/\{\{([^{}]+)\}\}/g)].map(
-      (match) => match[1]!,
-    );
-    if (
-      matches.length !== ids.size ||
-      new Set(matches).size !== matches.length ||
-      matches.some((key) => !ids.has(key)) ||
-      row.text.replace(/\{\{[^{}]+\}\}/g, "").includes("{{") ||
-      row.text.replace(/\{\{[^{}]+\}\}/g, "").includes("}}")
-    )
-      invalid();
+    if (clozeProblem(row.text, answers)) invalid();
   } else invalid();
   return structuredClone(value as MakeCardDraft);
 }

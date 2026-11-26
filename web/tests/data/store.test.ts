@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
-import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
+import { IDBDatabase, IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { initSync, DeviceKeys } from "../../src/generated/wasm/orbyn_wasm.js";
 import { openNotesStore } from "../../src/data";
 import {
@@ -97,6 +97,43 @@ describe("real WASM sealed notes library", () => {
     a.close();
     b.close();
   });
+  it("recovers persistence status after a rejected revision conflict", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    await expect(
+      store.update(note.id, { title: "Stale writer" }, note.revision + 1),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    expect(store.persistence()).toEqual({ status: "ready" });
+    const updated = await store.update(
+      note.id,
+      { title: "Healthy again" },
+      note.revision,
+    );
+    expect(updated.title).toBe("Healthy again");
+    expect(store.persistence()).toEqual({ status: "ready" });
+    store.close();
+  });
+  it("reports a transaction failure before the mutation callback as failed persistence", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    const transaction = vi
+      .spyOn(IDBDatabase.prototype, "transaction")
+      .mockImplementationOnce(() => {
+        throw new Error("Synthetic transaction failure");
+      });
+    try {
+      await expect(
+        store.update(note.id, { title: "Must not commit" }, note.revision),
+      ).rejects.toThrow("Synthetic transaction failure");
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Synthetic transaction failure",
+      });
+    } finally {
+      transaction.mockRestore();
+      store.close();
+    }
+  });
   it("awaits transaction rollback and keeps the committed note on write failure", async () => {
     const store = await openNotesStore(identity);
     const note = await store.create(input);
@@ -147,6 +184,24 @@ describe("real WASM sealed notes library", () => {
     const reopened = await openNotesStore(identity);
     expect(await reopened.list()).toHaveLength(1);
     reopened.close();
+  });
+  it("reports corrupted persisted snapshots as failed persistence during a change", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    await mutateRecord<DeviceRecord>("devices", identity.email, (current) => {
+      const snapshot = current!.snapshot!.slice();
+      snapshot[20] = snapshot[20]! ^ 1;
+      return { ...current!, snapshot };
+    });
+    try {
+      await expect(
+        store.update(note.id, { title: "Must not commit" }, note.revision),
+      ).rejects.toThrow("open_failed");
+      expect(store.persistence().status).toBe("failed");
+      expect(store.persistence().message).toContain("open_failed");
+    } finally {
+      store.close();
+    }
   });
   it("rejects authenticated snapshot tampering instead of opening an empty library", async () => {
     const store = await openNotesStore(identity);
