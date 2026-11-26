@@ -563,12 +563,22 @@ function renderInline(
         let raw = part.raw,
           prefix = "",
           suffix = "";
-        if (index === 0 && guardStart && raw.length) {
+        const emphasis = bold || italic || strike;
+        const firstPoint = raw.codePointAt(0);
+        const lastCharacter = /[^\x00-\x7f]$/u.exec(raw)?.[0] ?? "";
+        if (
+          index === 0 && raw.length &&
+          (guardStart || (emphasis && firstPoint! > 0x7f &&
+            /\p{Zs}/u.test(String.fromCodePoint(firstPoint!))))
+        ) {
           const point = raw.codePointAt(0)!;
           prefix = `&#${point};`;
           raw = raw.slice(point > 0xffff ? 2 : 1);
         }
-        if (index === parts.length - 1 && guardEnd && raw.length) {
+        if (
+          index === parts.length - 1 && raw.length &&
+          (guardEnd || (emphasis && /\p{Zs}/u.test(lastCharacter)))
+        ) {
           const last = /[\s\S]$/u.exec(raw)![0];
           suffix = `&#${last.codePointAt(0)};`;
           raw = raw.slice(0, -last.length);

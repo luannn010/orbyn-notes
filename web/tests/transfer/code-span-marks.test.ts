@@ -180,6 +180,14 @@ const textNode = (text: string, marks: Mark[] = []): RichNode => ({
   text,
   marks,
 });
+it.each([[true, "\u00a0"], [false, "\u00a0"], [true, "\u0085"], [false, "\u0085"]])("round trips non-ASCII whitespace at an emphasis edge", (before, whitespace) => {
+  const children = before
+    ? [textNode(whitespace, [bold, link]), textNode("x", [bold, link, code])]
+    : [textNode("x", [bold, link, code]), textNode(whitespace, [bold, link])];
+  const file = exportMarkdown([note({ type: "doc", content: [{ type: "paragraph", content: children }] })])[0]!;
+  const parsed = parseMarkdown([{ name: file.filename, content: file.content }])[0]!;
+  expect(ranges(parsed.document.content[0]!.content ?? []), file.content).toEqual(ranges(children));
+});
 it.each([
   ["code then plain", [textNode("a", [bold, code]), textNode("b", [bold])]],
   [
@@ -396,10 +404,8 @@ describe.each(edgeWhitespaceCases)(
             ])[0]!;
             const actual = parsed.document.content[0]!.content ?? [];
             const withBreaks = (nodes: RichNode[]) =>
-              ranges(
-                nodes.map((node) =>
-                  node.type === "hardBreak" ? textNode("\n") : node,
-                ),
+              nodes.flatMap((node) =>
+                node.type === "hardBreak" ? [{ kind: "hardBreak" }] : ranges([node]).map((range) => ({ kind: "text", ...range })),
               );
             expect(parsed.document.content).toHaveLength(1);
             expect(withBreaks(actual), file.content).toEqual(
