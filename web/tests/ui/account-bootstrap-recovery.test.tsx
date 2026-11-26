@@ -15,6 +15,7 @@ vi.mock("../../src/account", () => ({
     current: fixture.current,
     signIn: fixture.signIn,
     signOut: fixture.signOut,
+    close: vi.fn(),
   }),
   subscribeLock: () => () => {},
 }));

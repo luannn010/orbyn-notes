@@ -185,6 +185,24 @@ describe("real WASM sealed notes library", () => {
     expect(await reopened.list()).toHaveLength(1);
     reopened.close();
   });
+  it("reports corrupted persisted snapshots as failed persistence during a change", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    await mutateRecord<DeviceRecord>("devices", identity.email, (current) => {
+      const snapshot = current!.snapshot!.slice();
+      snapshot[20] = snapshot[20]! ^ 1;
+      return { ...current!, snapshot };
+    });
+    try {
+      await expect(
+        store.update(note.id, { title: "Must not commit" }, note.revision),
+      ).rejects.toThrow("open_failed");
+      expect(store.persistence().status).toBe("failed");
+      expect(store.persistence().message).toContain("open_failed");
+    } finally {
+      store.close();
+    }
+  });
   it("rejects authenticated snapshot tampering instead of opening an empty library", async () => {
     const store = await openNotesStore(identity);
     await store.create(input);
