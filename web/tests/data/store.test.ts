@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
-import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
+import { IDBDatabase, IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { initSync, DeviceKeys } from "../../src/generated/wasm/orbyn_wasm.js";
 import { openNotesStore } from "../../src/data";
 import {
@@ -112,6 +112,27 @@ describe("real WASM sealed notes library", () => {
     expect(updated.title).toBe("Healthy again");
     expect(store.persistence()).toEqual({ status: "ready" });
     store.close();
+  });
+  it("reports a transaction failure before the mutation callback as failed persistence", async () => {
+    const store = await openNotesStore(identity);
+    const note = await store.create(input);
+    const transaction = vi
+      .spyOn(IDBDatabase.prototype, "transaction")
+      .mockImplementationOnce(() => {
+        throw new Error("Synthetic transaction failure");
+      });
+    try {
+      await expect(
+        store.update(note.id, { title: "Must not commit" }, note.revision),
+      ).rejects.toThrow("Synthetic transaction failure");
+      expect(store.persistence()).toEqual({
+        status: "failed",
+        message: "Synthetic transaction failure",
+      });
+    } finally {
+      transaction.mockRestore();
+      store.close();
+    }
   });
   it("awaits transaction rollback and keeps the committed note on write failure", async () => {
     const store = await openNotesStore(identity);

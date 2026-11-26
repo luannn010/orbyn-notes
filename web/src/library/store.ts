@@ -269,10 +269,9 @@ export async function openNotesStore(
     let result: T | undefined,
       resultingEpoch: string | null = null,
       wrote = false;
-    // Set once a validated change reaches the transaction. A change rejected
-    // before that point never touched persisted data, so it is not a write
-    // failure and must not pin the persistence status to "failed".
-    let changeAccepted = false;
+    // Only an error thrown by the change callback is a rejected attempt;
+    // storage can fail before the callback is reached or after it returns.
+    let rejectedChange: { error: unknown } | undefined;
     let searchCandidate: {
       record: DeviceRecord;
       before?: DeviceRecord;
@@ -590,7 +589,6 @@ export async function openNotesStore(
                     revision: commonState.revision,
                   }),
             };
-          if (options.change) changeAccepted = true;
           return wrote ? nextRecord : UNCHANGED_RECORD;
         } finally {
           engine?.free();
@@ -602,7 +600,14 @@ export async function openNotesStore(
           state = { status: "saving" };
           notify();
         }
-        await mutateRecord<DeviceRecord>("devices", identity.email, apply);
+        await mutateRecord<DeviceRecord>("devices", identity.email, (record) => {
+          try {
+            return apply(record);
+          } catch (error) {
+            rejectedChange = { error };
+            throw error;
+          }
+        });
         guard();
         if (options.erase && wrote) {
           handleEpoch = resultingEpoch;
@@ -628,18 +633,16 @@ export async function openNotesStore(
       return result as T;
     } catch (error) {
       if (options.change && !closed) {
-        // A rejected attempt (revision conflict, read-only library, invalid
-        // input) never reached the transaction: the persisted library is
-        // healthy, so recover the status instead of reporting a write failure.
-        state = changeAccepted
-          ? {
+        // A rejected change did not write; other errors may be storage failures.
+        state = rejectedChange && Object.is(rejectedChange.error, error)
+          ? { status: "ready" }
+          : {
               status: "failed",
               message:
                 error instanceof Error
                   ? error.message
                   : "The library could not be saved.",
-            }
-          : { status: "ready" };
+            };
         notify();
       }
       throw error;
