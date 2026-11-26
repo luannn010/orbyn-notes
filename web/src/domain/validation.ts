@@ -134,6 +134,9 @@ export function inspectNoteDocument(
             !m ||
             typeof m !== "object" ||
             Array.isArray(m) ||
+            (Object.getPrototypeOf(m) !== Object.prototype && Object.getPrototypeOf(m) !== null) ||
+            !Object.prototype.propertyIsEnumerable.call(m, "type") ||
+            !("value" in Object.getOwnPropertyDescriptor(m, "type")!) ||
             typeof m.type !== "string" ||
             !["bold", "italic", "strike", "code", "link", "underline"].includes(
               m.type,
