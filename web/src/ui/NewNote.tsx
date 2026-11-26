@@ -118,6 +118,7 @@ export function NewNote({
   initialTags = [],
   onSaved,
   onBack,
+  onOpenTag,
   quick = false,
   onOpen,
   onClose,
@@ -126,6 +127,7 @@ export function NewNote({
   initialTags?: string[];
   onSaved: (note: Note) => void;
   onBack: () => void;
+  onOpenTag?: (tag: string) => void;
   quick?: boolean;
   onOpen?: (note: Note) => Promise<void>;
   onClose?: () => void;
@@ -358,6 +360,9 @@ export function NewNote({
         {!quick && (
           <CompactNoteTags
             tags={state.value.tags}
+            onOpenTag={state.note && state.status === "saved" && onOpenTag
+              ? (tag) => leave(() => onOpenTag(tag))
+              : undefined}
             onChange={(tags) => change({ tags })}
             onPendingChange={(pending) => {
               compactTagPending.current = pending;

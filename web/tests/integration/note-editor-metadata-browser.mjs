@@ -49,10 +49,8 @@ try {
   await input.press("Enter");
   await expect(input).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Current note tags" }),
-  ).toHaveText(
-    "Averylongunbrokentagthatstillhasitscompleteaccessibletext, café",
-  );
+    page.getByRole("group", { name: "Current note tags" }),
+  ).toHaveText("#Averylongunbrokentagthatstillhasitscompleteaccessibletext#café");
   await expect(
     page.getByText("Saved in this browser", { exact: true }),
   ).toBeVisible();
@@ -77,7 +75,7 @@ try {
           };
         });
       expect(sample.fontSize).toBe("12px");
-      expect(sample.gap).toBe("6px");
+      expect(sample.gap).toBe("5px");
       expect(sample.edited.trim()).toBe(sample.expected);
       expect(sample.overflow).toBe(false);
       samples.push({ theme, width, ...sample });
@@ -96,7 +94,7 @@ try {
     .getByRole("button", { name: /^A long note title that wraps/ })
     .click();
   await expect(
-    page.getByRole("button", { name: "Current note tags" }),
+    page.getByRole("group", { name: "Current note tags" }),
   ).toContainText("café");
   await expect(page.getByLabel("Note content", { exact: true })).toContainText(
     "Synthetic encrypted writing retained through tag controls.",
