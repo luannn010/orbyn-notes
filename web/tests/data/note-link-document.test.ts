@@ -313,6 +313,9 @@ describe("Editor-loadable document admission", () => {
     expect(() => validateDocument(inline([{ type: "text", text: "x", marks: [inherited] }]))).toThrow(invalid);
     const hidden = Object.defineProperty({}, "type", { value: "bold", enumerable: false });
     expect(() => validateDocument(inline([{ type: "text", text: "x", marks: [hidden] }]))).toThrow(invalid);
+    let reads = 0;
+    const unstable = { get type() { return ++reads <= 3 ? "bold" : undefined; } };
+    expect(() => validateDocument(inline([{ type: "text", text: "x", marks: [unstable] }]))).toThrow(invalid);
     const plain = Object.assign(Object.create(null), { type: "bold" });
     const result = validateDocument(inline([{ type: "text", text: "x", marks: [plain] }]));
     expect(() => validateDocument(result)).not.toThrow();
