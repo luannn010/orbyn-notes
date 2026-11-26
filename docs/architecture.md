@@ -55,6 +55,16 @@ The atomic `parseMarkdown` API is unchanged for other callers; Workspace uses
 `readMarkdownFiles` to collect per-file results. Node/depth limits are retained,
 and admitted bytes remain charged even after a read or parse failure.
 
+An account-mode local grant rejected as `local_access_invalid` returns to the
+existing signed-out entry so password authentication remains available. This
+does not delete saved keys or grant access to Notes; a verified session is still
+required before opening the store. Other bootstrap failures and local-workspace
+failures retain the existing retry screen.
+
+Lock invalidates account-request results and aborts their transport, including
+response-body reads. Operations remain serialized until cancellation settles;
+aborting a request does not undo any server-side effect.
+
 First-device trust is rooted in the account server. If verification succeeds but
 the local commit fails, the browser retains the original sealed signup keys for
 password-authenticated recovery. A verification-attempt marker selects those
@@ -63,6 +73,13 @@ still requires successful OPAQUE authentication and a trusted server response,
 and never replaces an existing local device record. Established-device approval
 requires the engine's verified ceremony. A sealed approval checkpoint is committed
 before acknowledging its one-use code, so a failed subsequent write can retry.
+Approval retries validate the sealed checkpoint in the latest device snapshot
+and preserve that snapshot, including later edits and erase epochs. A first
+checkpoint write requires the captured device generation and no existing
+snapshot. Merging a new approval into existing local data is unsupported by the
+current engine interface; this path fails closed without replacing saved data.
+Cancelling an approval completes the local lock when the server confirms it is
+already expired (`410 approval_expired`); other cancellation failures remain errors.
 
 The production service worker precaches a versioned application-shell allowlist:
 HTML, JavaScript, CSS, fonts and WASM. It never caches account/API requests, notes,
