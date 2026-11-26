@@ -125,3 +125,15 @@
     flex-basis: 100%;
   }
 }
+
+/* Windows High Contrast: the switch fills are replaced, so use the native
+   control, which always shows whether it is on. */
+@media (forced-colors: active) {
+  .study-settings-row > input[type="checkbox"] {
+    appearance: auto;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    background: none;
+  }
+}
