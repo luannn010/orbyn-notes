@@ -412,13 +412,32 @@ small {
   align-content: start;
 }
 .grid .note-row {
-  border: 1px solid var(--line);
+  /* The library-grid frame: a raised card with no border. */
+  background: var(--raise);
+  border: 0;
   border-radius: 12px;
   overflow: hidden;
+  align-items: stretch;
+  flex-wrap: nowrap;
 }
 .grid .note-open {
-  padding: 16px;
+  /* 14px padding and an 8px column stack, with the footer pinned to the
+     card's bottom edge exactly as the frame composes it. */
+  padding: 14px;
   min-height: 150px;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.grid .note-open h2,
+.grid .note-open p {
+  margin: 0;
+}
+.grid .metadata {
+  margin-top: auto;
 }
 .grid .note-row p {
   white-space: normal;
