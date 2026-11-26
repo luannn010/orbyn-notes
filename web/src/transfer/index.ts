@@ -321,41 +321,60 @@ function renderInline(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
 ): string {
-  return nodes
-    .map((n) => {
-      if (n.type === "hardBreak") return "  \n";
-      if (n.type === "noteLink") {
-        if (!reference)
-          throw new Error(
-            "invalid_document: A note reference needs an authorized export projection.",
-          );
-        return reference(n);
-      }
-      // A code span is literal source text, so it is the base the other marks
-      // wrap. Applying it inline in the mark loop replaced the text and dropped
-      // any `**`/`*`/`~~` already added, silently losing formatting on export.
-      const marks = n.marks ?? [];
-      const usesCode = marks.some((mark) => mark.type === "code");
-      let text = usesCode
-        ? markdownCodeSpan(n.text ?? "")
-        : escapeMarkdownText(n.text ?? "");
-      // Fixed nesting keeps the output byte-stable for any mark ordering:
-      // emphasis inside, link outermost around the finished span.
-      const usesStrike = marks.some((mark) => mark.type === "strike");
-      const usesItalic = marks.some((mark) => mark.type === "italic");
-      const usesBold = marks.some((mark) => mark.type === "bold");
-      if (usesBold) text = `**${text}**`;
-      if (usesItalic) text = `*${text}*`;
-      if (usesStrike) text = `~~${text}~~`;
-      const link = marks.find((mark) => mark.type === "link");
-      if (link) {
-        if (!safeHref(link.attrs?.href))
-          throw new Error("unsafe_link: Invalid link.");
-        text = `[${text}](${String(link.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
-      }
-      return text;
-    })
-    .join("");
+  let output = "";
+  for (let i = 0; i < nodes.length;) {
+    const n = nodes[i]!;
+    if (n.type === "hardBreak") {
+      output += "  \n";
+      i++;
+      continue;
+    }
+    if (n.type === "noteLink") {
+      if (!reference)
+        throw new Error(
+          "invalid_document: A note reference needs an authorized export projection.",
+        );
+      output += reference(n);
+      i++;
+      continue;
+    }
+    const marks = n.marks ?? [];
+    const bold = marks.some((mark) => mark.type === "bold");
+    const italic = marks.some((mark) => mark.type === "italic");
+    const strike = marks.some((mark) => mark.type === "strike");
+    const link = marks.find((mark) => mark.type === "link");
+    if (link && !safeHref(link.attrs?.href))
+      throw new Error("unsafe_link: Invalid link.");
+    const href = link ? String(link.attrs!.href) : null;
+    let text = "";
+    // Keep identical outer marks open across text/code boundaries.
+    do {
+      const next = nodes[i]!;
+      const nextMarks = next.marks ?? [];
+      text += nextMarks.some((mark) => mark.type === "code")
+        ? markdownCodeSpan(next.text ?? "")
+        : escapeMarkdownText(next.text ?? "");
+      i++;
+      const following = nodes[i];
+      if (!following || n.type !== "text" || following.type !== "text") break;
+      const followingMarks = following.marks ?? [];
+      const followingLink = followingMarks.find((mark) => mark.type === "link");
+      if (
+        followingMarks.some((mark) => mark.type === "bold") !== bold ||
+        followingMarks.some((mark) => mark.type === "italic") !== italic ||
+        followingMarks.some((mark) => mark.type === "strike") !== strike ||
+        (followingLink ? String(followingLink.attrs?.href) : null) !== href
+      )
+        break;
+    } while (true);
+    if (bold) text = `**${text}**`;
+    if (italic) text = `*${text}*`;
+    if (strike) text = `~~${text}~~`;
+    if (href !== null)
+      text = `[${text}](${href.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+    output += text;
+  }
+  return output;
 }
 function renderBlocks(
   nodes: RichNode[] = [],

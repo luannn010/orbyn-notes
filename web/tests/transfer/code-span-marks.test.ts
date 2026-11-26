@@ -54,6 +54,35 @@ const link: Mark = { type: "link", attrs: { href: "https://example.test/a" } };
  * bytes.
  */
 describe("Code spans keep the marks wrapped around them", () => {
+  it("preserves bold across adjacent plain and code text", () => {
+    const document: NoteDocument = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "a", marks: [bold] },
+            { type: "text", text: "b", marks: [bold, code] },
+          ],
+        },
+      ],
+    };
+    const exported = exportMarkdown([note(document)])[0]!;
+    expect(exported.content).toContain("**a` b `**");
+    const parsed = parseMarkdown([
+      { name: exported.filename, content: exported.content },
+    ])[0]!;
+    const nodes = parsed.document.content[0]!.content!;
+    expect(
+      nodes.map((node) => [
+        node.text,
+        node.marks?.map((mark) => mark.type).sort(),
+      ]),
+    ).toEqual([
+      ["a", ["bold"]],
+      ["b", ["bold", "code"]],
+    ]);
+  });
   it("exports bold that wraps inline code, whichever order the marks arrive in", () => {
     const codeLast = exportedBody(paragraph([bold, code]));
     const codeFirst = exportedBody(paragraph([code, bold]));
