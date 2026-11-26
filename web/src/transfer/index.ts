@@ -485,6 +485,7 @@ function renderInline(
       let text = escapeMarkdownText(whitespace ? whitespace.core : raw);
       if (whitespace && whitespace.core === "") text = escapeMarkdownText(raw);
       let code: string | undefined;
+      let linkHref: string | undefined;
       for (const mark of marks) {
         if (mark.type === "bold" && !whitespaceOnly) text = `**${text}**`;
         else if (mark.type === "italic" && !whitespaceOnly) text = `*${text}*`;
@@ -497,19 +498,22 @@ function renderInline(
         else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
-          text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+          const href = String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29");
+          if (whitespace && whitespace.core !== "") linkHref = href;
+          else text = `[${text}](${href})`;
         }
       }
       if (!whitespace || whitespace.core === "") return text;
       const leading =
-        index === 0 || nodes[index - 1]?.type === "hardBreak"
+        linked || index === 0 || edge(nodes[index - 1], true) === "\n"
           ? escapeEdgeWhitespace(whitespace.leading)
           : whitespace.leading;
       const trailing =
-        index === nodes.length - 1 || nodes[index + 1]?.type === "hardBreak"
+        linked || index === nodes.length - 1 || edge(nodes[index + 1], false) === "\n"
           ? escapeEdgeWhitespace(whitespace.trailing)
           : whitespace.trailing;
-      return leading + text + trailing;
+      const label = leading + text + trailing;
+      return linkHref === undefined ? label : `[${label}](${linkHref})`;
     })
     .join("");
 }

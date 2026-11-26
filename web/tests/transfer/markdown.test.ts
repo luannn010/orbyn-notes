@@ -161,6 +161,26 @@ describe("Markdown transfer boundary", () => {
       { type: "text", text: " ", marks: [{ type: "link", attrs: { href: "https://example.test" } }] },
     ]);
   });
+  it("preserves marked trailing spaces before an adjacent soft newline", () => {
+    const exported = exportMarkdown([note({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "hello  ", marks: [{ type: "bold" }] },
+      { type: "text", text: "\nworld" },
+    ] }] })])[0]!;
+    const nodes = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!.document.content[0]!.content!;
+    expect(nodes.some((n) => n.type === "hardBreak")).toBe(false);
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe("hello  \nworld");
+  });
+  it.each([false, true])("keeps linked edge spaces with bold, link first: %s", (linkFirst) => {
+    const link = { type: "link", attrs: { href: "https://example.test" } };
+    const bold = { type: "bold" };
+    const exported = exportMarkdown([note({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: " linked ", marks: linkFirst ? [link, bold] : [bold, link] },
+    ] }] })])[0]!;
+    const nodes = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!.document.content[0]!.content!;
+    expect(nodes.map((n) => n.text ?? "").join("")).toBe(" linked ");
+    expect(nodes.every((n) => n.marks?.some((m) => m.type === "link" && m.attrs?.href === link.attrs.href))).toBe(true);
+    expect(nodes.find((n) => n.text === "linked")?.marks?.some((m) => m.type === "bold")).toBe(true);
+  });
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
   });
