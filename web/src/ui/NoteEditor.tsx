@@ -258,6 +258,14 @@ export function NoteEditor({
   const [copyBusy, setCopyBusy] = useState(false);
   const duplicating = useRef(false);
   const leavePending = useRef(false);
+  const navigationOwner = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    const owner = active ? {} : null;
+    navigationOwner.current = owner;
+    return () => {
+      if (navigationOwner.current === owner) navigationOwner.current = null;
+    };
+  }, [active, note.id]);
   const lastSaveFailed = useRef(false);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [formattingTarget, setFormattingTarget] =
@@ -490,24 +498,32 @@ export function NoteEditor({
   }
   async function leave(action: () => void) {
     if (leavePending.current) return;
-    if (
-      formatDraftRef.current ||
-      sourceIntent.current ||
-      tagPendingRef.current ||
-      duplicating.current ||
-      copyInFlight.current
-    ) {
-      setNavigationNotice(
-        tagPendingRef.current
-          ? "Apply or cancel your tag edit before leaving."
-          : "Your latest changes are only in this window. Save or copy your text before leaving.",
-      );
-      return;
+    const owner = navigationOwner.current;
+    if (!owner) return;
+    function blocked() {
+      if (
+        formatDraftRef.current ||
+        sourceIntent.current ||
+        tagPendingRef.current ||
+        duplicating.current ||
+        copyInFlight.current
+      ) {
+        setNavigationNotice(
+          tagPendingRef.current
+            ? "Apply or cancel your tag edit before leaving."
+            : "Your latest changes are only in this window. Save or copy your text before leaving.",
+        );
+        return true;
+      }
+      return false;
     }
+    if (blocked()) return;
     if (dirtyRef.current || saving.current) {
       leavePending.current = true;
       try {
-        if (!(await settleDraft())) {
+        const settled = await settleDraft();
+        if (navigationOwner.current !== owner) return;
+        if (!settled) {
           setNavigationNotice(
             "Your latest changes are only in this window. Save or copy your text before leaving.",
           );
@@ -517,6 +533,7 @@ export function NoteEditor({
         leavePending.current = false;
       }
     }
+    if (navigationOwner.current !== owner || blocked()) return;
     action();
   }
   async function copy() {

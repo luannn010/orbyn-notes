@@ -54,7 +54,7 @@ function setup(update: NotesStore["update"]) {
   const back = vi.fn(),
     trash = vi.fn(),
     exportNote = vi.fn();
-  render(
+  const view = render(
     <NoteEditor
       note={initial}
       store={store}
@@ -64,7 +64,7 @@ function setup(update: NotesStore["update"]) {
       onExport={exportNote}
     />,
   );
-  return { store, back, trash, exportNote };
+  return { store, back, trash, exportNote, view };
 }
 function editTitle(value: string) {
   fireEvent.change(screen.getByLabelText("Note title"), {
@@ -93,6 +93,36 @@ describe("leaving while a save is pending", () => {
     await act(async () => release());
     await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(leaveWarning)).not.toBeInTheDocument();
+  });
+  it("keeps a tag draft opened while Back waits for an active autosave", async () => {
+    const { update, release } = blockingSave();
+    const { back } = setup(update);
+    editTitle("Autosaving");
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText("← Back to notes"));
+    expect(back).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Manage note tags" }));
+    const input = screen.getByLabelText("Tags, separated by commas");
+    fireEvent.change(input, { target: { value: "uncommitted tag" } });
+    await act(async () => release());
+    expect(back).not.toHaveBeenCalled();
+    expect(input).toHaveValue("uncommitted tag");
+    expect(
+      screen.getByText("Apply or cancel your tag edit before leaving."),
+    ).toBeVisible();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.click(screen.getByText("← Back to notes"));
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+  it("does not navigate after the editor unmounts while autosave is pending", async () => {
+    const { update, release } = blockingSave();
+    const { back, view } = setup(update);
+    editTitle("Autosaving");
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText("← Back to notes"));
+    view.unmount();
+    await act(async () => release());
+    expect(back).not.toHaveBeenCalled();
   });
   it("keeps the warning and stays on Back when the pending save fails", async () => {
     const { back } = setup(vi.fn().mockRejectedValue(new Error("Storage denied")));
