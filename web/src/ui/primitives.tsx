@@ -44,7 +44,7 @@ export function Dialog({
     dialog?.showModal();
     return () => {
       dialog?.close();
-      (returnFocusTo ?? previous)?.focus();
+      (returnFocusTo?.isConnected ? returnFocusTo : previous?.isConnected ? previous : null)?.focus();
     };
   }, []);
   return (

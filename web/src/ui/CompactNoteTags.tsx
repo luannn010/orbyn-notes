@@ -1,13 +1,55 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Check, Pencil, Plus } from "./icons";
 import { registerCloseGuard } from "../desktop/closeGuard";
 import { confirmedTagPrefix, formatTagText, parseTagText } from "./tagText";
 import "../styles/note-metadata.css";
 import "../styles/compact-note-tags.css";
+export function NoteTagPills({
+  tags,
+  label,
+  onOpenTag,
+  activeTag,
+  savedTags,
+}: {
+  tags: readonly string[];
+  label: string;
+  onOpenTag?: (tag: string) => void;
+  activeTag?: string;
+  savedTags?: readonly string[];
+}) {
+  if (!tags.length) return null;
+  return (
+    <div className="note-tag-pills" role="group" aria-label={label}>
+      {tags.map((tag) =>
+        onOpenTag && (!savedTags || savedTags.includes(tag)) ? (
+          <button
+            key={tag}
+            type="button"
+            className="note-tag-pill"
+            aria-label={`Show notes tagged ${tag}`}
+            aria-current={tag === activeTag || undefined}
+            onClick={() => onOpenTag(tag)}
+          >
+            #{tag}
+          </button>
+        ) : (
+          <span className="note-tag-pill" key={tag}>
+            #{tag}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function CompactNoteTags({
   tags,
   onChange,
   onPendingChange,
   onApply,
+  onOpenTag,
+  activeTag,
+  savedTags,
   readOnly = false,
   children,
 }: {
@@ -15,6 +57,9 @@ export function CompactNoteTags({
   onChange: (tags: string[]) => void;
   onPendingChange?: (pending: boolean) => void;
   onApply?: () => void;
+  onOpenTag?: (tag: string) => void;
+  activeTag?: string;
+  savedTags?: readonly string[];
   readOnly?: boolean;
   children?: ReactNode;
 }) {
@@ -152,26 +197,42 @@ export function CompactNoteTags({
   return (
     <div className="compact-note-tags">
       <div className="note-metadata compact-note-metadata">
+        {!editing && (
+          <NoteTagPills
+            tags={tags}
+            label="Current note tags"
+            onOpenTag={onOpenTag}
+            activeTag={activeTag}
+            savedTags={savedTags}
+          />
+        )}
         <button
           ref={trigger}
           type="button"
-          className="compact-tags-hash"
+          className="compact-tags-edit"
           aria-label="Manage note tags"
           aria-expanded={editing}
           aria-controls={id}
           disabled={readOnly}
-          title={tags.length ? "Edit tags" : "Add tags"}
+          title={
+            editing ? "Apply tags" : tags.length ? "Edit tags" : "Add tags"
+          }
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => (editing ? finish(true) : start())}
         >
-          #
+          {editing ? (
+            <Check size={12} aria-hidden="true" />
+          ) : tags.length ? (
+            <>
+              <Pencil size={12} aria-hidden="true" /> Edit tags
+            </>
+          ) : (
+            <>
+              <Plus size={12} aria-hidden="true" /> Add tags
+            </>
+          )}
         </button>
-        {editing && confirmed.length > 0 && (
-          <span className="compact-tags-confirmed" aria-label="Confirmed tags">
-            {confirmed.join(", ")}
-            <span aria-hidden="true">,</span>
-          </span>
-        )}
+        {editing && <NoteTagPills tags={confirmed} label="Confirmed tags" />}
         {editing ? (
           <input
             ref={input}
@@ -213,16 +274,6 @@ export function CompactNoteTags({
               }
             }}
           />
-        ) : tags.length ? (
-          <button
-            type="button"
-            className="compact-tags-text"
-            aria-label="Current note tags"
-            disabled={readOnly}
-            onClick={start}
-          >
-            {tags.join(", ")}
-          </button>
         ) : null}
         {children}
       </div>

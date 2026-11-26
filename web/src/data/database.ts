@@ -115,16 +115,28 @@ export async function mutateRecord<T>(
   store: string,
   key: string,
   change: (current: T | undefined) => T | undefined | typeof UNCHANGED_RECORD,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   const db = await openDatabase();
   try {
+    signal?.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(store, "readwrite");
       const objectStore = tx.objectStore(store);
       const req = objectStore.get(key);
       let failure: unknown;
+      const abort = () => {
+        try {
+          tx.abort();
+        } catch {
+          // A finished transaction's terminal event decides the actual outcome.
+        }
+      };
+      signal?.addEventListener("abort", abort, { once: true });
       req.onsuccess = () => {
         try {
+          signal?.throwIfAborted();
           const current = req.result as T | undefined;
           const next = change(current);
           if (next && typeof (next as { then?: unknown }).then === "function") {
@@ -133,19 +145,28 @@ export async function mutateRecord<T>(
               "storage_failed: Transaction callbacks must be synchronous.",
             );
           }
+          signal?.throwIfAborted();
           if (next === UNCHANGED_RECORD) return;
           if (next === undefined) objectStore.delete(key);
           else objectStore.put(next, key);
         } catch (error) {
           failure = error;
-          tx.abort();
+          abort();
         }
       };
-      tx.oncomplete = () => resolve();
-      tx.onabort = () =>
+      tx.oncomplete = () => {
+        signal?.removeEventListener("abort", abort);
+        resolve();
+      };
+      tx.onabort = () => {
+        signal?.removeEventListener("abort", abort);
         reject(
-          failure ?? tx.error ?? new Error("storage_failed: Write aborted."),
+          failure ??
+            (signal?.aborted ? signal.reason : undefined) ??
+            tx.error ??
+            new Error("storage_failed: Write aborted."),
         );
+      };
       tx.onerror = () => {};
     });
   } finally {

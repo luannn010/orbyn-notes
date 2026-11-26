@@ -73,6 +73,7 @@ const conflictCode = (failure: unknown) =>
     "source_undo_unavailable",
     "source_operation_reused",
   ].includes(String(failure.code));
+// design: notes/st-make-popover
 export function SourceCardComposer({
   owners,
   capture,
@@ -771,6 +772,7 @@ export function SourceCardComposer({
     </>
   );
 }
+// design: notes/st-make-added
 export function SourceCardNotice({
   owners,
   result,

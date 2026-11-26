@@ -1,4 +1,5 @@
 // Notes design artifact 06325398: logo-mark and logo-small-sizes.
+// design: notes/logo-mark
 export function NotesMark({ size }: { size: 16 | 48 }) {
   return size === 16 ? (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">

@@ -14,6 +14,29 @@ import type {
 } from "./sourceContracts";
 import { SOURCE_LIMITS } from "./sourceValidation";
 
+/** Removes a Study entry with its cards and the source anchor that points at it. */
+export function deleteSourceEntry(
+  state: SourceOwnerSnapshot,
+  entryId: string,
+): void {
+  state.collections.study = deleteEntry(state.collections.study, entryId);
+  state.library.anchors = state.library.anchors.filter(
+    (anchor) => anchor.entryId !== entryId,
+  );
+}
+/**
+ * Drops anchors whose Study entry no longer exists. Cards deleted before this
+ * boundary, or through another window, leave such orphan anchors behind; they
+ * are unreachable and would otherwise keep counting against `SOURCE_LIMITS`.
+ */
+export function pruneOrphanAnchors(state: SourceOwnerSnapshot): void {
+  const entries = new Set(
+    state.collections.study.entries.map((entry) => entry.id),
+  );
+  state.library.anchors = state.library.anchors.filter((anchor) =>
+    entries.has(anchor.entryId),
+  );
+}
 export function sourceTokens(state: SourceOwnerSnapshot): SourceExpected {
   return {
     library: { epoch: state.library.epoch, revision: state.library.revision },
@@ -100,6 +123,7 @@ export function applySourceCommand(
         "source_stale",
         "The selected passage changed. Select it again.",
       );
+    pruneOrphanAnchors(state);
     if (state.library.anchors.length >= SOURCE_LIMITS.anchors)
       throw new SourceError("source_limit", "Source annotations are full.");
     if (
@@ -225,10 +249,7 @@ export function applySourceCommand(
         "source_undo_unavailable",
         "This card or source changed, or Undo expired.",
       );
-    state.collections.study = deleteEntry(state.collections.study, entry.id);
-    state.library.anchors = state.library.anchors.filter(
-      (row) => row.id !== anchor.id,
-    );
+    deleteSourceEntry(state, entry.id);
     receipt = {
       ...structuredClone(original),
       operationId: command.operationId,

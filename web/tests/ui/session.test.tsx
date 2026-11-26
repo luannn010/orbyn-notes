@@ -1,7 +1,10 @@
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { AccountSession } from "../../src/domain/contracts";
 const control = vi.hoisted(() => ({
+  create: vi.fn(),
+  close: vi.fn(),
   signOut: vi.fn(),
   lock: null as null | (() => void),
   session: {
@@ -12,7 +15,10 @@ const control = vi.hoisted(() => ({
   } as AccountSession | null,
 }));
 vi.mock("../../src/account", () => ({
-  createAccountService: () => ({ current: async () => control.session, signOut: control.signOut }),
+  createAccountService: () => {
+    control.create();
+    return { close: control.close, current: async () => control.session, signOut: control.signOut };
+  },
   subscribeLock: (listener: () => void) => {
     control.lock = listener;
     return () => {
@@ -32,6 +38,8 @@ vi.mock("../../src/ui/AccountView", () => ({
 }));
 import { App } from "../../src/App";
 beforeEach(() => {
+  control.create.mockReset();
+  control.close.mockReset();
   control.signOut.mockReset().mockResolvedValue(undefined);
   vi.stubEnv("VITE_ENGINE_URL", "http://127.0.0.1:8089");
   vi.stubGlobal("matchMedia", () => ({
@@ -85,5 +93,17 @@ describe("session boundaries", () => {
     vi.stubEnv("VITE_ENGINE_URL", "");
     render(<App />);
     await screen.findByText("Private library contents");
+  });
+  it("releases every account service the attempt teardown created", async () => {
+    // StrictMode runs each effect setup twice with a cleanup in between.
+    const view = render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    await screen.findByText("Private library contents");
+    expect(control.create).toHaveBeenCalled();
+    view.unmount();
+    expect(control.close).toHaveBeenCalledTimes(control.create.mock.calls.length);
   });
 });

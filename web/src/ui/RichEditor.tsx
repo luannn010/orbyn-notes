@@ -102,6 +102,7 @@ type LinkRequest = {
   document: Editor["state"]["doc"];
 };
 
+// design: notes/slash-menu
 function currentSlash(editor: Editor): Slash | null {
   const { selection } = editor.state;
   if (!selection.empty || !selection.$from.parent.isTextblock) return null;
@@ -214,6 +215,7 @@ export function RichEditor({
   const editorVersion = useRef(0),
     sourceDecorations = useRef(DecorationSet.empty),
     sourceKey = useRef(new PluginKey("note-source-passages"));
+  // design: notes/st-make-toolbar
   const [sourceSelection, setSourceSelection] =
     useState<EditorSourceCapture | null>(null);
   const sourceToolbar = useRef<HTMLDivElement>(null);
@@ -326,7 +328,12 @@ export function RichEditor({
   const [slash, setSlash] = useState<Slash | null>(null);
   const [active, setActive] = useState(0);
   const [closing, setClosing] = useState<Slash | null>(null);
-  const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 300 });
+  const [position, setPosition] = useState({
+    left: 0,
+    top: 0,
+    width: 260,
+    maxHeight: 300,
+  });
   const slashRef = useRef<Slash | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const dismissed = useRef<Slash | null>(null);
@@ -818,10 +825,7 @@ export function RichEditor({
         right = left + width,
         bottom = top + height;
       const menu = menuRef.current,
-        ownWidth = Math.max(
-          0,
-          menu?.offsetWidth || Math.min(260, width - gap * 2),
-        ),
+        ownWidth = Math.max(0, Math.min(260, width - gap * 2)),
         ownHeight = menu?.scrollHeight ?? 0;
       const spaceBelow = Math.max(0, bottom - gap - rect.bottom),
         spaceAbove = Math.max(0, rect.top - top - gap),
@@ -840,6 +844,7 @@ export function RichEditor({
             bottom - gap - rendered,
           ),
         ),
+        width: ownWidth,
         maxHeight,
       });
     };
@@ -895,7 +900,7 @@ export function RichEditor({
       )
         menu.scrollTop = row.offsetTop + row.offsetHeight - menu.clientHeight;
     }
-  }, [slash, active, matches.join("|")]);
+  }, [slash, active, matches.join("|"), position.maxHeight]);
   function requestFromDraft(draft: EditorLinkDraft): LinkRequest {
     return {
       from: draft.from,
@@ -1369,6 +1374,7 @@ export function RichEditor({
             position: "fixed",
             left: position.left,
             top: position.top,
+            width: position.width,
             maxHeight: position.maxHeight,
           }}
         >

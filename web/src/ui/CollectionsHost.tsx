@@ -4,7 +4,10 @@ import type {
   StudyEntryOpenRequest,
 } from "./studySourceNavigation";
 import type { AccountSession } from "../domain/contracts";
-import type { CollectionsStore } from "../collections/contracts";
+import type {
+  CollectionsState,
+  CollectionsStore,
+} from "../collections/contracts";
 import { trackOperation } from "../desktop/closeGuard";
 import type { HeadingPresentation } from "./routeHeadingMotion";
 import { StudyView } from "./StudyView";
@@ -37,6 +40,7 @@ export function CollectionsHost({
   clipSearchInvocation,
   restoreClipSearchOrigin,
   onSearchReaderResult,
+  onDeleteSourceEntries,
   covered = false,
   onReopen,
 }: {
@@ -51,6 +55,10 @@ export function CollectionsHost({
   restoreClipSearchOrigin?: number;
   onSearchReaderResult?: SearchReaderResult;
   onOpenSource?: (request: StudySourceOpenRequest) => void;
+  onDeleteSourceEntries?: (
+    entryIds: string[],
+    expectedCollectionsEpoch: string,
+  ) => Promise<CollectionsState>;
   openEntry?: StudyEntryOpenRequest | null;
   collections?: CollectionsStore | null;
   session: AccountSession;
@@ -280,6 +288,7 @@ export function CollectionsHost({
       onReturnToSearch={onReturnToSearch}
       onOpenNote={onOpenNote}
       onOpenSource={onOpenSource}
+      onDeleteSourceEntries={onDeleteSourceEntries}
       openEntry={openEntry}
     />
   );

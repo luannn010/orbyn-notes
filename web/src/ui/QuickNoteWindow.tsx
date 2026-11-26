@@ -10,6 +10,7 @@ import { NewNote } from "./NewNote";
 import { NotesMark } from "./NotesMark";
 import { Pin, X } from "./icons";
 
+// design: notes/quick-note
 export function QuickNoteWindow({ store }: { store: NotesStore }) {
   const root = useRef<HTMLDivElement>(null),
     bridge = useRef<DesktopWindow | null>(null);
