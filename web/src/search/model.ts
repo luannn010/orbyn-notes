@@ -1,3 +1,4 @@
+import { ClozeScanner, clozeAnswerMatches } from "../study/cloze";
 import type {
   SearchSourceReader,
   SearchNoteView,
@@ -160,73 +161,24 @@ function* parseCloze(
       const blank = yield* read(() => reader.blank(view.cursor, i));
       yield* blanks.set(blank.id, blank.answer);
     }
-    let start = 0,
-      open = -1,
-      idLength = 0,
-      stage = 0;
+    let start = 0;
+    const scanner = new ClozeScanner();
+    const seen = new Set<string>();
     for (let from = 0; from < view.text.length;) {
-      const to = Math.min(view.text.length, from + 4096),
-        candidates: { from: number; to: number; id: string }[] = [];
-      yield* work(
+      const to = Math.min(view.text.length, from + 4096);
+      const candidates = yield* work(
         (to - from) * 40 + 128,
         1,
-        () => {
-          for (let p = from; p < to; p++) {
-            const unit = view.text[p]!;
-            if (stage === 0) {
-              if (unit === "{") {
-                open = p;
-                stage = 1;
-              }
-            } else if (stage === 1) {
-              if (unit === "{") {
-                stage = 2;
-                idLength = 0;
-              } else {
-                stage = 0;
-                open = -1;
-              }
-            } else if (stage === 2) {
-              if (unit === "}") {
-                stage = 3;
-              } else if (unit === "{") {
-                open = idLength === 0 ? p - 1 : p;
-                stage = idLength === 0 ? 2 : 1;
-                idLength = 0;
-              } else {
-                if (idLength < 101) idLength++;
-                else {
-                  stage = 0;
-                  open = -1;
-                }
-              }
-            } else {
-              if (unit === "}" && idLength) {
-                candidates.push({
-                  from: open,
-                  to: p + 1,
-                  id: view.text.slice(open + 2, p - 1),
-                });
-                stage = 0;
-                open = -1;
-              } else if (unit === "{") {
-                open = p;
-                stage = 1;
-                idLength = 0;
-              } else {
-                stage = 0;
-                open = -1;
-              }
-            }
-          }
-        },
+        () => scanner.scan(view.text, from, to),
         to - from,
       );
       for (const candidate of candidates) {
         const answer = yield* blanks.get(candidate.id);
-        if (answer === undefined)
+        if (answer === undefined || seen.has(candidate.id) ||
+            !(yield* clozeAnswerMatches(view.text, candidate, answer)))
           throw new Error("Invalid admitted Cloze marker.");
-        yield* work(96, 1, () => {
+        yield* work(128, 1, () => {
+          seen.add(candidate.id);
           if (candidate.from > start)
             result.push({ source: view.text, from: start, to: candidate.from });
           result.push({ blankId: candidate.id, answer });
@@ -235,6 +187,8 @@ function* parseCloze(
       }
       from = to;
     }
+    if (seen.size !== view.blankCount)
+      throw new Error("Invalid admitted Cloze marker.");
     if (start < view.text.length)
       yield* work(32, 1, () =>
         result.push({ source: view.text, from: start, to: view.text.length }),

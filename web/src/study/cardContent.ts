@@ -1,4 +1,5 @@
 import type { CardKey } from "../collections/contracts";
+import { ClozeScanner, clozeAnswerMatches } from "./cloze";
 import { SearchIdentityMap } from "../search/identity";
 import type { WorkEvent } from "../search/work";
 export type CardContentInput =
@@ -163,8 +164,7 @@ function* parse(
   input: Extract<CardContentInput, { type: "cloze" }>,
   state: State,
 ): Generator<WorkEvent, void, void> {
-  const blanks = new SearchIdentityMap<{ answer: string; seen: number }>(),
-    literals: { from: number; to: number }[] = [];
+  const blanks = new SearchIdentityMap<{ answer: string; seen: number }>();
   try {
     for (const blank of input.blanks) {
       yield* work(
@@ -181,69 +181,21 @@ function* parse(
     }
     const selected = input.key.slice(6);
     if (!(yield* blanks.get(selected))) invalid();
-    let literal = 0,
-      open = -1,
-      stage = 0,
-      length = 0;
+    let literal = 0;
+    const scanner = new ClozeScanner();
     for (let from = 0; from < input.text.length;) {
-      const to = Math.min(input.text.length, from + 4096),
-        found: { from: number; to: number; id: string }[] = [];
-      yield* work(
+      const to = Math.min(input.text.length, from + 4096);
+      const found = yield* work(
         (to - from) * 40 + 128,
         1,
-        () => {
-          for (let p = from; p < to; p++) {
-            const unit = input.text[p]!;
-            if (stage === 0) {
-              if (unit === "{") {
-                open = p;
-                stage = 1;
-              }
-            } else if (stage === 1) {
-              if (unit === "{") {
-                stage = 2;
-                length = 0;
-              } else {
-                stage = 0;
-                open = -1;
-              }
-            } else if (stage === 2) {
-              if (unit === "}") stage = 3;
-              else if (unit === "{") {
-                open = length === 0 ? p - 1 : p;
-                stage = length === 0 ? 2 : 1;
-                length = 0;
-              } else if (length < 101) length++;
-              else {
-                stage = 0;
-                open = -1;
-              }
-            } else if (unit === "}" && length) {
-              found.push({
-                from: open,
-                to: p + 1,
-                id: input.text.slice(open + 2, p - 1),
-              });
-              stage = 0;
-              open = -1;
-            } else if (unit === "{") {
-              open = p;
-              stage = 1;
-              length = 0;
-            } else {
-              stage = 0;
-              open = -1;
-            }
-          }
-        },
+        () => scanner.scan(input.text, from, to),
         to - from,
       );
       for (const marker of found) {
         const blank = yield* blanks.get(marker.id);
         if (!blank || blank.seen++) invalid();
-        yield* work(32, 1, () =>
-          literals.push({ from: literal, to: marker.from }),
-        );
+        // An inline answer is the same blank's answer, never a second one.
+        if (!(yield* clozeAnswerMatches(input.text, marker, blank.answer))) invalid();
         yield* append(state.front, input.text, literal, marker.from);
         yield* append(state.back, input.text, literal, marker.from);
         yield* append(
@@ -255,40 +207,12 @@ function* parse(
       }
       from = to;
     }
-    yield* work(32, 1, () =>
-      literals.push({ from: literal, to: input.text.length }),
-    );
     yield* append(state.front, input.text, literal);
     yield* append(state.back, input.text, literal);
-    // Match producer admission after removing complete markers, without joining
-    // the literal residue or scanning answers as if they were marker syntax.
-    let previous = "";
-    for (const span of literals)
-      for (let from = span.from; from < span.to;) {
-        const to = Math.min(span.to, from + 4096);
-        yield* work(
-          (to - from) * 6 + 32,
-          1,
-          () => {
-            for (let p = from; p < to; p++) {
-              const unit = input.text[p]!;
-              if (
-                (unit === "{" && previous === "{") ||
-                (unit === "}" && previous === "}")
-              )
-                invalid();
-              previous = unit;
-            }
-          },
-          to - from,
-        );
-        from = to;
-      }
     for (const blank of input.blanks)
       if ((yield* blanks.get(blank.id))!.seen !== 1) invalid();
   } finally {
     blanks.clear();
-    literals.length = 0;
   }
 }
 export function* buildCardContent(
