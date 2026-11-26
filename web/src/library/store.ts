@@ -272,6 +272,12 @@ export async function openNotesStore(
       resultingEpoch: string | null = null,
       wrote = false,
       committed = false;
+    // Track explicit owner and validation rejections separately from storage failures.
+    let rejectedChange: { error: unknown } | undefined;
+    const rejectChange = (error: unknown): never => {
+      rejectedChange = { error };
+      throw error;
+    };
     let searchCandidate: {
       record: DeviceRecord;
       before?: DeviceRecord;
@@ -364,7 +370,7 @@ export async function openNotesStore(
                 knownMismatch.revision === common.revision &&
                 knownMismatch.rawIndex === rawIndex))
           )
-            throw new NoteLinkError("note_link_index_invalid");
+            rejectChange(new NoteLinkError("note_link_index_invalid"));
           const existed = header !== null;
           if (!library && !recoveryCommon && options.initialize) {
             try {
@@ -392,7 +398,7 @@ export async function openNotesStore(
             (library ?? recoveryCommon) &&
             operationEpoch !== (library ?? recoveryCommon)!.epoch
           )
-            throw new LibraryEpochError();
+            rejectChange(new LibraryEpochError());
           const ctx: Context = {
             notes: core.notes,
             library,
@@ -426,7 +432,11 @@ export async function openNotesStore(
                 )
               : null;
           const linkSnapshot = library ? ownerSnapshot(ctx) : null;
-          options.change?.(ctx);
+          try {
+            options.change?.(ctx);
+          } catch (error) {
+            rejectChange(error);
+          }
           if (
             options.change &&
             !ctx.skipWrite &&
@@ -489,7 +499,16 @@ export async function openNotesStore(
               ctx.library.noteLinks = [...rows.values()].filter((row) =>
                 ids.has(row.noteId),
               );
-              validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              try {
+                validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              } catch (error) {
+                if (
+                  error instanceof NoteLinkError &&
+                  error.code === "note_link_limit"
+                )
+                  rejectChange(error);
+                throw error;
+              }
             }
           }
           // Central tag operations revise Notes outside changeNote, but retain
@@ -527,7 +546,7 @@ export async function openNotesStore(
           options.signal?.throwIfAborted();
           options.beforeStage?.();
           const changed = Boolean(options.change && !ctx.skipWrite);
-          if (changed && !ctx.library) throw new LibraryReadOnlyError();
+          if (changed && !ctx.library) rejectChange(new LibraryReadOnlyError());
           // Capture the old collections revision while its authenticated owner
           // still exists. Purge and all fresh-key replacements share this IDB put.
           const finishCollectionsErase =
@@ -634,8 +653,12 @@ export async function openNotesStore(
       return result as T;
     } catch (error) {
       if (options.change && !closed) {
+        // A rejected change or a pre-commit cancellation did not write.
         state =
-          options.signal?.aborted && error === options.signal.reason && !committed
+          (rejectedChange && Object.is(rejectedChange.error, error)) ||
+          (options.signal?.aborted &&
+            error === options.signal.reason &&
+            !committed)
             ? { status: "ready" }
             : {
                 status: "failed",

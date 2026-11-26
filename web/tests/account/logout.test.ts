@@ -61,6 +61,33 @@ async function authenticated() {
   });
   return { service, identity };
 }
+it("releases the lock subscription when a service attempt is torn down", async () => {
+  const sessionModule = await import("../../src/account/session");
+  const realOnLock = sessionModule.onLock;
+  const live = new Set<() => void>();
+  const spy = vi
+    .spyOn(sessionModule, "onLock")
+    .mockImplementation((listener: () => void) => {
+      live.add(listener);
+      const stop = realOnLock(listener);
+      return () => {
+        live.delete(listener);
+        stop();
+      };
+    });
+  try {
+    // React StrictMode runs an effect setup, its cleanup, then setup again.
+    // The first service must not stay registered once its cleanup ran.
+    const first = createAccountService();
+    first.close();
+    const second = createAccountService();
+    expect(live.size).toBe(1);
+    second.close();
+    expect(live.size).toBe(0);
+  } finally {
+    spy.mockRestore();
+  }
+});
 it("invalidates access immediately but announces logout only after durable grant deletion", async () => {
   const { service, identity } = await authenticated();
   const store = await openNotesStore(identity);
