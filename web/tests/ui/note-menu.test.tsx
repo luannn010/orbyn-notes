@@ -12,18 +12,19 @@ function setup(create: NotesStore["create"]) {
 }
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Note menu" }));
 describe("note actions", () => {
-  it("renames by focusing the title and guards dirty actions", async () => {
+  it("renames by focusing the title, keeps pending-save actions available, and guards a failed save", async () => {
     const { onTrash, onExport } = setup(vi.fn());
     open(); fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     const title = screen.getByRole("textbox", { name: "Note title" });
     expect(title).toHaveFocus();
     fireEvent.change(title, { target: { value: "Unsaved" } });
     open();
-    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeDisabled();
-    expect(screen.getByRole("menuitem", { name: "Export Markdown" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Export Markdown" })).toBeEnabled();
     fireEvent.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
-    expect(onTrash).not.toHaveBeenCalled(); expect(onExport).not.toHaveBeenCalled();
-    expect(screen.getByText(/latest changes are only in this window/)).toBeVisible();
+    expect(onTrash).not.toHaveBeenCalled();
+    expect(onExport).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Save or copy your text before leaving/)).toBeVisible();
   });
   it("prevents a second pending duplicate and permits retry after failure", async () => {
     let fail!: (error: Error) => void;

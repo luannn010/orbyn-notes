@@ -8,7 +8,7 @@ import type {
 } from "./contracts";
 import type { SearchQuery } from "./text";
 import { LiteralMatcher, splitSearchText } from "./matching";
-import type { SearchExcerpt, TextSlice } from "./matching";
+import type { SearchExcerpt, TextSlice, ChunkMatch } from "./matching";
 import type {
   SearchCounts,
   SearchKind,
@@ -295,20 +295,29 @@ function* scan(
     excerpt: SearchExcerpt | null = null,
     prefix = "",
     more = false;
-  const contexts: { excerpt: SearchExcerpt; runFrom: number }[] = [];
+  const contexts: { excerpt: SearchExcerpt; offset: number }[] = [];
   let runFrom = 0;
+  function* retainContext(found: ChunkMatch): Stream {
+    // Full-prefix reconstruction is impossible after truncation; retaining its
+    // excerpts at every later semantic boundary would grow unused state.
+    if (!more && found.excerpt)
+      yield* work(32, 1, () => contexts.push({
+        excerpt: found.excerpt!, offset: runFrom + found.excerptFrom!,
+      }));
+  }
   const emit: Emit = function* (segment) {
     if (segment === null || "placeholder" in segment) {
       const ended = yield* matcher.finish();
       mask |= ended.mask;
       excerpt ??= ended.excerpt;
+      yield* retainContext(ended);
       yield* work(128, 1, () => matcher.boundary());
       if (segment) {
         yield* work(16, 1, () => {
           const add = "[...]";
           const remaining = 240 - prefix.length;
           if (remaining > 0) prefix += add.slice(0, remaining);
-          if (add.length > remaining) more = true;
+          if (add.length > remaining) { more = true; contexts.length = 0; }
         });
       }
       if (excerpt) excerpt = Object.freeze({ ...excerpt, after: true });
@@ -319,8 +328,7 @@ function* scan(
     mask |= found.mask;
     if (excerpt) excerpt = Object.freeze({ ...excerpt, after: true });
     else excerpt = found.excerpt;
-    if (found.excerpt && prefix.length < 240)
-      contexts.push({ excerpt: found.excerpt, runFrom });
+    yield* retainContext(found);
     yield* work(1024, 1, () => {
       let take = Math.min(segment.to - segment.from, 240 - prefix.length);
       if (take > 0) {
@@ -335,19 +343,20 @@ function* scan(
           take--;
         prefix += segment.source.slice(segment.from, segment.from + take);
       }
-      if (segment.to - segment.from > take) more = true;
+      if (segment.to - segment.from > take) { more = true; contexts.length = 0; }
     });
   };
   yield* stream(emit);
   const ended = yield* matcher.finish();
   mask |= ended.mask;
   excerpt ??= ended.excerpt;
+  yield* retainContext(ended);
   if (excerpt && !more) {
     const marked = yield* work(256, 1, () =>
       new Array<boolean>(prefix.length).fill(false),
     );
     for (const context of contexts) {
-      const at = yield* findText(prefix, context.excerpt.text, context.runFrom);
+      const at = context.offset;
       if (at >= 0)
         yield* work(
           2048,

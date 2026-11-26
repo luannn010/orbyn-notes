@@ -11,7 +11,7 @@ type Token = ReturnType<typeof parser.parse>[number];
 export const MAX_MARKDOWN_FILE_BYTES = 2_000_000;
 export const MAX_MARKDOWN_BATCH_BYTES = 10_000_000;
 export const MAX_MARKDOWN_FILES = 100;
-function inline(tokens: Token[]): RichNode[] {
+function inline(tokens: Token[], filename: string): RichNode[] {
   const nodes: RichNode[] = [];
   let marks: NonNullable<RichNode["marks"]> = [];
   for (const token of tokens) {
@@ -30,8 +30,10 @@ function inline(tokens: Token[]): RichNode[] {
     else if (token.type === "softbreak")
       nodes.push({ type: "text", text: "\n" });
     else if (token.type === "hardbreak") nodes.push({ type: "hardBreak" });
-    else if (token.type === "image" && token.content)
-      nodes.push({ type: "text", text: token.content });
+    else if (token.type === "image")
+      throw new Error(
+        `unsupported_image: ${JSON.stringify(filename)} contains an image, which is not supported yet. Keep the image and its URL separately before importing. Nothing was imported.`,
+      );
     else if (token.type.endsWith("_open")) {
       const kind: Record<string, string> = {
         strong_open: "bold",
@@ -61,6 +63,7 @@ function document(tokens: Token[], filename: string): NoteDocument {
     );
   const root: NoteDocument = { type: "doc", content: [] };
   const stack: RichNode[] = [root];
+  const taskMarkers = new WeakMap<RichNode, RegExpExecArray>();
   const kinds: Record<string, string> = {
     paragraph_open: "paragraph",
     heading_open: "heading",
@@ -80,17 +83,30 @@ function document(tokens: Token[], filename: string): NoteDocument {
       parent.content!.push(node);
       stack.push(node);
     } else if (token.type.endsWith("_close")) stack.pop();
-    else if (token.type === "inline")
-      parent.content!.push(...inline(token.children ?? []));
-    else if (["fence", "code_block"].includes(token.type))
+    else if (token.type === "inline") {
+      const item = stack.at(-2);
+      if (
+        parent.type === "paragraph" &&
+        item?.type === "listItem" &&
+        item.content?.[0] === parent &&
+        stack.at(-3)?.type === "bulletList"
+      ) {
+        // Parsed text also contains escaped/marked literals. Only a source
+        // marker followed by whitespace or end-of-line admits a task item.
+        const marker = /^\[([ xX])\](?:[ \t]|(?=\n|$))/.exec(token.content);
+        if (marker) taskMarkers.set(item, marker);
+      }
+      parent.content!.push(...inline(token.children ?? [], filename));
+    } else if (["fence", "code_block"].includes(token.type)) {
+      // A fence holding only a blank line yields "\n" and would leave an empty
+      // text node, which the editor schema cannot load.
+      const text = token.content.replace(/\n$/, "");
       parent.content!.push({
         type: "codeBlock",
         attrs: { language: token.info.trim().split(/\s/)[0] || null },
-        content: token.content
-          ? [{ type: "text", text: token.content.replace(/\n$/, "") }]
-          : [],
+        content: text ? [{ type: "text", text }] : [],
       });
-    else if (token.type === "hr")
+    } else if (token.type === "hr")
       parent.content!.push({ type: "horizontalRule" });
   }
   function tasks(nodes: RichNode[]): RichNode[] {
@@ -100,7 +116,11 @@ function document(tokens: Token[], filename: string): NoteDocument {
       const groups: RichNode[] = [];
       for (const item of node.content ?? []) {
         const text = item.content?.[0]?.content?.[0];
-        const match = /^\[([ xX])\] /.exec(text?.text ?? "");
+        const marker = taskMarkers.get(item);
+        const match =
+          marker && !text?.marks?.length && text?.text?.startsWith(marker[0])
+            ? marker
+            : null;
         const type = match ? "taskList" : "bulletList";
         if (match) {
           item.type = "taskItem";
@@ -123,19 +143,25 @@ function document(tokens: Token[], filename: string): NoteDocument {
     ? root
     : { type: "doc", content: [{ type: "paragraph", content: [] }] };
 }
-function frontmatter(source: string): {
+function frontmatter(
+  source: string,
+  filename: string,
+): {
   body: string;
   title?: string;
   tags: string[];
 } {
   if (!source.startsWith("---\n")) return { body: source, tags: [] };
-  const end = source.indexOf("\n---\n", 4);
-  if (end < 0 || end > 10000)
+  const closing = /^---(?:\n|$)/gm;
+  closing.lastIndex = 4;
+  const delimiter = closing.exec(source);
+  const end = delimiter?.index ?? -1;
+  if (end < 0 || end - 1 > 10000)
     throw new Error(
-      "invalid_frontmatter: Use a closed title/tags front matter block.",
+      `invalid_frontmatter: ${JSON.stringify(filename)}: Use a closed title/tags front matter block.`,
     );
   const result: { body: string; title?: string; tags: string[] } = {
-    body: source.slice(end + 5),
+    body: source.slice(end + delimiter![0].length),
     tags: [],
   };
   const seen = new Set<string>();
@@ -144,7 +170,7 @@ function frontmatter(source: string): {
     const match = /^(title|tags):\s*(.*)$/.exec(line);
     if (!match || seen.has(match[1]!))
       throw new Error(
-        "invalid_frontmatter: Only title and tags are supported.",
+        `invalid_frontmatter: ${JSON.stringify(filename)}: Only title and tags are supported.`,
       );
     seen.add(match[1]!);
     let value: unknown;
@@ -152,16 +178,20 @@ function frontmatter(source: string): {
       value = JSON.parse(match[2]!);
     } catch {
       throw new Error(
-        "invalid_frontmatter: title and tags must use JSON strings and arrays.",
+        `invalid_frontmatter: ${JSON.stringify(filename)}: title and tags must use JSON strings and arrays.`,
       );
     }
     if (match[1] === "title") {
       if (typeof value !== "string")
-        throw new Error("invalid_frontmatter: Invalid title.");
+        throw new Error(
+          `invalid_frontmatter: ${JSON.stringify(filename)}: Invalid title.`,
+        );
       result.title = value;
     } else {
       if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
-        throw new Error("invalid_frontmatter: Invalid tags.");
+        throw new Error(
+          `invalid_frontmatter: ${JSON.stringify(filename)}: Invalid tags.`,
+        );
       result.tags = value;
     }
   }
@@ -180,6 +210,10 @@ export function parseMarkdown(
       !/\.(?:md|markdown|mdown)$/i.test(file.name)
     )
       throw new Error("invalid_file: Choose Markdown files.");
+    if (!file.content.trim())
+      throw new Error(
+        `invalid_file: ${JSON.stringify(file.name)} is empty. Nothing was imported.`,
+      );
     const size = new TextEncoder().encode(file.content).length;
     total += size;
     if (size > MAX_MARKDOWN_FILE_BYTES || total > MAX_MARKDOWN_BATCH_BYTES)
@@ -190,6 +224,7 @@ export function parseMarkdown(
       throw new Error("invalid_file: Binary files cannot be imported.");
     const front = frontmatter(
       file.content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"),
+      file.name,
     );
     const doc = document(parser.parse(front.body, {}), file.name);
     const heading = doc.content.find((n) => n.type === "heading");
@@ -220,6 +255,77 @@ export function escapeMarkdownText(text: string): string {
       .replace(/\n/g, "&#10;")
   );
 }
+// Body lines can use readable soft breaks. Edges and consecutive newlines need
+// entities so Markdown does not trim them or split a single paragraph in two.
+function escapeMarkdownBodyText(
+  text: string,
+  before: string | undefined,
+  after: string | undefined,
+  guardStart = false,
+  guardEnd = false,
+): string {
+  let prefix = "",
+    suffix = "";
+  // An entity at a marked run's edge is punctuation in Markdown source. Fence
+  // its plain neighbor too so the adjacent mark delimiter can open or close.
+  if (guardStart && text.length) {
+    const point = text.codePointAt(0)!;
+    const first = String.fromCodePoint(point);
+    prefix = `&#${point};`;
+    before = first.at(-1);
+    text = text.slice(first.length);
+  }
+  if (guardEnd && text.length) {
+    let start = text.length - 1;
+    if (
+      start > 0 &&
+      /[\uDC00-\uDFFF]/.test(text[start]!) &&
+      /[\uD800-\uDBFF]/.test(text[start - 1]!)
+    )
+      start--;
+    const last = text.slice(start);
+    suffix = `&#${last.codePointAt(0)};`;
+    after = last[0];
+    text = text.slice(0, start);
+  }
+  let offset = 0;
+  const body = text
+    .split("\n")
+    .map((line, index) => {
+      const escaped = escapeMarkdownText(line);
+      if (index === 0) {
+        offset = line.length;
+        return escaped;
+      }
+      const previous = text[offset - 1] ?? before;
+      const next = text[offset + 1] ?? after;
+      offset += line.length + 1;
+      return `${previous && next && previous !== "\n" && next !== "\n" ? "\n" : "&#10;"}${escaped}`;
+    })
+    .join("");
+  return prefix + body + suffix;
+}
+
+type MarkdownLoss =
+  "underline" | "adjacent lists" | "empty paragraphs" | "code line breaks";
+const markdownLossMessages: Record<MarkdownLoss, string> = {
+  underline: "Markdown cannot preserve underline formatting.",
+  "code line breaks":
+    "Markdown cannot preserve code line breaks in inline code.",
+  "adjacent lists": "Markdown can merge adjacent lists of the same kind.",
+  "empty paragraphs": "Markdown cannot preserve these empty paragraphs.",
+};
+export class UnsupportedMarkdownExportError extends Error {
+  constructor(reason: MarkdownLoss) {
+    super(
+      `unsupported_markdown_export: ${markdownLossMessages[reason]} Your notes were not changed.`,
+    );
+  }
+}
+type ReportMarkdownLoss = (reason: MarkdownLoss) => void;
+const rejectMarkdownLoss: ReportMarkdownLoss = (reason) => {
+  throw new UnsupportedMarkdownExportError(reason);
+};
 export function markdownCodeSpan(text: string): string {
   let longest = 0;
   for (const match of text.matchAll(/`+/g))
@@ -256,8 +362,7 @@ function inlineExtent(
     }
     const text = node.text ?? "";
     bytes += text.length * 6 + 4;
-    if (node.marks?.some((mark) => mark.type === "code"))
-      newlines += lineCount(text);
+    newlines += lineCount(text);
     for (const mark of node.marks ?? [])
       bytes +=
         4 +
@@ -299,13 +404,15 @@ function blockExtent(
       };
       for (let i = 0; i < children.length; i++) {
         const child = blockExtent(children[i]!.content ?? [], reference);
-        const prefix =
+        /** Mirrors the renderer: marker on line one, content column after. */
+        const marker =
           node.type === "orderedList"
             ? `${(Number(node.attrs?.start) || 1) + i}. `.length
             : node.type === "taskList"
               ? 6
               : 2;
-        value.bytes += child.bytes + prefix * (child.newlines + 1);
+        const indent = node.type === "orderedList" ? marker : 2;
+        value.bytes += child.bytes + marker + indent * child.newlines;
         value.newlines += child.newlines;
       }
     } else {
@@ -320,9 +427,16 @@ function blockExtent(
 function renderInline(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
+  bodyLines = false,
 ): string {
+  const edge = (node: RichNode | undefined, last: boolean) => {
+    if (node?.type === "hardBreak") return "\n";
+    if (node?.type === "noteLink") return "\ufffc";
+    return last ? node?.text?.at(-1) : node?.text?.[0];
+  };
   return nodes
-    .map((n) => {
+    .map((n, index) => {
       if (n.type === "hardBreak") return "  \n";
       if (n.type === "noteLink") {
         if (!reference)
@@ -331,16 +445,31 @@ function renderInline(
           );
         return reference(n);
       }
-      let text = escapeMarkdownText(n.text ?? "");
+      // Mark delimiters need non-whitespace edges; entities also retain the
+      // mark on a newline instead of introducing an unmarked soft-break node.
+      let text =
+        bodyLines && !n.marks?.length
+          ? escapeMarkdownBodyText(
+              n.text ?? "",
+              edge(nodes[index - 1], true),
+              edge(nodes[index + 1], false),
+              !!nodes[index - 1]?.marks?.length &&
+                !!nodes[index - 1]?.text?.endsWith("\n"),
+              !!nodes[index + 1]?.marks?.length &&
+                !!nodes[index + 1]?.text?.startsWith("\n"),
+            )
+          : escapeMarkdownText(n.text ?? "");
       let code: string | undefined;
       for (const mark of n.marks ?? []) {
         if (mark.type === "bold") text = `**${text}**`;
         else if (mark.type === "italic") text = `*${text}*`;
         else if (mark.type === "strike") text = `~~${text}~~`;
         else if (mark.type === "code") {
+          if (/[\r\n]/.test(n.text ?? "")) reportLoss("code line breaks");
           code ??= markdownCodeSpan(n.text ?? "");
           text = code;
-        } else if (mark.type === "link") {
+        } else if (mark.type === "underline") reportLoss("underline");
+        else if (mark.type === "link") {
           if (!safeHref(mark.attrs?.href))
             throw new Error("unsafe_link: Invalid link.");
           text = `[${text}](${String(mark.attrs.href).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
@@ -353,19 +482,31 @@ function renderInline(
 function renderBlocks(
   nodes: RichNode[] = [],
   reference?: (node: RichNode) => string,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
+  parent = "doc",
 ): string {
   return nodes
-    .map((n) => {
+    .map((n, index) => {
       const children = n.content ?? [];
+      if (
+        ["bulletList", "orderedList", "taskList"].includes(n.type) &&
+        nodes[index - 1]?.type === n.type
+      )
+        reportLoss("adjacent lists");
       switch (n.type) {
         case "paragraph":
-          return renderInline(children, reference);
+          if (
+            children.length === 0 &&
+            !(nodes.length === 1 && (parent === "doc" || parent === "taskItem"))
+          )
+            reportLoss("empty paragraphs");
+          return renderInline(children, reference, reportLoss, true);
         case "heading":
-          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children, reference)}`;
+          return `${"#".repeat(Math.max(1, Math.min(6, Number(n.attrs?.level) || 1)))} ${renderInline(children, reference, reportLoss)}`;
         case "horizontalRule":
           return "---";
         case "blockquote":
-          return renderBlocks(children, reference)
+          return renderBlocks(children, reference, reportLoss, n.type)
             .split("\n")
             .map((l) => `> ${l}`)
             .join("\n");
@@ -386,22 +527,30 @@ function renderBlocks(
         case "taskList":
           return children
             .map((item, index) => {
-              const prefix =
+              /** First-line marker; `[x] ` is content, not item indentation. */
+              const marker =
                 n.type === "orderedList"
                   ? `${(Number(n.attrs?.start) || 1) + index}. `
                   : n.type === "taskList"
                     ? `- [${item.attrs?.checked ? "x" : " "}] `
                     : "- ";
-              return renderBlocks(item.content, reference)
+              /** The column a nested block must reach to stay in this item. */
+              const indent = n.type === "orderedList" ? marker.length : 2;
+              return renderBlocks(
+                item.content,
+                reference,
+                reportLoss,
+                item.type,
+              )
                 .split("\n")
                 .map((line, i) =>
-                  i === 0 ? prefix + line : " ".repeat(prefix.length) + line,
+                  i === 0 ? marker + line : " ".repeat(indent) + line,
                 )
                 .join("\n");
             })
             .join("\n");
         default:
-          return renderBlocks(children, reference);
+          return renderBlocks(children, reference, reportLoss, n.type);
       }
     })
     .join("\n\n");
@@ -417,6 +566,7 @@ export function renderMarkdownSnapshot(
   notes: readonly Note[],
   reference?: (node: RichNode) => string,
   admission?: MarkdownAdmission,
+  reportLoss: ReportMarkdownLoss = rejectMarkdownLoss,
 ): Array<{ filename: string; content: string }> {
   return notes.map((note, index) => {
     admission?.admit(
@@ -429,10 +579,11 @@ export function renderMarkdownSnapshot(
       (note.title || "Untitled")
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
         .replace(/[. ]+$/g, "")
-        .slice(0, 100) || "Untitled";
+        .slice(0, 100)
+        .replace(/[\uD800-\uDBFF]$/, "") || "Untitled";
     return {
       filename: `${name}-${index + (admission?.startIndex ?? 0) + 1}.md`,
-      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference)}\n`,
+      content: `---\ntitle: ${JSON.stringify(note.title)}\ntags: ${JSON.stringify(note.tags)}\n---\n\n${renderBlocks(note.document.content, reference, reportLoss)}\n`,
     };
   });
 }

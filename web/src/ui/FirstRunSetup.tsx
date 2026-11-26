@@ -11,6 +11,7 @@ export type SetupImportState =
   | "running"
   | "failed"
   | "completed";
+// design: notes/first-run
 export function FirstRunSetup({
   email,
   environment,

@@ -258,17 +258,26 @@ export async function openNotesStore(
     collections?: boolean;
     repair?: boolean;
     beforeStage?: () => void;
+    signal?: AbortSignal;
   }): Promise<T> {
     // Immutable invocation fence: adopting an erase result must not admit queued old work.
     const operationEpoch = handleEpoch,
       operationLockVersion = lockVersion();
     assertOpen();
+    options.signal?.throwIfAborted();
     if (options.change && legacyReadOnly && !options.legacyErase)
       throw new LibraryReadOnlyError();
     const secret = await wrappingSecret(initial.wrapKey);
     let result: T | undefined,
       resultingEpoch: string | null = null,
-      wrote = false;
+      wrote = false,
+      committed = false;
+    // Track explicit owner and validation rejections separately from storage failures.
+    let rejectedChange: { error: unknown } | undefined;
+    const rejectChange = (error: unknown): never => {
+      rejectedChange = { error };
+      throw error;
+    };
     let searchCandidate: {
       record: DeviceRecord;
       before?: DeviceRecord;
@@ -294,6 +303,7 @@ export async function openNotesStore(
     };
     try {
       guard();
+      options.signal?.throwIfAborted();
       function apply(
         record: DeviceRecord | undefined,
       ): DeviceRecord | typeof UNCHANGED_RECORD {
@@ -360,7 +370,7 @@ export async function openNotesStore(
                 knownMismatch.revision === common.revision &&
                 knownMismatch.rawIndex === rawIndex))
           )
-            throw new NoteLinkError("note_link_index_invalid");
+            rejectChange(new NoteLinkError("note_link_index_invalid"));
           const existed = header !== null;
           if (!library && !recoveryCommon && options.initialize) {
             try {
@@ -388,7 +398,7 @@ export async function openNotesStore(
             (library ?? recoveryCommon) &&
             operationEpoch !== (library ?? recoveryCommon)!.epoch
           )
-            throw new LibraryEpochError();
+            rejectChange(new LibraryEpochError());
           const ctx: Context = {
             notes: core.notes,
             library,
@@ -422,7 +432,11 @@ export async function openNotesStore(
                 )
               : null;
           const linkSnapshot = library ? ownerSnapshot(ctx) : null;
-          options.change?.(ctx);
+          try {
+            options.change?.(ctx);
+          } catch (error) {
+            rejectChange(error);
+          }
           if (
             options.change &&
             !ctx.skipWrite &&
@@ -485,7 +499,16 @@ export async function openNotesStore(
               ctx.library.noteLinks = [...rows.values()].filter((row) =>
                 ids.has(row.noteId),
               );
-              validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              try {
+                validateLinkRows(ctx.library.noteLinks, ctx.notes);
+              } catch (error) {
+                if (
+                  error instanceof NoteLinkError &&
+                  error.code === "note_link_limit"
+                )
+                  rejectChange(error);
+                throw error;
+              }
             }
           }
           // Central tag operations revise Notes outside changeNote, but retain
@@ -520,9 +543,10 @@ export async function openNotesStore(
             }
           }
           guard();
+          options.signal?.throwIfAborted();
           options.beforeStage?.();
           const changed = Boolean(options.change && !ctx.skipWrite);
-          if (changed && !ctx.library) throw new LibraryReadOnlyError();
+          if (changed && !ctx.library) rejectChange(new LibraryReadOnlyError());
           // Capture the old collections revision while its authenticated owner
           // still exists. Purge and all fresh-key replacements share this IDB put.
           const finishCollectionsErase =
@@ -597,7 +621,13 @@ export async function openNotesStore(
           state = { status: "saving" };
           notify();
         }
-        await mutateRecord<DeviceRecord>("devices", identity.email, apply);
+        await mutateRecord<DeviceRecord>(
+          "devices",
+          identity.email,
+          apply,
+          options.signal,
+        );
+        committed = true;
         guard();
         if (options.erase && wrote) {
           handleEpoch = resultingEpoch;
@@ -623,13 +653,20 @@ export async function openNotesStore(
       return result as T;
     } catch (error) {
       if (options.change && !closed) {
-        state = {
-          status: "failed",
-          message:
-            error instanceof Error
-              ? error.message
-              : "The library could not be saved.",
-        };
+        // A rejected change or a pre-commit cancellation did not write.
+        state =
+          (rejectedChange && Object.is(rejectedChange.error, error)) ||
+          (options.signal?.aborted &&
+            error === options.signal.reason &&
+            !committed)
+            ? { status: "ready" }
+            : {
+                status: "failed",
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "The library could not be saved.",
+              };
         notify();
       }
       throw error;
@@ -1359,6 +1396,72 @@ export async function openNotesStore(
           syncMembership(writable(ctx), note, now);
         },
         project: (ctx) => findNote(ctx, id),
+      });
+    },
+    createBatch: async (entries, options) => {
+      const { signal, expectedEpoch } = options;
+      signal?.throwIfAborted();
+      uuid(expectedEpoch);
+      if (!Array.isArray(entries) || entries.length > 10)
+        throw new Error(
+          "import_batch_limit: Import at most 10 notes per transaction.",
+        );
+      const ids = new Set<string>();
+      let units = 0;
+      const checked = entries.map((entry) => {
+        noteId(entry.creationId);
+        if (ids.has(entry.creationId))
+          throw new Error("import_batch_invalid: Creation IDs must be distinct.");
+        ids.add(entry.creationId);
+        const input = validateInput(structuredClone(entry.input));
+        units += JSON.stringify(input).length;
+        if (entries.length > 1 && units > 1_000_000)
+          throw new Error(
+            "import_batch_limit: Split large imports into smaller transactions.",
+          );
+        return { id: entry.creationId, input };
+      });
+      return access({
+        signal,
+        change: (ctx) => {
+          const state = writable(ctx);
+          if (state.epoch !== expectedEpoch) throw new LibraryEpochError();
+          const current = new Map(ctx.notes.map((note) => [note.id, note]));
+          // Check every replay before adding any note to this transaction.
+          for (const entry of checked) {
+            const existing = current.get(entry.id);
+            if (
+              existing &&
+              (existing.revision !== 1 ||
+                existing.trashedAt ||
+                existing.title !== entry.input.title ||
+                !sameDocument(existing.document, entry.input.document) ||
+                JSON.stringify(existing.tags) !== JSON.stringify(entry.input.tags))
+            )
+              throw new RevisionConflictError(existing, {
+                ...existing,
+                ...entry.input,
+              });
+          }
+          const now = new Date().toISOString();
+          let added = false;
+          for (const entry of checked) {
+            if (current.has(entry.id)) continue;
+            const note: Note = {
+              ...entry.input,
+              id: entry.id,
+              createdAt: now,
+              updatedAt: now,
+              trashedAt: null,
+              revision: 1,
+            };
+            ctx.notes.push(note);
+            syncMembership(state, note, now);
+            added = true;
+          }
+          if (!added) ctx.skipWrite = true;
+        },
+        project: (ctx) => checked.map((entry) => findNote(ctx, entry.id)),
       });
     },
     update: async (id, patch, revision) => {

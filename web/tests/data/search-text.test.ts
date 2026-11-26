@@ -40,7 +40,14 @@ describe("bounded literal matching and original scalar highlights", () => {
     let mask = 0;
     const snippets = [];
     for (const piece of pieces) {
-      if (piece === null) { matcher.boundary(); continue; }
+      if (piece === null) {
+        const final = await new SearchWork(matcher.finish(), undefined, async () => {}).round();
+        if (final.status !== "done") throw new Error("Unexpected boundary pause");
+        mask |= final.value.mask;
+        if (final.value.excerpt) snippets.push(final.value.excerpt);
+        matcher.boundary();
+        continue;
+      }
       for (const chunk of splitSearchText(piece)) {
         const result = await new SearchWork(matcher.push(chunk), undefined, async () => {}).round();
         if (result.status !== "done") throw new Error("One bounded chunk unexpectedly paused");
@@ -73,8 +80,8 @@ describe("bounded literal matching and original scalar highlights", () => {
   it("keeps combining sequences inside one bounded chunk", async () => {
     const chunked = await scan("é", ["x".repeat(4094) + "e\u0301"]);
     expect(chunked.mask).toBe(1);
-    expect(chunked.snippets[0]?.matches).toEqual([{ from: 0, to: 2 }]);
-    expect(chunked.snippets[0]?.text).toBe("e\u0301");
+    const excerpt = chunked.snippets[0]!;
+    expect(excerpt.matches.map(range => excerpt.text.slice(range.from, range.to))).toEqual(["e\u0301"]);
   });
   it("advances past a normalization cluster larger than a chunk", () => {
     const source = "e" + "\u0301".repeat(4095);
@@ -88,6 +95,7 @@ describe("bounded literal matching and original scalar highlights", () => {
     expect((await scan(text, [text])).mask).toBe(1);
   });
   it("matches across contiguous marked nodes and chunk splits but not semantic boundaries", async () => {
+    expect((await scan("e", ["e", null, "q"])).mask).toBe(1);
     expect((await scan("Straße", ["Stra", "ße"])).mask).toBe(1);
     expect((await scan("Straße", ["Stra", null, "ße"])).mask).toBe(0);
     expect((await scan("needle", ["x".repeat(4094) + "needle"])).mask).toBe(1);

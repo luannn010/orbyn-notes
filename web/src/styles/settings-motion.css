@@ -40,11 +40,25 @@
 .settings-motion-pane .settings-heading {
   padding-right: 100px;
 }
-.settings-motion-done {
-  position: absolute;
-  z-index: 1;
+/* The web dialog is the scrollport; keep the section header and its Done action in view. */
+.settings-dialog .settings-pane {
+  overflow: visible;
+}
+.settings-dialog .settings-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--main);
+}
+.settings-dialog .settings-motion-done {
+  position: sticky;
+  z-index: 3;
   top: 22px;
-  right: 28px;
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: end;
+  margin-top: 22px;
+  margin-right: 28px;
 }
 .settings-segments {
   position: relative;
@@ -99,9 +113,10 @@
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .settings-motion-done {
+  .settings-dialog .settings-motion-done {
     top: 18px;
-    right: 20px;
+    margin-top: 18px;
+    margin-right: 20px;
   }
 }
 /* Study owns its values and labels; share the Notes switch's presentation only. */

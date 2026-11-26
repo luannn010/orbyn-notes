@@ -8,7 +8,7 @@ beforeEach(() => {
 });
 
 it.each([
-  { name: "oversized file", files: [{ name: "large.md", size: 2_000_001 }], message: "Choose Markdown files up to 2 MB each." },
+  { name: "oversized file", files: [{ name: "large.md", size: 2_000_001 }], message: "large.md: Choose Markdown files up to 2 MB each." },
   { name: "oversized batch", files: Array.from({ length: 6 }, (_, i) => ({ name: `${i}.md`, size: 2_000_000 })), message: "Import batches up to 10 MB." },
   { name: "too many files", files: Array.from({ length: 101 }, (_, i) => ({ name: `${i}.md`, size: 1 })), message: "Import at most 100 files at once." },
 ])("rejects $name before reading content", async ({ files, message }) => {
