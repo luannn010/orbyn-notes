@@ -181,6 +181,10 @@ export function parseMarkdown(
       !/\.(?:md|markdown|mdown)$/i.test(file.name)
     )
       throw new Error("invalid_file: Choose Markdown files.");
+    if (!file.content.trim())
+      throw new Error(
+        `invalid_file: ${JSON.stringify(file.name)} is empty. Nothing was imported.`,
+      );
     const size = new TextEncoder().encode(file.content).length;
     total += size;
     if (size > MAX_MARKDOWN_FILE_BYTES || total > MAX_MARKDOWN_BATCH_BYTES)
