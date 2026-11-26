@@ -24,6 +24,7 @@ import {
 } from "./icons";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
+import { prepareMarkdownImport, runMarkdownImport, MarkdownImportFailure, type MarkdownImportPlan } from "./markdownImport";
 import { readMarkdownFiles } from "../transfer/readFiles";
 import { projectNotes, plainText, message } from "./model";
 import { Dialog, usePreferences, readPreference } from "./primitives";
@@ -263,6 +264,8 @@ export function Workspace({
     revokeSearchScope();
 
     importGeneration.current++;
+    importController.current?.abort();
+    importPlan.current = null;
     importHeld.current = false;
     importPending.current = false;
     fileReading.current = false;
@@ -271,6 +274,7 @@ export function Workspace({
     setSetupOpen(false);
     setImports(null);
     setImporting(false);
+    setImportStopping(false);
     setSetupImportState("idle");
     clearSourceRoute();
     setStudyEntry(null);
@@ -543,6 +547,10 @@ export function Workspace({
     fileReading = useRef(false),
     importOrigin = useRef<"setup" | "library">("library");
   const [importing, setImporting] = useState(false);
+  const [importStopping, setImportStopping] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
+  const importController = useRef<AbortController | null>(null);
+  const importPlan = useRef<MarkdownImportPlan | null>(null);
   const [exportNotes, setExportNotes] = useState<Note[] | null>(null);
   const [archiveExport, setArchiveExport] = useState(false);
   function requestExport(values: Note[], archive = false) {
@@ -636,6 +644,8 @@ export function Workspace({
   useEffect(
     () => () => {
       importGeneration.current++;
+      importController.current?.abort();
+      importPlan.current = null;
       importHeld.current = false;
       setupVisible.current = false;
     },
@@ -1423,7 +1433,13 @@ export function Workspace({
     fileRef.current?.click();
   }
   function cancelMarkdown() {
-    if (importPending.current || fileReading.current) return;
+    if (importPending.current) {
+      importController.current?.abort();
+      setImportStopping(true);
+      return;
+    }
+    if (fileReading.current) return;
+    importPlan.current = null;
     importHeld.current = false;
     setImports(null);
     if (importOrigin.current === "setup") {
@@ -1746,6 +1762,7 @@ export function Workspace({
     }
     if (fileReading.current || importPending.current) return;
     const ticket = ++importGeneration.current;
+    importPlan.current = null;
     fileReading.current = true;
     importHeld.current = true;
     setImportError("");
@@ -1799,35 +1816,44 @@ export function Workspace({
     setImportError("");
     if (importOrigin.current === "setup") setSetupImportState("running");
     let done = 0;
+    const controller = new AbortController();
+    importController.current = controller;
+    setImportStopping(false);
+    setImportProgress(`Importing 0 of ${batch.length} notes…`);
     try {
-      await trackOperation(async () => {
-        for (const input of batch) {
+      const plan = importPlan.current ?? prepareMarkdownImport(batch, snapshot?.token.epoch);
+      importPlan.current = plan;
+      const result = await trackOperation(() => runMarkdownImport(store, plan, controller.signal, saved => {
+          done = saved;
           if (ticket !== importGeneration.current) return;
-          await store.create(input);
-          if (ticket !== importGeneration.current) return;
-          done++;
-          setNotice(`Importing ${done} of ${batch.length} notes…`);
+          setImportProgress(`Importing ${done} of ${batch.length} notes…`);
           if (importOrigin.current === "setup") setSetupImported(prior + done);
-        }
-      });
+      }));
       if (ticket !== importGeneration.current) return;
       importHeld.current = false;
+      importPlan.current = null;
       setImports(null);
-      setNotice(`Imported ${done} notes`);
-      if (importOrigin.current === "setup") setSetupImportState("completed");
+      setNotice(result.stopped ? `Import stopped. Imported ${done} of ${batch.length} notes.` : `Imported ${done} notes`);
+      if (importOrigin.current === "setup") setSetupImportState(result.stopped ? "idle" : "completed");
     } catch (failure) {
       if (ticket === importGeneration.current) {
         const remaining = batch.slice(done);
+        if (importPlan.current)
+          importPlan.current = { ...importPlan.current, entries: importPlan.current.entries.slice(done) };
         setImports(remaining.length ? remaining : null);
         importHeld.current = remaining.length > 0;
         setImportError(
-          `Imported ${done} of ${batch.length} notes. ${remaining.length} weren’t imported. ${message(failure)}`,
+          failure instanceof MarkdownImportFailure
+            ? `Imported ${done} of ${batch.length} notes. ${failure.message} ${message(failure.failure)}`
+            : `Imported ${done} of ${batch.length} notes. ${message(failure)}`,
         );
         if (importOrigin.current === "setup") setSetupImportState("failed");
       }
     } finally {
       if (ticket === importGeneration.current) {
         importPending.current = false;
+        importController.current = null;
+        setImportStopping(false);
         setImporting(false);
         await refresh();
       }
@@ -3198,10 +3224,11 @@ export function Workspace({
           title="Import Markdown"
           returnFocusTo={importReturnFocus.current}
           onClose={() => {
-            if (!importPending.current) cancelMarkdown();
+            cancelMarkdown();
           }}
         >
           <p>{imports.length} files ready. Original files remain untouched.</p>
+          {importing && <p role="status">{importStopping ? "Stopping…" : importProgress}</p>}
           {importError && (
             <p className="markdown-import-error" role="alert">
               {importError}
@@ -3221,8 +3248,8 @@ export function Workspace({
             >
               {importing ? "Importing…" : "Import remaining"}
             </button>
-            <button disabled={importing} onClick={cancelMarkdown}>
-              Cancel
+            <button disabled={importStopping} onClick={cancelMarkdown}>
+              {importStopping ? "Stopping…" : "Cancel"}
             </button>
           </div>
         </Dialog>

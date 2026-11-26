@@ -89,6 +89,30 @@ compatibility review; changing the shell cache does not migrate user data.
 
 ## Library and local collections
 
+The Notes store optionally supports atomic creation batches of up to ten notes.
+Multi-note batches admit at most one million serialized input UTF-16 units;
+an individually valid larger note can be created alone. Every entry carries a
+stable creation ID and the original library epoch. Exact retries return the
+existing notes without another encrypted write; conflicting IDs reject the
+whole batch. Existing metadata, link-index and source-anchor maintenance remains
+inside the library writer.
+
+Markdown import validates the complete selection before writing, captures its
+original epoch and retains creation IDs for retries. It uses chunks of at most
+ten notes and one million serialized input units (larger valid notes run alone),
+also bounded by existing link-scanner work limits. Stores without the optional
+batch capability use sequential creation with the same stable IDs. The review
+dialog yields between chunks and keeps Cancel available. Cancellation retains
+operation guards until settlement and counts a late committed chunk. An
+uncertain result retains the remaining plan and warns that the final batch may
+already be saved; retries do not allocate replacement IDs.
+
+Batch cancellation aborts the IndexedDB transaction before commit. Its terminal
+event determines whether the batch committed or was cancelled; a late abort
+cannot turn a committed write into cancellation. A post-commit notification
+failure remains an uncertain result and can be retried with the same creation
+IDs and epoch. Other store mutations keep their existing contracts.
+
 The library writer owns `notes-local` and `notes-library-v1` in the same encrypted
 snapshot transaction. Its catalog records pins, exact tag names/colors, bounded
 immutable note versions and mutation receipts. Renaming or merging tags changes
