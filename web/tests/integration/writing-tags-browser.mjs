@@ -82,8 +82,8 @@ try {
   await tags.fill("New, Relevant");
   await tags.press("Enter");
   await expect(
-    page.getByRole("button", { name: "Current note tags" }),
-  ).toHaveText("New, Relevant");
+    page.getByRole("group", { name: "Current note tags" }),
+  ).toHaveText("#New#Relevant");
   await expect(page.locator(".note-header-status")).toHaveText(/Saved/);
   await page.getByRole("button", { name: /Back to notes/ }).click();
   await page
