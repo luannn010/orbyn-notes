@@ -586,6 +586,81 @@ it("projects current authorized labels without storing them and handles Trash/re
   ).toEqual({ status: "unavailable", reason: "scope" });
 });
 
+it("keeps the Linked filter to notes whose links resolve in this library", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const target = (await links.reference(b.id)).target;
+  await notes.update(a.id, { document: linked(target) }, a.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [a.id, b.id],
+  });
+  const trashed = await notes.trash(b.id, b.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+  await notes.restore(b.id, trashed.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [a.id, b.id],
+  });
+  const current = (await notes.get(a.id))!,
+    otherEpoch = { ...target, libraryEpoch: crypto.randomUUID() };
+  await notes.update(a.id, { document: linked(otherEpoch) }, current.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+  const otherAccount = { ...target, accountId: crypto.randomUUID() },
+    latest = (await notes.get(a.id))!;
+  await notes.update(a.id, { document: linked(otherAccount) }, latest.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+});
+it("separates backlink snippets at block boundaries", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const target = (await links.reference(b.id)).target;
+  await notes.update(
+    a.id,
+    {
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "Meeting notes " },
+              { type: "noteLink", attrs: { version: 1, target } },
+            ],
+          },
+          { type: "paragraph", content: [{ type: "text", text: "Agenda" }] },
+        ],
+      },
+    },
+    a.revision,
+  );
+  await links.verifyGraph();
+  expect(await links.backlinks(b.id)).toMatchObject({
+    status: "ready",
+    items: [
+      {
+        sourceId: a.id,
+        occurrences: 1,
+        snippet: "Meeting notes Note reference Agenda",
+      },
+    ],
+  });
+});
+
 it("verifies the full 10000-note/100000-reference graph with bounded rounds and linear row admission", async () => {
   const { notes, links, a } = await setup(),
     state = await noteLinkOwner(notes).read(),

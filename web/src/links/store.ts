@@ -669,14 +669,17 @@ export function createNoteLinkService(
         linked = new Set<string>();
       for (const row of certificate.rows) {
         if (!active.has(row.noteId)) continue;
-        linked.add(row.noteId);
-        for (const entry of row.targets)
-          if (
+        const targets = row.targets.filter(
+          (entry) =>
             entry.target.accountId === state.accountId &&
             entry.target.libraryEpoch === state.library.epoch &&
-            active.has(entry.target.noteId)
-          )
-            linked.add(entry.target.noteId);
+            active.has(entry.target.noteId),
+        );
+        // A source is linked only through a target this owner can resolve;
+        // Trash and other-epoch links never make the note appear in the filter.
+        if (!targets.length) continue;
+        linked.add(row.noteId);
+        for (const entry of targets) linked.add(entry.target.noteId);
       }
       return { status: "ready", token: linkToken(state), items: [...linked] };
     },

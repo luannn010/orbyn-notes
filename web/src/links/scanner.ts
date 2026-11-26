@@ -151,14 +151,25 @@ export async function scanLinkDocumentAsync(
     fresh();
     const node = queue.pop()!;
     charge(work, 0, 1);
-    if (snippet && snippet.text.length < 160)
-      snippet.text += (
-        node.type === "noteLink"
-          ? "Note reference"
-          : node.type === "hardBreak"
-            ? "\n"
-            : (node.text ?? "")
-      ).slice(0, 160 - snippet.text.length);
+    if (snippet) {
+      // Separate adjacent blocks so their text never runs together. Only nodes
+      // with children are block containers; inline children carry text.
+      if (
+        node.content &&
+        snippet.text &&
+        !/\s$/.test(snippet.text) &&
+        snippet.text.length < 160
+      )
+        snippet.text += " ";
+      if (snippet.text.length < 160)
+        snippet.text += (
+          node.type === "noteLink"
+            ? "Note reference"
+            : node.type === "hardBreak"
+              ? "\n"
+              : (node.text ?? "")
+        ).slice(0, 160 - snippet.text.length);
+    }
     if (node.type === "noteLink") {
       const target = validateNoteTarget(node.attrs?.target),
         key = targetKey(target),

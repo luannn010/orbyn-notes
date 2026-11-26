@@ -223,6 +223,49 @@ export async function openCollectionsStore(
   let searchAdmission: ReturnType<typeof createSearchAdmission> | null = null;
   let observedEpoch: string | undefined;
   let persistence: PersistenceState = { status: "ready" };
+  let pendingWrites = 0;
+  // A write error belongs to its overlapping wave; a successful write cannot
+  // clear an independent refresh error. Only a later authenticated read can.
+  let writeFailure: string | null = null,
+    refreshFailure: string | null = null;
+  let refreshStarted = 0,
+    refreshSettled = 0;
+  function publishPersistence(force = false) {
+    if (closed) return;
+    const message = writeFailure ?? refreshFailure;
+    const next: PersistenceState =
+      pendingWrites > 0
+        ? { status: "saving" }
+        : message
+          ? { status: "failed", message }
+          : { status: "ready" };
+    const changed =
+      next.status !== persistence.status ||
+      next.message !== persistence.message;
+    persistence = next;
+    if (changed || force) notify();
+  }
+  async function refresh(notifySuccess = false): Promise<CollectionsState> {
+    const ticket = ++refreshStarted;
+    try {
+      const result = await access(null);
+      if (!closed) {
+        if (ticket > refreshSettled) {
+          refreshSettled = ticket;
+          refreshFailure = null;
+        }
+        publishPersistence(notifySuccess);
+      }
+      return result;
+    } catch (error) {
+      if (!closed && ticket > refreshSettled) {
+        refreshSettled = ticket;
+        refreshFailure = "Collections could not be refreshed.";
+        publishPersistence();
+      }
+      throw error;
+    }
+  }
   const listeners = new Set<() => void>();
   const epochListeners = new Set<(epoch: string) => void>();
   const closeListeners = new Set<() => void>();
@@ -292,19 +335,13 @@ export async function openCollectionsStore(
       typeof BroadcastChannel === "undefined"
         ? null
         : new BroadcastChannel(`orbyn-notes-library:${identity.accountId}`);
-    channel?.addEventListener("message", () => {
-      searchAdmission?.unverified();
-      void access(null)
-        .then(() => notify())
-        .catch(() => {
-          if (!closed) {
-            persistence = {
-              status: "failed",
-              message: "Collections could not be refreshed.",
-            };
-            notify();
-          }
-        });
+    channel?.addEventListener("message", async () => {
+      try {
+        searchAdmission?.unverified();
+        await refresh(true);
+      } catch {
+        // refresh owns its failure state; the detached event must not reject.
+      }
     });
     // Persist exactly one initial epoch atomically and authenticate before reporting readiness.
     await access(null, true);
@@ -442,10 +479,13 @@ export async function openCollectionsStore(
     )
       throw new Error("collections_invalid: Invalid mutation request.");
     assertOpen();
-    persistence = { status: "saving" };
-    notify();
+    if (pendingWrites === 0) writeFailure = null;
+    pendingWrites++;
+    publishPersistence(true);
+    let result: CollectionsState;
+    let committed = false;
     try {
-      const result = await access(
+      result = await access(
         (current) => {
           if (
             current.epoch !== expected.epoch ||
@@ -497,25 +537,24 @@ export async function openCollectionsStore(
         false,
         currentGuard,
       );
+      committed = true;
       assertOpen();
-      persistence = { status: "ready" };
       channel?.postMessage("changed");
-      notify();
-      assertOpen();
-      return result;
     } catch (error) {
-      if (!closed) {
-        persistence = {
-          status: "failed",
-          message: "Collections could not be saved. Reload before retrying.",
-        };
-        notify();
-      }
+      if (!closed)
+        writeFailure =
+          "Collections could not be saved. Reload before retrying.";
       throw error;
+    } finally {
+      pendingWrites--;
+      // A committed revision is observable even while other writes keep saving.
+      publishPersistence(committed);
     }
+    assertOpen();
+    return result;
   }
   const store: CollectionsStore = {
-    read: () => access(null),
+    read: () => refresh(),
     update: (expected, change) => commit(expected, change, false),
     subscribe: (listener) => {
       assertOpen();
