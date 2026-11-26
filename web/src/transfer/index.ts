@@ -347,13 +347,24 @@ function renderInline(
       throw new Error("unsafe_link: Invalid link.");
     const href = link ? String(link.attrs!.href) : null;
     let text = "";
+    let codeRun = "";
+    let hasCode = false;
+    const flushCode = () => {
+      if (hasCode) text += markdownCodeSpan(codeRun);
+      codeRun = "";
+      hasCode = false;
+    };
     // Keep identical outer marks open across text/code boundaries.
     do {
       const next = nodes[i]!;
       const nextMarks = next.marks ?? [];
-      text += nextMarks.some((mark) => mark.type === "code")
-        ? markdownCodeSpan(next.text ?? "")
-        : escapeMarkdownText(next.text ?? "");
+      if (nextMarks.some((mark) => mark.type === "code")) {
+        codeRun += next.text ?? "";
+        hasCode = true;
+      } else {
+        flushCode();
+        text += escapeMarkdownText(next.text ?? "");
+      }
       i++;
       const following = nodes[i];
       if (!following || n.type !== "text" || following.type !== "text") break;
@@ -367,6 +378,7 @@ function renderInline(
       )
         break;
     } while (true);
+    flushCode();
     if (bold) text = `**${text}**`;
     if (italic) text = `*${text}*`;
     if (strike) text = `~~${text}~~`;

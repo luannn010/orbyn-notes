@@ -54,6 +54,18 @@ const link: Mark = { type: "link", attrs: { href: "https://example.test/a" } };
  * bytes.
  */
 describe("Code spans keep the marks wrapped around them", () => {
+  it.each([[[]], [[link]]])("combines adjacent code nodes into a single literal span", (outer) => {
+    const document: NoteDocument = { type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "a", marks: [...outer, code] },
+      { type: "text", text: "b", marks: [...outer, code] },
+    ] }] };
+    const exported = exportMarkdown([note(document)])[0]!;
+    const parsed = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    const nodes = parsed.document.content[0]!.content!;
+    expect(nodes.map((node) => node.text).join("")).toBe("ab");
+    expect(nodes.every((node) => node.marks?.some((mark) => mark.type === "code"))).toBe(true);
+    if (outer.length) expect(nodes.every((node) => node.marks?.some((mark) => mark.type === "link" && mark.attrs?.href === "https://example.test/a"))).toBe(true);
+  });
   it("preserves bold across adjacent plain and code text", () => {
     const document: NoteDocument = {
       type: "doc",
