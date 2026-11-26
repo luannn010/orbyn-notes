@@ -24,12 +24,7 @@ import {
 } from "./icons";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
-import {
-  parseMarkdown,
-  MAX_MARKDOWN_FILE_BYTES,
-  MAX_MARKDOWN_BATCH_BYTES,
-  MAX_MARKDOWN_FILES,
-} from "../transfer";
+import { readMarkdownFiles } from "../transfer/readFiles";
 import { projectNotes, plainText, message } from "./model";
 import { Dialog, usePreferences, readPreference } from "./primitives";
 import { SettingsView } from "./SettingsView";
@@ -121,7 +116,7 @@ const CollectionsHost = lazy(() =>
     default: module.CollectionsHost,
   })),
 );
-type Imported = ReturnType<typeof parseMarkdown>;
+type Imported = Awaited<ReturnType<typeof readMarkdownFiles>>["notes"];
 /** Everything the mobile drawer's Tab trap may focus, in document order. A trap
  * that queries only inputs and buttons lets Tab escape past links and selects. */
 export const DRAWER_FOCUSABLE =
@@ -1756,37 +1751,25 @@ export function Workspace({
     setImportError("");
     if (importOrigin.current === "setup") setSetupImportState("reading");
     try {
-      const parsed = await trackOperation(async () => {
-        const selectedFiles = Array.from(files);
-        if (selectedFiles.length > MAX_MARKDOWN_FILES)
-          throw Error("Import at most 100 files at once.");
-        if (
-          selectedFiles.some(
-            (file) =>
-              !/[.](md|markdown|mdown)$/i.test(file.name) ||
-              file.size > MAX_MARKDOWN_FILE_BYTES,
-          )
-        )
-          throw Error("Choose Markdown files up to 2 MB each.");
-        if (
-          selectedFiles.reduce((total, file) => total + file.size, 0) >
-          MAX_MARKDOWN_BATCH_BYTES
-        )
-          throw Error("Import batches up to 10 MB.");
-        const content = await Promise.all(
-          selectedFiles.map(async (file) => ({
-            name: file.name,
-            content: await file.text(),
-          })),
-        );
-        if (ticket !== importGeneration.current) return null;
-        return parseMarkdown(content);
-      });
-      if (ticket !== importGeneration.current || !parsed) return;
-      setImports(parsed.length ? parsed : null);
-      importHeld.current = parsed.length > 0;
+      const parsed = await trackOperation(() =>
+        readMarkdownFiles(Array.from(files)),
+      );
+      if (ticket !== importGeneration.current) return;
+      setImportError(
+        parsed.errors
+          .map((error) => `${error.name}: ${error.message}`)
+          .join(" "),
+      );
+      setImports(parsed.notes.length ? parsed.notes : null);
+      importHeld.current = parsed.notes.length > 0;
       if (importOrigin.current === "setup")
-        setSetupImportState(parsed.length ? "review" : "idle");
+        setSetupImportState(
+          parsed.notes.length
+            ? "review"
+            : parsed.errors.length
+              ? "failed"
+              : "idle",
+        );
     } catch (failure) {
       if (ticket === importGeneration.current) {
         importHeld.current = false;
@@ -2408,7 +2391,7 @@ export function Workspace({
             </div>
           )}
           {importError && !setupOpen && !imports && (
-            <p className="banner error" role="alert">
+            <p className="banner error markdown-import-error" role="alert">
               {importError}
             </p>
           )}
@@ -3219,7 +3202,11 @@ export function Workspace({
           }}
         >
           <p>{imports.length} files ready. Original files remain untouched.</p>
-          {importError && <p role="alert">{importError}</p>}
+          {importError && (
+            <p className="markdown-import-error" role="alert">
+              {importError}
+            </p>
+          )}
           {readOnly && (
             <p role="status">
               Import is unavailable while Notes is read-only. You can cancel
