@@ -56,23 +56,24 @@ function fixture(readOnly = false, update?: NotesStore["update"]) {
       readOnly={readOnly}
       onSaved={vi.fn()}
       onBack={back}
+      onOpenTag={vi.fn()}
       onTrash={vi.fn()}
       onExport={vi.fn()}
     />,
   );
   return { unexpected, back, view };
 }
-it("shows one hashtag action and comma-separated tags without a separate form", () => {
+it("shows individual hashtags and a separate edit action without a separate form", () => {
   fixture();
   expect(
     screen.queryByRole("textbox", { name: "Tags, separated by commas" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
+    screen.getByRole("group", { name: "Current note tags" }),
   ).toHaveTextContent("Ideas");
   expect(
     screen.getByRole("button", { name: "Manage note tags" }),
-  ).toHaveTextContent("#");
+  ).toHaveTextContent("Edit tags");
   expect(document.querySelector(".note-metadata time")).toHaveAttribute(
     "dateTime",
     note.updatedAt,
@@ -92,7 +93,7 @@ it("cancels with Escape and leaves saved tags untouched", () => {
   expect(checkClose()).toBe("draft");
   fireEvent.keyDown(input, { key: "Escape" });
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
+    screen.getByRole("group", { name: "Current note tags" }),
   ).toHaveTextContent("Ideas");
   expect(checkClose()).toBe("allowed");
   expect(unexpected).not.toHaveBeenCalled();
@@ -148,8 +149,14 @@ it("retains committed tag text when the encrypted write fails", async () => {
   fireEvent.blur(input);
   await screen.findByText("Unexpected mutation");
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
-  ).toHaveTextContent("Ideas, trip");
+    screen.getByRole("group", { name: "Current note tags" }),
+  ).toHaveTextContent("#Ideas#trip");
+  expect(
+    screen.queryByRole("button", { name: "Show notes tagged trip" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Show notes tagged Ideas" }),
+  ).toBeVisible();
   expect(checkClose()).toBe("draft");
   expect(unexpected).toHaveBeenCalledOnce();
 });
@@ -176,8 +183,8 @@ it.each(["work\nplay", "work\rplay"])(
       screen.queryByLabelText("Tags, separated by commas"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Current note tags" }).textContent,
-    ).toBe(`${legacy}, ideas`);
+      screen.getByRole("group", { name: "Current note tags" }).textContent,
+    ).toBe(`#${legacy}#ideas`);
     expect(change).not.toHaveBeenCalled();
   },
 );

@@ -6,9 +6,10 @@ import {
   initSync,
   DeviceKeys,
   SyncEngine,
+  DeviceSession,
 } from "../../src/generated/wasm/orbyn_wasm.js";
 import { createAccountService } from "../../src/account";
-import { lock } from "../../src/account/session";
+import { lock, lockVersion } from "../../src/account/session";
 import {
   newWrappingKey,
   wrappingSecret,
@@ -16,6 +17,16 @@ import {
   readRecord,
 } from "../../src/data/database";
 import type { SignupRecord, DeviceRecord } from "../../src/data/database";
+import * as database from "../../src/data/database";
+import {
+  readCore,
+  readLibrary,
+  stageCore,
+  stageLibrary,
+  CORE_ZONE,
+  LIBRARY_ZONE,
+} from "../../src/library/storage";
+import { emptyLibrary } from "../../src/library/model";
 const accountId = "11111111-1111-4111-8111-111111111111",
   deviceId = "22222222-2222-4222-8222-222222222222",
   approverId = "33333333-3333-4333-8333-333333333333",
@@ -32,7 +43,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.stubGlobal("indexedDB", new IDBFactory());
 });
-async function ceremony() {
+async function ceremony(
+  cancelResponse = async (): Promise<Response> =>
+    new Response(null, { status: 204 }),
+) {
   const pendingKeys = DeviceKeys.create(),
     trustedKeys = DeviceKeys.create();
   const wrapKey = await newWrappingKey();
@@ -124,6 +138,7 @@ async function ceremony() {
         posts++;
         return Response.json({ ...pendingDevice, state: "trusted" });
       }
+      if (url.endsWith("/cancel")) return cancelResponse();
       throw new Error("Unexpected synthetic HTTP path");
     }),
   );
@@ -265,6 +280,113 @@ it("restores sealed verified approval after reload when server acknowledgement s
   }
 });
 
+it.each([204, 410])(
+  "completes local approval cancellation for HTTP %i",
+  async (status) => {
+    const fixture = await ceremony(async () =>
+      status === 204
+        ? new Response(null, { status })
+        : Response.json({ code: "approval_expired" }, { status }),
+    );
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+    try {
+      const stored = await readRecord<DeviceRecord>("devices", email);
+      const before = lockVersion();
+      await expect(fixture.service.cancelDevice()).resolves.toBeUndefined();
+      expect(lockVersion()).toBe(before + 1);
+      expect(await fixture.service.current()).toBeNull();
+      expect(await readRecord("devices", email)).toEqual(stored);
+      expect(await readRecord("access", "active")).toBeUndefined();
+      expect(freeSession).toHaveBeenCalledTimes(1);
+      expect(freeEngine).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+it.each([
+  [401, "approval_expired"],
+  [500, "approval_expired"],
+  [410, "other_failure"],
+  [404, "not_found"],
+  [0, "network_error"],
+] as const)(
+  "preserves cancellation failure for HTTP %i / %s",
+  async (status, code) => {
+    const fixture = await ceremony(async () => {
+      if (!status) throw new TypeError("Synthetic offline");
+      return Response.json({ code }, { status });
+    });
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    try {
+      const stored = await readRecord<DeviceRecord>("devices", email);
+      const before = lockVersion();
+      await expect(fixture.service.cancelDevice()).rejects.toMatchObject({
+        code,
+      });
+      expect(lockVersion()).toBe(before);
+      expect((await fixture.service.current())?.deviceState).toBe("pending");
+      expect(await readRecord("devices", email)).toEqual(stored);
+      expect(freeSession.mock.calls.length).toBe(0);
+    } finally {
+      lock();
+      fixture.close();
+    }
+  },
+);
+
+it("does not swallow a stale approval-expired cancellation response after lock", async () => {
+  let atServer = () => {};
+  const requested = new Promise<void>((resolve) => (atServer = resolve));
+  let respond = (_value: Response) => {};
+  const fixture = await ceremony(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+        atServer();
+      }),
+  );
+  const cancelling = fixture.service.cancelDevice();
+  const cancelled = expect(cancelling).rejects.toMatchObject({
+    code: "cancelled",
+  });
+  try {
+    await requested;
+    lock();
+    const before = lockVersion();
+    respond(Response.json({ code: "approval_expired" }, { status: 410 }));
+    await cancelled;
+    expect(lockVersion()).toBe(before);
+  } finally {
+    fixture.close();
+  }
+});
+
+it("fences a lock between an expired HTTP result and the cancellation catch", async () => {
+  const fixture = await ceremony(async () => {
+    const response = Response.json(
+      { code: "approval_expired" },
+      { status: 410 },
+    );
+    vi.spyOn(response, "json").mockImplementation(async () => {
+      queueMicrotask(() => queueMicrotask(() => lock()));
+      return { code: "approval_expired" };
+    });
+    return response;
+  });
+  try {
+    const before = lockVersion();
+    await expect(fixture.service.cancelDevice()).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(lockVersion()).toBe(before + 1);
+  } finally {
+    fixture.close();
+  }
+});
+
 it("never checkpoints trust or grants access for a human code that WASM rejects", async () => {
   const fixture = await ceremony();
   try {
@@ -278,6 +400,508 @@ it("never checkpoints trust or grants access for a human code that WASM rejects"
     expect(
       (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
     ).not.toBe(true);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({
+      code: "approval_missing",
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
+it.each(["device-read", "wrapping-secret"])(
+  "retries the same approval after a pre-checkpoint %s failure",
+  async (failurePoint) => {
+    const fixture = await ceremony();
+    const finish = vi.spyOn(SyncEngine.prototype, "finishApproval");
+    const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+    const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+    try {
+      const originalRead = database.readRecord;
+      let reads = 0;
+      const read = vi
+        .spyOn(database, "readRecord")
+        .mockImplementation(async (store, key) => {
+          if (
+            failurePoint === "device-read" &&
+            store === "devices" &&
+            ++reads === 2
+          )
+            throw new Error("Synthetic pre-checkpoint device read failure");
+          return originalRead(store, key);
+        });
+      const secret = vi.spyOn(database, "wrappingSecret");
+      if (failurePoint === "wrapping-secret")
+        secret.mockRejectedValueOnce(
+          new Error("Synthetic pre-checkpoint HMAC failure"),
+        );
+      await expect(
+        fixture.service.confirmDevice(fixture.sas),
+      ).rejects.toBeInstanceOf(Error);
+      read.mockRestore();
+      secret.mockRestore();
+      expect(await readRecord("access", "active")).toBeUndefined();
+      expect(
+        (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
+      ).not.toBe(true);
+      expect(fixture.posts()).toBe(0);
+      const consumedBeforeRetry = finish.mock.calls.length;
+      const retry = await fixture.service
+        .confirmDevice(fixture.sas)
+        .catch((error) => error);
+      expect(retry).toMatchObject({ deviceState: "trusted" });
+      expect(consumedBeforeRetry).toBe(0);
+      expect(finish).toHaveBeenCalledTimes(1);
+      expect(fixture.posts()).toBe(1);
+      expect(freeSession).toHaveBeenCalledTimes(1);
+      expect(freeEngine).toHaveBeenCalledTimes(2);
+      expect(new Set(freeEngine.mock.instances).size).toBe(2);
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+it("locks during approval preparation without consuming or double-freeing the ceremony", async () => {
+  const fixture = await ceremony();
+  const finish = vi.spyOn(SyncEngine.prototype, "finishApproval");
+  const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+  const freeEngine = vi.spyOn(SyncEngine.prototype, "free");
+  let preparing = () => {};
+  const atSecret = new Promise<void>((resolve) => (preparing = resolve));
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const originalSecret = database.wrappingSecret;
+  const secret = vi
+    .spyOn(database, "wrappingSecret")
+    .mockImplementationOnce(async (key) => {
+      preparing();
+      await gate;
+      return originalSecret(key);
+    });
+  const confirming = fixture.service.confirmDevice(fixture.sas);
+  const cancelled = expect(confirming).rejects.toMatchObject({
+    code: "cancelled",
+  });
+  try {
+    await atSecret;
+    lock();
+    release();
+    await cancelled;
+    expect(finish.mock.calls.length).toBe(0);
+    expect(freeSession).toHaveBeenCalledTimes(1);
+    expect(freeEngine).toHaveBeenCalledTimes(1);
+    expect(fixture.posts()).toBe(0);
+    expect(await readRecord("access", "active")).toBeUndefined();
+    expect(
+      (await readRecord<DeviceRecord>("devices", email))?.verifiedTrust,
+    ).not.toBe(true);
+  } finally {
+    release();
+    secret.mockRestore();
+    fixture.close();
+  }
+});
+
+it("releases approval preparation keys and secret before awaiting durable recovery", async () => {
+  const fixture = await ceremony();
+  const imported = vi.spyOn(DeviceKeys, "import");
+  const freed = vi.spyOn(DeviceKeys.prototype, "free");
+  const freeSession = vi.spyOn(DeviceSession.prototype, "free");
+  const originalSecret = database.wrappingSecret;
+  let preparedSecret: Uint8Array | undefined;
+  vi.spyOn(database, "wrappingSecret").mockImplementation(async (key) => {
+    const secret = await originalSecret(key);
+    preparedSecret ??= secret;
+    return secret;
+  });
+  let recovering = () => {};
+  const atRecovery = new Promise<void>((resolve) => (recovering = resolve));
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const originalRead = database.readRecord;
+  let deviceReads = 0;
+  vi.spyOn(database, "readRecord").mockImplementation(async (store, key) => {
+    if (store === "devices" && ++deviceReads === 3) {
+      recovering();
+      await gate;
+    }
+    return originalRead(store, key);
+  });
+  const confirming = fixture.service.confirmDevice(fixture.sas);
+  const settled = confirming.catch((error: unknown) => error);
+  try {
+    await atRecovery;
+    expect(preparedSecret?.every((byte) => byte === 0)).toBe(true);
+    const preparationKeys = imported.mock.results[0]?.value;
+    expect(
+      freed.mock.instances.filter((instance) => instance === preparationKeys)
+        .length,
+    ).toBe(1);
+    expect(freeSession).toHaveBeenCalledTimes(1);
+    release();
+    expect(await settled).toMatchObject({ deviceState: "trusted" });
+  } finally {
+    release();
+    await settled;
+    fixture.close();
+  }
+});
+
+it("preserves a newer local note when retrying a cached approval checkpoint", async () => {
+  const fixture = await ceremony();
+  try {
+    const originalPut = IDBObjectStore.prototype.put;
+    let failed = false;
+    const put = vi
+      .spyOn(IDBObjectStore.prototype, "put")
+      .mockImplementation(function (
+        this: IDBObjectStore,
+        value: unknown,
+        key?: IDBValidKey,
+      ) {
+        if (!failed && this.name === "access") {
+          failed = true;
+          throw new DOMException(
+            "Synthetic grant write abort",
+            "QuotaExceededError",
+          );
+        }
+        return originalPut.call(this, value, key);
+      });
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toBeInstanceOf(Error);
+    put.mockRestore();
+    expect(fixture.posts()).toBe(1);
+
+    // Simulate a committed write by a same-device window after server approval.
+    const stored = (await readRecord<DeviceRecord>("devices", email))!;
+    const secret = await wrappingSecret(stored.wrapKey);
+    const keys = DeviceKeys.import(stored.sealedKeys, secret);
+    const engine = SyncEngine.restore(
+      keys,
+      stored.snapshot!,
+      secret,
+      Date.now(),
+    );
+    const noteId = "44444444-4444-4444-8444-444444444444";
+    try {
+      const core = readCore(engine);
+      stageCore(
+        engine,
+        [
+          ...core.notes,
+          {
+            id: noteId,
+            title: "Synthetic later-window note",
+            document: { type: "doc", content: [] },
+            tags: ["synthetic"],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            trashedAt: null,
+            revision: 1,
+          },
+        ],
+        core.exists,
+      );
+      const snapshot = engine.snapshot(secret);
+      await mutateRecord<DeviceRecord>("devices", email, (current) => ({
+        ...current!,
+        snapshot,
+        generation: current!.generation + 1,
+      }));
+    } finally {
+      engine.free();
+      keys.free();
+      secret.fill(0);
+    }
+    expect((await fixture.service.confirmDevice(fixture.sas)).deviceState).toBe(
+      "trusted",
+    );
+    const after = (await readRecord<DeviceRecord>("devices", email))!;
+    const afterSecret = await wrappingSecret(after.wrapKey);
+    const afterKeys = DeviceKeys.import(after.sealedKeys, afterSecret);
+    const afterEngine = SyncEngine.restore(
+      afterKeys,
+      after.snapshot!,
+      afterSecret,
+      Date.now(),
+    );
+    try {
+      expect(readCore(afterEngine).notes.map((note) => note.id)).toContain(
+        noteId,
+      );
+      expect(after.approvalCheckpointId).toBe(stored.approvalCheckpointId);
+      expect(fixture.posts()).toBe(1);
+    } finally {
+      afterEngine.free();
+      afterKeys.free();
+      afterSecret.fill(0);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+async function interruptedApproval() {
+  const fixture = await ceremony();
+  const original = IDBObjectStore.prototype.put;
+  const put = vi
+    .spyOn(IDBObjectStore.prototype, "put")
+    .mockImplementation(function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
+      if (this.name === "access")
+        throw new DOMException(
+          "Synthetic grant write abort",
+          "QuotaExceededError",
+        );
+      return original.call(this, value, key);
+    });
+  try {
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toBeInstanceOf(Error);
+  } finally {
+    put.mockRestore();
+  }
+  expect(fixture.posts()).toBe(1);
+  return fixture;
+}
+
+async function changeApprovalSnapshot(change: (engine: SyncEngine) => void) {
+  const stored = (await readRecord<DeviceRecord>("devices", email))!;
+  const secret = await wrappingSecret(stored.wrapKey);
+  try {
+    await mutateRecord<DeviceRecord>("devices", email, (current) => {
+      const keys = DeviceKeys.import(current!.sealedKeys, secret);
+      let engine: SyncEngine | undefined;
+      try {
+        engine = current!.snapshot
+          ? SyncEngine.restore(keys, current!.snapshot, secret, Date.now())
+          : SyncEngine.create(keys, current!.accountId, current!.deviceId);
+        change(engine);
+        return {
+          ...current!,
+          snapshot: engine.snapshot(secret),
+          generation: current!.generation + 1,
+        };
+      } finally {
+        engine?.free();
+        keys.free();
+      }
+    });
+  } finally {
+    secret.fill(0);
+  }
+}
+
+it("retains an erase's fresh library epoch on cached approval retry", async () => {
+  const fixture = await interruptedApproval();
+  try {
+    const fresh = emptyLibrary();
+    await changeApprovalSnapshot((engine) => {
+      engine.purgeLocalZones(
+        JSON.stringify([CORE_ZONE, LIBRARY_ZONE, "notes-collections-v1"]),
+      );
+      stageCore(engine, [], false);
+      stageLibrary(engine, fresh, [], false);
+    });
+    const erased = (await readRecord<DeviceRecord>("devices", email))!;
+    await fixture.service.confirmDevice(fixture.sas);
+    const after = (await readRecord<DeviceRecord>("devices", email))!;
+    expect(after.snapshot).toEqual(erased.snapshot);
+    expect(after.generation).toBe(erased.generation);
+    const secret = await wrappingSecret(after.wrapKey);
+    const keys = DeviceKeys.import(after.sealedKeys, secret);
+    const engine = SyncEngine.restore(
+      keys,
+      after.snapshot!,
+      secret,
+      Date.now(),
+    );
+    try {
+      expect(readCore(engine).notes.length).toBe(0);
+      expect(readLibrary(engine, [])?.epoch).toBe(fresh.epoch);
+    } finally {
+      engine.free();
+      keys.free();
+      secret.fill(0);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+it.each([undefined, "different-checkpoint"])(
+  "rejects cached proof with durable marker %s without changing data",
+  async (marker) => {
+    const fixture = await interruptedApproval();
+    try {
+      await mutateRecord<DeviceRecord>("devices", email, (record) => ({
+        ...record!,
+        approvalCheckpointId: marker,
+        generation: record!.generation + 1,
+      }));
+      const before = await readRecord<DeviceRecord>("devices", email);
+      await expect(
+        fixture.service.confirmDevice(fixture.sas),
+      ).rejects.toMatchObject({ code: "approval_snapshot_conflict" });
+      expect(await readRecord("devices", email)).toEqual(before);
+      expect(await readRecord("access", "active")).toBeUndefined();
+      expect(fixture.posts()).toBe(1);
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+it("rejects a durable marker whose sealed checkpoint code changed", async () => {
+  const fixture = await interruptedApproval();
+  try {
+    await changeApprovalSnapshot((engine) => {
+      const raw = JSON.parse(
+        engine.record("notes-local-approval", "verified-checkpoint")!,
+      );
+      const stamp = JSON.parse(engine.tick(Date.now()));
+      engine.stage(
+        "notes-local-approval",
+        "approval_checkpoint",
+        "verified-checkpoint",
+        JSON.stringify({
+          approvalId: { value: raw.fields.approvalId.value, stamp },
+          code: {
+            value: fixture.sas === "000000" ? "111111" : "000000",
+            stamp,
+          },
+        }),
+      );
+    });
+    const before = await readRecord<DeviceRecord>("devices", email);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({ code: "approval_checkpoint_invalid" });
+    expect(await readRecord("devices", email)).toEqual(before);
+    expect(await readRecord("access", "active")).toBeUndefined();
+  } finally {
+    fixture.close();
+  }
+});
+
+it("rejects changed device signing keys without reinstalling a cached snapshot", async () => {
+  const fixture = await interruptedApproval();
+  const replacement = DeviceKeys.create();
+  try {
+    const stored = (await readRecord<DeviceRecord>("devices", email))!;
+    const secret = await wrappingSecret(stored.wrapKey);
+    try {
+      const sealedKeys = replacement.export(secret);
+      await mutateRecord<DeviceRecord>("devices", email, (record) => ({
+        ...record!,
+        sealedKeys,
+        generation: record!.generation + 1,
+      }));
+    } finally {
+      secret.fill(0);
+    }
+    const before = await readRecord<DeviceRecord>("devices", email);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({ code: "device_mismatch" });
+    expect(await readRecord("devices", email)).toEqual(before);
+    expect(await readRecord("access", "active")).toBeUndefined();
+  } finally {
+    replacement.free();
+    fixture.close();
+  }
+});
+
+it("rejects initial approval over an existing snapshot before consuming the ceremony", async () => {
+  const fixture = await ceremony();
+  const finish = vi.spyOn(SyncEngine.prototype, "finishApproval");
+  try {
+    await changeApprovalSnapshot((engine) => {
+      stageCore(engine, [], false);
+    });
+    const before = await readRecord<DeviceRecord>("devices", email);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({ code: "approval_snapshot_conflict" });
+    expect(finish.mock.calls.length).toBe(0);
+    expect(await readRecord("devices", email)).toEqual(before);
+    expect(await readRecord("access", "active")).toBeUndefined();
+    expect(fixture.posts()).toBe(0);
+  } finally {
+    fixture.close();
+  }
+});
+
+it("fences a generation change between consuming approval and its first durable write", async () => {
+  const fixture = await ceremony();
+  const original = database.wrappingSecret;
+  let calls = 0;
+  const secret = vi
+    .spyOn(database, "wrappingSecret")
+    .mockImplementation(async (key) => {
+      const value = await original(key);
+      if (++calls === 2)
+        await mutateRecord<DeviceRecord>("devices", email, (record) => ({
+          ...record!,
+          generation: record!.generation + 1,
+        }));
+      return value;
+    });
+  try {
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({ code: "approval_snapshot_conflict" });
+    secret.mockRestore();
+    const beforeRetry = (await readRecord<DeviceRecord>("devices", email))!;
+    expect(beforeRetry.generation).toBe(1);
+    expect(beforeRetry.snapshot).toBeUndefined();
+    expect(beforeRetry.verifiedTrust).not.toBe(true);
+    await expect(
+      fixture.service.confirmDevice(fixture.sas),
+    ).rejects.toMatchObject({ code: "approval_snapshot_conflict" });
+    expect(await readRecord("devices", email)).toEqual(beforeRetry);
+    expect(fixture.posts()).toBe(0);
+  } finally {
+    secret.mockRestore();
+    fixture.close();
+  }
+});
+
+it("does not reinstall a restored proof after its durable marker and snapshot disappear", async () => {
+  const fixture = await interruptedApproval();
+  try {
+    const fresh = await fixture.reload();
+    const original = database.wrappingSecret;
+    let calls = 0;
+    const secret = vi
+      .spyOn(database, "wrappingSecret")
+      .mockImplementation(async (key) => {
+        const value = await original(key);
+        if (++calls === 2)
+          await mutateRecord<DeviceRecord>("devices", email, (record) => ({
+            ...record!,
+            verifiedTrust: false,
+            approvalCheckpointId: undefined,
+            snapshot: undefined,
+          }));
+        return value;
+      });
+    await expect(fresh.confirmDevice(fixture.sas)).rejects.toMatchObject({
+      code: "approval_snapshot_conflict",
+    });
+    secret.mockRestore();
+    expect(
+      (await readRecord<DeviceRecord>("devices", email))?.snapshot,
+    ).toBeUndefined();
+    expect(await readRecord("access", "active")).toBeUndefined();
   } finally {
     fixture.close();
   }

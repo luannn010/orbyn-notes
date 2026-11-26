@@ -580,6 +580,9 @@
     margin-left: 16px;
     margin-right: 16px;
   }
+  .study-toast kbd {
+    display: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-motion="on"]) .study-flash,

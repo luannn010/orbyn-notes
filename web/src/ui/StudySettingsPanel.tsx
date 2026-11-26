@@ -116,6 +116,7 @@ function patch(attempt: Attempt): Partial<Values> {
     out.showStreak = attempt.values.showStreak;
   return out;
 }
+// design: notes/settings-study
 export function StudySettingsPanel({
   owner,
   onGuardReady,

@@ -20,6 +20,7 @@ import {
   readRecord,
   mutateRecord,
   signupRecovery,
+  UNCHANGED_RECORD,
 } from "../data/database";
 import type {
   DeviceRecord,
@@ -62,12 +63,31 @@ type VerifiedApproval = {
   code: string;
   snapshot: Uint8Array;
   signingKey: string;
+  initialGeneration?: number;
 };
 const APPROVAL_ZONE = "notes-local-approval";
 const APPROVAL_RECORD = "verified-checkpoint";
+export type AccountServiceHandle = AccountService & {
+  close(): void;
+};
+class AccountResponseError extends AccountError {
+  constructor(
+    code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(code, message);
+  }
+}
+function approvalSnapshotConflict(): AccountError {
+  return new AccountError(
+    "approval_snapshot_conflict",
+    "Merging approval with existing local data isn’t supported. Your saved data was not changed.",
+  );
+}
 export function createAccountService(options?: {
   engineUrl?: string;
-}): AccountService {
+}): AccountServiceHandle {
   const configured =
     options?.engineUrl ??
     (import.meta as ImportMeta & { env?: Record<string, string> }).env
@@ -106,12 +126,14 @@ export function createAccountService(options?: {
   let busy = false;
   let epoch = 0;
   let operationEpoch = 0;
+  const requests = new Set<AbortController>();
   function assertOperation() {
     if (epoch !== operationEpoch)
       throw new AccountError("cancelled", "The account request was cancelled.");
   }
   function discard() {
     epoch++;
+    for (const controller of requests) controller.abort();
     token = undefined;
     expiry = 0;
     candidate?.keys.free();
@@ -123,13 +145,15 @@ export function createAccountService(options?: {
     verifiedApproval = undefined;
     verifiedEmail = undefined;
   }
-  onLock(discard);
+  const stopLock = onLock(discard);
+  let closed = false;
   async function request<T>(
     path: string,
     body?: unknown,
     method = "POST",
     authenticated = false,
   ): Promise<T> {
+    assertOperation();
     if (!base)
       throw new AccountError(
         "engine_unavailable",
@@ -138,81 +162,120 @@ export function createAccountService(options?: {
     if (authenticated && (!token || Date.now() >= expiry))
       throw new AccountError("session_expired", "Sign in again to continue.");
     const requestEpoch = epoch;
-    let response: Response;
+    const controller = new AbortController();
+    const timeout = AbortSignal.timeout(20000);
+    const onTimeout = () => controller.abort(timeout.reason);
+    timeout.addEventListener("abort", onTimeout, { once: true });
+    requests.add(controller);
+    // Keep cancellation attached until the response body has been consumed too.
     try {
-      response = await fetch(base + path, {
-        method,
-        headers: {
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-          ...(authenticated ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        credentials: "omit",
-        cache: "no-store",
-        redirect: "error",
-        signal: AbortSignal.timeout(20000),
-      });
-    } catch {
-      throw new AccountError(
-        "network_error",
-        "The account service could not be reached. Please retry.",
-      );
-    }
-    if (requestEpoch !== epoch)
-      throw new AccountError("cancelled", "The account request was cancelled.");
-    if (!response.ok) {
-      if (authenticated && response.status === 401) {
-        token = undefined;
-        expiry = 0;
-      }
-      let data: Record<string, unknown> = {};
+      let response: Response;
       try {
-        data = await response.json();
+        response = await fetch(base + path, {
+          method,
+          headers: {
+            ...(body === undefined
+              ? {}
+              : { "Content-Type": "application/json" }),
+            ...(authenticated ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          credentials: "omit",
+          cache: "no-store",
+          redirect: "error",
+          signal: controller.signal,
+        });
       } catch {
-        /* A proxy may return an empty error. */
-      }
-      const code =
-        typeof data.code === "string" && /^[a-z_]{1,64}$/.test(data.code)
-          ? data.code
-          : "account_failed";
-      if (
-        response.status === 428 &&
-        code === "proof_required" &&
-        path === "/v1/accounts/register/finish" &&
-        body &&
-        typeof body === "object" &&
-        !("proof" in body)
-      ) {
-        const proof = await solveSignupProof(
-          { challenge: data.challenge, bits: data.bits },
-          assertOperation,
+        if (requestEpoch !== epoch)
+          throw new AccountError(
+            "cancelled",
+            "The account request was cancelled.",
+          );
+        throw new AccountError(
+          "network_error",
+          "The account service could not be reached. Please retry.",
         );
-        return request<T>(path, { ...body, proof }, method, authenticated);
       }
-      const messages: Record<string, string> = {
-        invite_invalid: "This invitation is invalid or no longer available.",
-        invalid_email_code: "Check the email code and try again.",
-        too_many_attempts: "Too many attempts. Please try again later.",
-        auth_failed: "Check your email and password and try again.",
-        second_factor_required: "Enter your authenticator or recovery code.",
-        second_factor_failed: "Check the code and try again.",
-        proof_required:
-          "The account service requires a sign-up proof. Please try again later.",
-        email_unverified: "Verify your email before signing in.",
-      };
-      throw new AccountError(
-        code,
-        messages[code] ?? "The account request failed. Please retry.",
-      );
-    }
-    if (response.status === 204) return undefined as T;
-    try {
-      return (await response.json()) as T;
-    } catch {
-      throw new AccountError(
-        "invalid_response",
-        "The account service returned an invalid response.",
-      );
+      if (requestEpoch !== epoch)
+        throw new AccountError(
+          "cancelled",
+          "The account request was cancelled.",
+        );
+      if (!response.ok) {
+        if (authenticated && response.status === 401) {
+          token = undefined;
+          expiry = 0;
+        }
+        let data: Record<string, unknown> = {};
+        try {
+          data = await response.json();
+        } catch {
+          /* A proxy may return an empty error. */
+        }
+        if (requestEpoch !== epoch)
+          throw new AccountError(
+            "cancelled",
+            "The account request was cancelled.",
+          );
+        const code =
+          typeof data.code === "string" && /^[a-z_]{1,64}$/.test(data.code)
+            ? data.code
+            : "account_failed";
+        if (
+          response.status === 428 &&
+          code === "proof_required" &&
+          path === "/v1/accounts/register/finish" &&
+          body &&
+          typeof body === "object" &&
+          !("proof" in body)
+        ) {
+          const proof = await solveSignupProof(
+            { challenge: data.challenge, bits: data.bits },
+            assertOperation,
+          );
+          return request<T>(path, { ...body, proof }, method, authenticated);
+        }
+        const messages: Record<string, string> = {
+          invite_invalid: "This invitation is invalid or no longer available.",
+          invalid_email_code: "Check the email code and try again.",
+          too_many_attempts: "Too many attempts. Please try again later.",
+          auth_failed: "Check your email and password and try again.",
+          second_factor_required: "Enter your authenticator or recovery code.",
+          second_factor_failed: "Check the code and try again.",
+          proof_required:
+            "The account service requires a sign-up proof. Please try again later.",
+          email_unverified: "Verify your email before signing in.",
+        };
+        throw new AccountResponseError(
+          code,
+          messages[code] ?? "The account request failed. Please retry.",
+          response.status,
+        );
+      }
+      if (response.status === 204) return undefined as T;
+      let data: T;
+      try {
+        data = (await response.json()) as T;
+      } catch {
+        if (requestEpoch !== epoch)
+          throw new AccountError(
+            "cancelled",
+            "The account request was cancelled.",
+          );
+        throw new AccountError(
+          "invalid_response",
+          "The account service returned an invalid response.",
+        );
+      }
+      if (requestEpoch !== epoch)
+        throw new AccountError(
+          "cancelled",
+          "The account request was cancelled.",
+        );
+      return data;
+    } finally {
+      requests.delete(controller);
+      timeout.removeEventListener("abort", onTimeout);
     }
   }
   async function exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -456,25 +519,82 @@ export function createAccountService(options?: {
   ): Promise<AccountSession> {
     // Durable local cryptographic evidence precedes the irreversible server effect.
     // If this aborts, the in-memory receipt survives so the consumed ceremony is not needed again.
-    await mutateRecord<DeviceRecord>("devices", current.email, (record) => {
-      assertOperation();
-      if (
-        !record ||
-        record.accountId !== current.accountId ||
-        record.deviceId !== current.deviceId
-      )
-        throw new AccountError(
-          "device_mismatch",
-          "This browser’s account device changed.",
-        );
-      return {
-        ...record,
-        verifiedTrust: true,
-        approvalCheckpointId: checkpoint.approvalId,
-        snapshot: checkpoint.snapshot,
-        generation: record.generation + 1,
-      };
-    });
+    const stored = await readRecord<DeviceRecord>("devices", current.email);
+    if (!stored)
+      throw new AccountError(
+        "keys_missing",
+        "This browser has no device keys.",
+      );
+    const secret = await wrappingSecret(stored.wrapKey);
+    try {
+      await mutateRecord<DeviceRecord>("devices", current.email, (record) => {
+        assertOperation();
+        if (
+          !record ||
+          record.accountId !== current.accountId ||
+          record.deviceId !== current.deviceId
+        )
+          throw new AccountError(
+            "device_mismatch",
+            "This browser’s account device changed.",
+          );
+        const keys = DeviceKeys.import(record.sealedKeys, secret);
+        let engine: SyncEngine | undefined;
+        try {
+          if (keys.signingKey() !== checkpoint.signingKey)
+            throw new AccountError(
+              "device_mismatch",
+              "This browser’s saved keys changed. Your saved data was not changed.",
+            );
+          const durable =
+            record.verifiedTrust &&
+            record.approvalCheckpointId === checkpoint.approvalId &&
+            record.snapshot;
+          if (
+            !durable &&
+            (record.snapshot ||
+              record.approvalCheckpointId ||
+              record.verifiedTrust ||
+              checkpoint.initialGeneration === undefined ||
+              !Number.isSafeInteger(record.generation) ||
+              record.generation < 0 ||
+              record.generation >= Number.MAX_SAFE_INTEGER ||
+              record.generation !== checkpoint.initialGeneration)
+          )
+            throw approvalSnapshotConflict();
+          engine = SyncEngine.restore(
+            keys,
+            durable ? record.snapshot! : checkpoint.snapshot,
+            secret,
+            Date.now(),
+          );
+          const raw = engine.record(APPROVAL_ZONE, APPROVAL_RECORD);
+          const proof = raw ? JSON.parse(raw) : null;
+          if (
+            proof?.record_type !== "approval_checkpoint" ||
+            proof.fields?.approvalId?.value !== checkpoint.approvalId ||
+            proof.fields?.code?.value !== checkpoint.code
+          )
+            throw new AccountError(
+              "approval_checkpoint_invalid",
+              "The saved device approval could not be restored.",
+            );
+          if (durable) return UNCHANGED_RECORD;
+        } finally {
+          engine?.free();
+          keys.free();
+        }
+        return {
+          ...record,
+          verifiedTrust: true,
+          approvalCheckpointId: checkpoint.approvalId,
+          snapshot: checkpoint.snapshot,
+          generation: record.generation + 1,
+        };
+      });
+    } finally {
+      secret.fill(0);
+    }
     let view = await activeDevice();
     if (view.device.state !== "trusted") {
       if (view.approval?.id !== checkpoint.approvalId)
@@ -516,6 +636,13 @@ export function createAccountService(options?: {
     return value;
   }
   return {
+    // The owner releases the service when it stops driving this attempt.
+    close: () => {
+      if (closed) return;
+      closed = true;
+      stopLock();
+      discard();
+    },
     current: async () => {
       if (isLocking()) return null;
       // Retained local access is distinct from the HTTP bearer session, which is never persisted.
@@ -876,27 +1003,27 @@ export function createAccountService(options?: {
             "Confirm the matching digits on your trusted device first.",
           );
         const ceremony = approval;
-        approval = undefined;
+        // Prepare fallible local reads before consuming the one-use ceremony.
+        const stored = await readRecord<DeviceRecord>("devices", current.email);
+        if (!stored)
+          throw new AccountError(
+            "keys_missing",
+            "This browser has no device keys.",
+          );
+        if (stored.snapshot) throw approvalSnapshotConflict();
+        const secret = await wrappingSecret(stored.wrapKey);
+        let keys: DeviceKeys | undefined;
         try {
-          const verifiedCode = ceremony.engine.finishApproval(
-            ceremony.session,
-            JSON.stringify(view.approval),
-            code,
-            Date.now() / 1000,
-          );
-          const stored = await readRecord<DeviceRecord>(
-            "devices",
-            current.email,
-          );
-          if (!stored)
-            throw new AccountError(
-              "keys_missing",
-              "This browser has no device keys.",
-            );
-          const secret = await wrappingSecret(stored.wrapKey);
-          let keys: DeviceKeys | undefined;
+          keys = DeviceKeys.import(stored.sealedKeys, secret);
+          assertOperation();
+          approval = undefined;
           try {
-            keys = DeviceKeys.import(stored.sealedKeys, secret);
+            const verifiedCode = ceremony.engine.finishApproval(
+              ceremony.session,
+              JSON.stringify(view.approval),
+              code,
+              Date.now() / 1000,
+            );
             ceremony.engine.createZoneKey(APPROVAL_ZONE);
             const stamp = JSON.parse(ceremony.engine.tick(Date.now()));
             ceremony.engine.stage(
@@ -913,26 +1040,38 @@ export function createAccountService(options?: {
               code: verifiedCode,
               snapshot: ceremony.engine.snapshot(secret),
               signingKey: keys.signingKey(),
+              initialGeneration: stored.generation,
             };
           } finally {
-            keys?.free();
-            secret.fill(0);
+            ceremony.session.free();
+            ceremony.engine.free();
           }
-          return await finishVerifiedApproval(current, verifiedApproval!);
         } finally {
-          ceremony.session.free();
-          ceremony.engine.free();
+          keys?.free();
+          secret.fill(0);
         }
+        return finishVerifiedApproval(current, verifiedApproval!);
       }),
     cancelDevice: () =>
       exclusive(async () => {
-        if (approval)
-          await request(
-            `/v1/devices/approvals/${approval.view.id}/cancel`,
-            {},
-            "POST",
-            true,
-          );
+        if (approval) {
+          try {
+            await request(
+              `/v1/devices/approvals/${approval.view.id}/cancel`,
+              {},
+              "POST",
+              true,
+            );
+          } catch (error) {
+            if (!(
+              error instanceof AccountResponseError &&
+              error.status === 410 &&
+              error.code === "approval_expired"
+            ))
+              throw error;
+          }
+        }
+        assertOperation();
         lock();
       }),
     signOut: async () => {

@@ -50,6 +50,7 @@ const starters = [
     headings: ["Terms", "Summary", "Cards"],
   },
 ];
+// design: notes/new-note-starter
 function starterDocument(name: string): NoteDocument {
   const starter = starters.find((item) => item.name === name)!;
   if (name === "Meeting")
@@ -113,11 +114,14 @@ function starterDocument(name: string): NoteDocument {
     ]),
   };
 }
+// design: notes/new-note
+// design: notes/new-note-states
 export function NewNote({
   store,
   initialTags = [],
   onSaved,
   onBack,
+  onOpenTag,
   quick = false,
   onOpen,
   onClose,
@@ -126,6 +130,7 @@ export function NewNote({
   initialTags?: string[];
   onSaved: (note: Note) => void;
   onBack: () => void;
+  onOpenTag?: (tag: string) => void;
   quick?: boolean;
   onOpen?: (note: Note) => Promise<void>;
   onClose?: () => void;
@@ -195,6 +200,7 @@ export function NewNote({
     writer.current!.change({ ...writer.current!.state.value, ...patch });
   }
   const empty = !meaningful(state.value);
+  // design: notes/quick-note-states
   const status =
     state.status === "empty"
       ? quick
@@ -358,6 +364,9 @@ export function NewNote({
         {!quick && (
           <CompactNoteTags
             tags={state.value.tags}
+            onOpenTag={state.note && state.status === "saved" && onOpenTag
+              ? (tag) => leave(() => onOpenTag(tag))
+              : undefined}
             onChange={(tags) => change({ tags })}
             onPendingChange={(pending) => {
               compactTagPending.current = pending;
