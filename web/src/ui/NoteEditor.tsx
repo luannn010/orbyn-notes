@@ -56,11 +56,14 @@ import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
 import { CompactNoteTags } from "./CompactNoteTags";
+// design: notes/note-menu
 export function NoteEditor({
   note,
   store,
   onSaved,
   onBack,
+  onOpenTag,
+  activeTag,
   onTrash,
   onExport,
   readOnly = false,
@@ -93,6 +96,8 @@ export function NoteEditor({
   store: NotesStore;
   onSaved: (n: Note) => void;
   onBack: () => void;
+  onOpenTag?: (tag: string) => void;
+  activeTag?: string;
   onTrash: (n: Note) => void;
   onExport: (n: Note) => void;
 }) {
@@ -530,6 +535,7 @@ export function NoteEditor({
       });
   }
   const actionBlocked = dirty || tagPending || formatDraftPending;
+  // design: notes/save-states
   const chrome = (
     <header
       className={`${desktop ? "desktop-editor-actions" : "editor-chrome"} note-editor-header`}
@@ -866,6 +872,9 @@ export function NoteEditor({
         />
         <CompactNoteTags
           tags={draft.tags}
+          activeTag={activeTag}
+          savedTags={base.current.tags}
+          onOpenTag={onOpenTag ? (tag) => leave(() => onOpenTag(tag)) : undefined}
           readOnly={readOnly}
           onChange={(tags) => change({ tags })}
           onPendingChange={tagPendingChanged}

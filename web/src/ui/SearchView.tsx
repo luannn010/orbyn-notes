@@ -83,6 +83,7 @@ function MarkedExcerpt({ excerpt }: { excerpt: SearchExcerpt }) {
 }
 
 /** Controlled presentation. The owning route admits work, scopes navigation and disposes private projections. */
+// design: notes/search
 export function SearchView(props: SearchViewProps) {
   const { state, query, tab, navigationState } = props;
   const composing = useRef(false);
@@ -94,6 +95,7 @@ export function SearchView(props: SearchViewProps) {
   ) ?? [];
   const visibleResults = visibleGroups.flatMap((group) => group.items);
   const selectedResult = Math.min(activeResult, Math.max(0, visibleResults.length - 1));
+  // design: notes/search-empty
   const empty = ready?.counts.all === 0;
   const busy = state.status === "pending";
   const error =

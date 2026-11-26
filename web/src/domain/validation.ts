@@ -108,6 +108,19 @@ export function inspectNoteDocument(
       (typeof n.text !== "string" || n.text.length > 1000000)
     )
       throw new Error("invalid_document: Invalid text.");
+    if (n.type === "text") {
+      // ProseMirror refuses to load an empty text node, and the editor schema
+      // admits text only as the inline content of these parents.
+      if (!n.text) throw new Error("invalid_document: Invalid text.");
+      if (
+        parent !== "paragraph" &&
+        parent !== "heading" &&
+        parent !== "codeBlock"
+      )
+        throw new Error(
+          "invalid_document: A text node must be inside a paragraph, heading or code block.",
+        );
+    }
     if (
       n.attrs !== undefined &&
       (!n.attrs || typeof n.attrs !== "object" || Array.isArray(n.attrs))
@@ -118,6 +131,10 @@ export function inspectNoteDocument(
       (!Array.isArray(n.marks) ||
         n.marks.some(
           (m) =>
+            !m ||
+            typeof m !== "object" ||
+            Array.isArray(m) ||
+            typeof m.type !== "string" ||
             !["bold", "italic", "strike", "code", "link", "underline"].includes(
               m.type,
             ) ||
@@ -163,6 +180,24 @@ type NoteInput = {
   document: NoteDocument;
   tags: string[];
 };
+/** A tag is read back as a label, so keep the letters the user typed and only
+ * trim them, matching tagName(). Identity ignores case, so "a", "A" and " a"
+ * cannot all be stored. Lowercase is the dedupe key rather than full Unicode
+ * folding: "straße" and "STRASSE" read differently as tags, and stored legacy
+ * text may still hold lone surrogates, which a code-point fold rejects. */
+function normaliseTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const tag of tags) {
+    const name = tag.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(name);
+  }
+  return kept;
+}
 function validateInputMetadata(input: NoteInput): void {
   if (
     typeof input.title !== "string" ||
@@ -184,7 +219,7 @@ function inputForPolicy(input: NoteInput, policy: DocumentPolicy): NoteInput {
   return {
     title: input.title,
     document: inspectNoteDocument(input.document, policy).document,
-    tags: [...new Set(input.tags)],
+    tags: normaliseTags(input.tags),
   };
 }
 export function inspectNotes(

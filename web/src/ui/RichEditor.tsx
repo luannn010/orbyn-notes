@@ -102,6 +102,7 @@ type LinkRequest = {
   document: Editor["state"]["doc"];
 };
 
+// design: notes/slash-menu
 function currentSlash(editor: Editor): Slash | null {
   const { selection } = editor.state;
   if (!selection.empty || !selection.$from.parent.isTextblock) return null;
@@ -214,6 +215,7 @@ export function RichEditor({
   const editorVersion = useRef(0),
     sourceDecorations = useRef(DecorationSet.empty),
     sourceKey = useRef(new PluginKey("note-source-passages"));
+  // design: notes/st-make-toolbar
   const [sourceSelection, setSourceSelection] =
     useState<EditorSourceCapture | null>(null);
   const sourceToolbar = useRef<HTMLDivElement>(null);

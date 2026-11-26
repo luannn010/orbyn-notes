@@ -217,6 +217,11 @@ export function renderNoteExport(
           return target.noteId.length * 8 + 4096;
         },
       },
+      (reason) => {
+        warnings.add(
+          `Markdown may lose ${reason}; notes.json retains the exact structured documents for manual recovery.`,
+        );
+      },
     );
     markdown.push(...rendered);
   }

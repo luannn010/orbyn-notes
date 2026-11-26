@@ -39,7 +39,7 @@ it("confirms comma-space, keeps the field focused, then Tab commits the last tag
   expect(writes).toHaveBeenLastCalledWith(["trip"]);
   expect(input).toHaveFocus();
   expect(input).toHaveValue("");
-  expect(screen.getByLabelText("Confirmed tags")).toHaveTextContent("trip,");
+  expect(screen.getByLabelText("Confirmed tags")).toHaveTextContent("#trip");
   fireEvent.change(input, { target: { value: "planning, " } });
   expect(writes).toHaveBeenLastCalledWith(["trip", "planning"]);
   fireEvent.change(input, { target: { value: "ideas" } });
@@ -79,7 +79,7 @@ it("Escape discards the unfinished token while retaining confirmed tags", () => 
   fireEvent.keyDown(input, { key: "Escape" });
   expect(writes).toHaveBeenCalledOnce();
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
+    screen.getByRole("group", { name: "Current note tags" }),
   ).toHaveTextContent("trip");
 });
 it("rejects an invalid confirmation without losing the visible draft", () => {
@@ -97,8 +97,8 @@ it("keeps existing suffix tags when inserting at the beginning or middle then ca
   expect(writes).not.toHaveBeenCalled();
   fireEvent.keyDown(input, { key: "Escape" });
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
-  ).toHaveTextContent("planning, ideas");
+    screen.getByRole("group", { name: "Current note tags" }),
+  ).toHaveTextContent("#planning#ideas");
   fireEvent.click(screen.getByRole("button", { name: "Manage note tags" }));
   fireEvent.change(screen.getByLabelText("Tags, separated by commas"), {
     target: { value: "planning, trip, ideas" },
@@ -108,6 +108,6 @@ it("keeps existing suffix tags when inserting at the beginning or middle then ca
     key: "Escape",
   });
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
-  ).toHaveTextContent("planning, ideas");
+    screen.getByRole("group", { name: "Current note tags" }),
+  ).toHaveTextContent("#planning#ideas");
 });

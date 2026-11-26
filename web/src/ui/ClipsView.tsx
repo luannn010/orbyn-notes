@@ -61,6 +61,7 @@ const isConflict = (error: unknown) => {
     "clip_operation_reused",
   ].includes(code);
 };
+// design: notes/read-later
 export function ClipsView({
   store,
   heading,

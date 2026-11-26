@@ -275,6 +275,10 @@
 .library-sort select {
   max-width: 110px;
 }
+.library-sort option {
+  background-color: var(--main);
+  color: var(--t1);
+}
 .history-dialog {
   width: min(860px, calc(100vw - 32px));
 }
