@@ -487,3 +487,18 @@ Quoted fields preserve existing comma/quote/case/Unicode identities. Legacy tag
 names containing line breaks remain untouched and require a rename through Tags,
 because HTML single-line fields would otherwise strip those characters. Quick
 note keeps its existing capture controls. The encrypted tag schema is unchanged.
+
+### Streaming search normalization
+
+Search compares NFC followed by default full case folding across contiguous text
+nodes and transport chunks. An unfinished normalization cluster is retained until
+a safe boundary or field end; semantic atoms flush it before separating matches.
+Small finalized spans share bounded transform batches, which also flush at field
+and semantic endings before their results are returned.
+Highlight offsets refer to the original UTF-16 source, including composed or
+reordered sequences.
+
+Normalization retains the existing indivisible-work limit. A degenerate cluster
+that cannot fit the 4096-unit conservative scalar reservation fails the search
+operation explicitly before its carry is joined or normalized. It is not truncated
+or reported as a complete non-match, and stored notes remain unchanged.

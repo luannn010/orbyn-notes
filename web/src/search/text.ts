@@ -27,11 +27,18 @@ export type SearchQuery = Readonly<{
  * here: legacy lone UTF16 units remain literal source text. */
 export function compileSearchQuery(raw: string): SearchQuery | null {
   if (raw.length > 200) throw new SearchQueryError("query-too-long");
-  let folded = "";
   for (let offset = 0; offset < raw.length; ) {
     const point = raw.codePointAt(offset)!;
     if (point >= 0xd800 && point <= 0xdfff)
       throw new SearchQueryError("query-invalid");
+    offset += point > 0xffff ? 2 : 1;
+  }
+  // NFC matches the form stored by macOS pastes and file imports. Folding runs
+  // afterwards so both sides compare the same canonical code points.
+  const normalized = raw.normalize("NFC");
+  let folded = "";
+  for (let offset = 0; offset < normalized.length; ) {
+    const point = normalized.codePointAt(offset)!;
     folded += foldCodePoint(point);
     offset += point > 0xffff ? 2 : 1;
   }
