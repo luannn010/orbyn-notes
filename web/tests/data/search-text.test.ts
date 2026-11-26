@@ -8,7 +8,7 @@ describe("Unicode literal query contract", () => {
     ["Straße ẞ STRASSE", ["strasse", "ss"]],
     ["Σ σ ς", ["σ"]],
     ["I İ ı", ["i", "i\u0307", "ı"]],
-    ["CAFÉ cafe\u0301", ["café", "cafe\u0301"]],
+    ["CAFÉ cafe\u0301", ["café"]],
     ["\u{10400} \u{10428}", ["\u{10428}"]],
     ["ﬃ FFI <script>", ["ffi", "<script>"]],
   ])("folds %s with pinned default full mappings", (input, terms) => {
@@ -18,6 +18,11 @@ describe("Unicode literal query contract", () => {
     expect(compileSearchQuery("  Lisbon  LISBON \n costs ")?.raw).toBe("  Lisbon  LISBON \n costs ");
     expect(compileSearchQuery("word ".repeat(20))?.terms).toEqual(["word"]);
     expect(compileSearchQuery(" \t\n ")).toBe(null);
+  });
+  it("normalizes canonically equivalent queries to one NFC term", () => {
+    expect(compileSearchQuery("café")?.terms).toEqual(["café"]);
+    expect(compileSearchQuery("cafe\u0301")?.terms).toEqual(["café"]);
+    expect(compileSearchQuery("CAFÉ cafe\u0301")?.raw).toBe("CAFÉ cafe\u0301");
   });
   it("rejects oversized, incomplete or too-many-term input without truncation", () => {
     expect(compileSearchQuery("😀".repeat(100))?.raw.length).toBe(200);
@@ -35,7 +40,14 @@ describe("bounded literal matching and original scalar highlights", () => {
     let mask = 0;
     const snippets = [];
     for (const piece of pieces) {
-      if (piece === null) { matcher.boundary(); continue; }
+      if (piece === null) {
+        const final = await new SearchWork(matcher.finish(), undefined, async () => {}).round();
+        if (final.status !== "done") throw new Error("Unexpected boundary pause");
+        mask |= final.value.mask;
+        if (final.value.excerpt) snippets.push(final.value.excerpt);
+        matcher.boundary();
+        continue;
+      }
       for (const chunk of splitSearchText(piece)) {
         const result = await new SearchWork(matcher.push(chunk), undefined, async () => {}).round();
         if (result.status !== "done") throw new Error("One bounded chunk unexpectedly paused");
@@ -55,7 +67,40 @@ describe("bounded literal matching and original scalar highlights", () => {
     const astral = await scan("\u{10428}", ["😀\u{10400}😀"]);
     expect(astral.snippets[0]?.matches).toEqual([{ from: 2, to: 4 }]);
   });
+  it("matches canonically equivalent text in either normalization form", async () => {
+    const nfd = "cafe\u0301";
+    const composed = await scan("café", [nfd]);
+    expect(composed.mask).toBe(1);
+    expect(composed.snippets[0]).toEqual({ text: nfd, matches: [{ from: 0, to: 5 }], before: false, after: false });
+    const nfc = "café";
+    const decomposed = await scan("cafe\u0301", [nfc]);
+    expect(decomposed.mask).toBe(1);
+    expect(decomposed.snippets[0]).toEqual({ text: nfc, matches: [{ from: 0, to: 4 }], before: false, after: false });
+  });
+  it("keeps combining sequences inside one bounded chunk", async () => {
+    const chunked = await scan("é", ["x".repeat(4094) + "e\u0301"]);
+    expect(chunked.mask).toBe(1);
+    const excerpt = chunked.snippets[0]!;
+    expect(excerpt.matches.map(range => excerpt.text.slice(range.from, range.to))).toEqual(["e\u0301"]);
+  });
+  it("advances past a normalization cluster larger than a chunk", () => {
+    const source = "e" + "\u0301".repeat(4095);
+    const chunks = splitSearchText(source);
+    const first = chunks.next().value!;
+    expect(first.to).toBeGreaterThan(first.from);
+    expect(chunks.next().value?.from).toBe(first.to);
+  });
+  it("matches canonical compositions whose second character is a letter", async () => {
+    const text = "\u{16D63}\u{16D67}";
+    expect((await scan(text, [text])).mask).toBe(1);
+    expect((await scan("\u{16D6A}", ["\u{16D63}\u{16D68}"])).mask).toBe(1);
+    expect((await scan("\u{16D6A}", ["\u{16D63}", "\u{16D68}"])).mask).toBe(1);
+  });
+  it("scans long runs of combining grapheme joiners with safe boundaries", async () => {
+    expect((await scan("needle", ["needle " + "\u034f".repeat(4097)])).mask).toBe(1);
+  });
   it("matches across contiguous marked nodes and chunk splits but not semantic boundaries", async () => {
+    expect((await scan("e", ["e", null, "q"])).mask).toBe(1);
     expect((await scan("Straße", ["Stra", "ße"])).mask).toBe(1);
     expect((await scan("Straße", ["Stra", null, "ße"])).mask).toBe(0);
     expect((await scan("needle", ["x".repeat(4094) + "needle"])).mask).toBe(1);

@@ -593,3 +593,21 @@
     padding: 24px 20px;
   }
 }
+
+/*
+ * Windows High Contrast: the habit tick is drawn with author fills and the
+ * "today" ring with a box-shadow. Both are replaced, so use system colours.
+ */
+@media (forced-colors: active) {
+  .journal-habits > button[aria-pressed="true"] .journal-check {
+    background: HighlightText;
+    border-color: HighlightText;
+  }
+  .journal-habits > button[aria-pressed="true"] .journal-check-mark {
+    border-color: Highlight;
+  }
+  .journal-calendar-days button[aria-current="date"] {
+    outline: 2px solid CanvasText;
+    outline-offset: -2px;
+  }
+}

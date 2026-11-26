@@ -547,6 +547,113 @@ it("does not mark a display-only selected Cloze placeholder when identical liter
   expect(first.primary.text).toBe("[...] literal [...] second");
   expect(first.primary.matches).toEqual([{ from: 14, to: 19 }]);
 });
+it("matches a decomposed character across a cloze chunk boundary", async () => {
+  const f = await fixture(),
+    current = await f.collections.read();
+  const entry = current.study.entries.find((entry) => entry.type === "cloze")!;
+  await f.collections.update(current, (state) => ({
+    ...state,
+    study: saveEntry(
+      state.study,
+      {
+        ...entry,
+        type: "cloze",
+        revision: entry.revision + 1,
+        text: "x".repeat(4090) + "e\u0301 {{one}}",
+        blanks: [{ id: "one", answer: "answer" }],
+      },
+      new Date(),
+    ),
+  }));
+  const { index } = await build(f, "é");
+  const cards = await done(projectSearchPage(index, "card", 0, 50));
+  expect(
+    cards.some(
+      (hit) => hit.locator.kind === "card" && hit.locator.key === "cloze:one",
+    ),
+  ).toBe(true);
+});
+it("projects final normalization hits and exact overlapping highlight offsets", async () => {
+  const f = await fixture();
+  await f.notes.update(
+    f.note.id,
+    {
+      title: "cafe\u0301",
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "cafe", marks: [{ type: "bold" }] },
+              { type: "text", text: "\u0301", marks: [{ type: "italic" }] },
+            ],
+          },
+        ],
+      },
+    },
+    1,
+  );
+  const { index } = await build(f, "é");
+  const hits = await done(projectSearchPage(index, "note", 0, 50));
+  const hit = hits.find(
+    (hit) => hit.locator.kind === "note" && hit.locator.noteId === f.note.id,
+  )!;
+  expect(hit.primary).toEqual({
+    text: "cafe\u0301",
+    matches: [{ from: 3, to: 5 }],
+    before: false,
+    after: false,
+  });
+  expect(
+    hit.secondary.some((part) =>
+      part.matches.some(
+        (range) => part.text.slice(range.from, range.to) === "e\u0301",
+      ),
+    ),
+  ).toBe(true);
+
+  await f.notes.update(f.note.id, { title: "aaa", document: doc("aaa") }, 2);
+  const overlap = await build(f, "aa");
+  const overlapHits = await done(
+    projectSearchPage(overlap.index, "note", 0, 50),
+  );
+  const repeated = overlapHits.find(
+    (hit) => hit.locator.kind === "note" && hit.locator.noteId === f.note.id,
+  )!;
+  expect(repeated.primary.matches).toEqual([{ from: 0, to: 3 }]);
+  expect(repeated.secondary[0]?.matches).toEqual([{ from: 1, to: 4 }]);
+});
+it("retains a normalization hit flushed before a cloze placeholder", async () => {
+  const f = await fixture(),
+    current = await f.collections.read();
+  const entry = current.study.entries.find((entry) => entry.type === "cloze")!;
+  await f.collections.update(current, (state) => ({
+    ...state,
+    study: saveEntry(
+      state.study,
+      {
+        ...entry,
+        type: "cloze",
+        revision: entry.revision + 1,
+        text: "e\u0301{{one}}",
+        blanks: [{ id: "one", answer: "answer" }],
+      },
+      new Date(),
+    ),
+  }));
+  const { index } = await build(f, "é");
+  const cards = await done(projectSearchPage(index, "card", 0, 50));
+  const card = cards.find(
+    (hit) => hit.locator.kind === "card" && hit.locator.key === "cloze:one",
+  )!;
+  expect(card.primary).toEqual({
+    text: "e\u0301[...]",
+    matches: [{ from: 0, to: 2 }],
+    before: false,
+    after: false,
+  });
+});
 it("disposal terminates a held page iterator and rejects future readers", async () => {
   const f = await fixture(),
     { index } = await build(f, "common"),

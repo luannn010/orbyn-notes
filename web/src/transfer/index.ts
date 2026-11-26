@@ -563,12 +563,22 @@ function renderInline(
         let raw = part.raw,
           prefix = "",
           suffix = "";
-        if (index === 0 && guardStart && raw.length) {
+        // Unicode edge whitespace stays marked, but needs entity source so the
+        // emphasis delimiter can flank it. ASCII spaces/tabs were moved outside.
+        if (
+          index === 0 &&
+          raw.length &&
+          (guardStart || ((bold || italic || strike) && /\s/u.test(raw[0]!)))
+        ) {
           const point = raw.codePointAt(0)!;
           prefix = `&#${point};`;
           raw = raw.slice(point > 0xffff ? 2 : 1);
         }
-        if (index === parts.length - 1 && guardEnd && raw.length) {
+        if (
+          index === parts.length - 1 &&
+          raw.length &&
+          (guardEnd || ((bold || italic || strike) && /\s/u.test(raw.at(-1)!)))
+        ) {
           const last = /[\s\S]$/u.exec(raw)![0];
           suffix = `&#${last.codePointAt(0)};`;
           raw = raw.slice(0, -last.length);

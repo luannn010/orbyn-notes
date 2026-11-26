@@ -166,14 +166,17 @@ describe("Code spans keep the marks wrapped around them", () => {
 // Compare semantic ranges: Markdown may combine adjacent text nodes on import.
 const ranges = (nodes: RichNode[]) =>
   nodes.flatMap((node) =>
-    (node.text ?? "").split("").map((text) => ({
-      text,
-      marks: (node.marks ?? [])
-        .map((mark) =>
-          mark.type === "link" ? `link:${mark.attrs?.href}` : mark.type,
-        )
-        .sort(),
-    })),
+    node.type === "hardBreak"
+      ? [{ type: "hardBreak", text: "", marks: [] }]
+      : (node.text ?? "").split("").map((text) => ({
+          type: "text",
+          text,
+          marks: (node.marks ?? [])
+            .map((mark) =>
+              mark.type === "link" ? `link:${mark.attrs?.href}` : mark.type,
+            )
+            .sort(),
+        })),
   );
 const textNode = (text: string, marks: Mark[] = []): RichNode => ({
   type: "text",
@@ -395,17 +398,61 @@ describe.each(edgeWhitespaceCases)(
               { name: file.filename, content: file.content },
             ])[0]!;
             const actual = parsed.document.content[0]!.content ?? [];
-            const withBreaks = (nodes: RichNode[]) =>
-              ranges(
-                nodes.map((node) =>
-                  node.type === "hardBreak" ? textNode("\n") : node,
-                ),
-              );
             expect(parsed.document.content).toHaveLength(1);
-            expect(withBreaks(actual), file.content).toEqual(
-              withBreaks(expected),
-            );
+            expect(ranges(actual), file.content).toEqual(ranges(expected));
           }
+      },
+    );
+  },
+);
+
+it("distinguishes hard breaks from newline text while ignoring text fragmentation", () => {
+  const original = [
+    textNode("before"),
+    { type: "hardBreak" },
+    textNode("after"),
+  ];
+  const fragmented = [
+    textNode("be"),
+    textNode("fore"),
+    { type: "hardBreak" },
+    textNode("after"),
+  ];
+  expect(ranges(fragmented)).toEqual(ranges(original));
+  const mutated = original.map((node) =>
+    node.type === "hardBreak" ? textNode("\n") : node,
+  );
+  expect(() => expect(ranges(mutated)).toEqual(ranges(original))).toThrow();
+});
+describe.each(edgeWhitespaceCases)(
+  "Unicode whitespace in a shared %s run",
+  (_, outer) => {
+    it.each(["\u00a0", "\u2003", "\u202f", "\u3000"])(
+      "preserves Unicode edge %j and its marks",
+      (whitespace) => {
+        for (const position of ["trailing", "leading", "both"]) {
+          const literal = textNode("x", [...outer, code]),
+            edge = textNode(whitespace, outer);
+          const children =
+            position === "leading"
+              ? [edge, literal]
+              : position === "trailing"
+                ? [literal, edge]
+                : [edge, literal, edge];
+          const file = exportMarkdown([
+            note({
+              type: "doc",
+              content: [{ type: "paragraph", content: children }],
+            }),
+          ])[0]!;
+          const parsed = parseMarkdown([
+            { name: file.filename, content: file.content },
+          ])[0]!;
+          expect(
+            ranges(parsed.document.content[0]!.content ?? []),
+            file.content,
+          ).toEqual(ranges(children));
+        }
       },
     );
   },

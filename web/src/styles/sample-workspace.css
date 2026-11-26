@@ -633,3 +633,19 @@
 .sample-sidebar[hidden] { display: none; }
 .desktop-content .sample-main { padding-top: 44px; overflow: auto; }
 [data-desktop="true"] .sample-sidebar, [data-desktop="true"] .sample-main { min-height: 0; overflow-y: auto; }
+
+/* Windows High Contrast: the sample's active row is a translucent fill, which
+   the theme replaces. Use the theme's Highlight pair instead. */
+@media (forced-colors: active) {
+  .sample-nav.active {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+  .sample-nav.active:focus-visible {
+    outline-color: CanvasText;
+  }
+  .sample-nav.active small {
+    color: inherit;
+  }
+}
