@@ -138,6 +138,29 @@ describe("Markdown transfer boundary", () => {
     expect(exported.content).toContain("start ");
     expect(exported.content).toContain(" end");
   });
+  it.each([" ", " linked "])("retains link text and destination for %j", (text) => {
+    const href = "https://example.test";
+    const exported = exportMarkdown([note({ type: "doc", content: [{
+      type: "paragraph", content: [{ type: "text", text, marks: [{ type: "link", attrs: { href } }] }],
+    }] })])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    expect(imported.document.content[0]!.content).toEqual([
+      { type: "text", text, marks: [{ type: "link", attrs: { href } }] },
+    ]);
+  });
+  it("keeps a whitespace-only styled link and validates its destination", () => {
+    const make = (href: string) => note({ type: "doc", content: [{
+      type: "paragraph", content: [{ type: "text", text: " ", marks: [
+        { type: "bold" }, { type: "link", attrs: { href } },
+      ] }],
+    }] });
+    expect(() => exportMarkdown([make("javascript:alert(1)")])).toThrow();
+    const exported = exportMarkdown([make("https://example.test")])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    expect(imported.document.content[0]!.content).toEqual([
+      { type: "text", text: " ", marks: [{ type: "link", attrs: { href: "https://example.test" } }] },
+    ]);
+  });
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
   });
@@ -154,6 +177,20 @@ describe("Markdown transfer boundary", () => {
     expect(
       parseMarkdown([files[0]!])[0]?.document.content[0]?.content?.[0]?.text,
     ).toBe("plain");
+  });
+  it("imports empty fenced code blocks without an empty text node", () => {
+    const fence = "`".repeat(3);
+    const imported = parseMarkdown([
+      {
+        name: "empty-code.md",
+        content: `${fence}\n${fence}\n\n${fence}js\n\n${fence}\n`,
+      },
+    ])[0]!;
+    const codeBlocks = imported.document.content.filter(
+      (node) => node.type === "codeBlock",
+    );
+    expect(codeBlocks).toHaveLength(2);
+    for (const block of codeBlocks) expect(block.content ?? []).toEqual([]);
   });
   it("preserves ordinary list items alongside tasks without turning them into checkboxes", () => {
     const result = parseMarkdown([{ name: "mixed.md", content: "- Plain\n- [x] Done\n- Other\n- [ ] Next" }])[0]!;

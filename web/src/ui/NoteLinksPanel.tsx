@@ -249,6 +249,7 @@ export function NoteLinksPanel({
       );
     return null;
   }
+  // design: notes/backlinks
   const content = (
     <aside
       ref={panel}

@@ -106,6 +106,19 @@ function intervalText(due: string, at: Date) {
       : `${Math.round(minutes / 1440)} d`;
 }
 
+// design: notes/st-home
+// design: notes/st-deck
+// design: notes/st-home-empty
+// design: notes/st-home-loading
+// design: notes/st-home-error
+// design: notes/st-home-offline
+// design: notes/st-deck-empty
+// design: notes/st-review-front
+// design: notes/st-review-back
+// design: notes/st-review-undo
+// design: notes/st-review-done
+// design: notes/st-review-offline
+// design: notes/st-progress
 export function StudyView({
   store,
   heading,
@@ -1863,6 +1876,10 @@ function DeckForm({
     </form>
   );
 }
+// design: notes/st-card-basic
+// design: notes/st-card-reversed
+// design: notes/st-card-cloze
+// design: notes/st-card-editor
 function CardForm({
   entry,
   deckId,
@@ -2148,6 +2165,7 @@ function CardForm({
   );
 }
 
+// design: notes/st-import-error
 function CsvImport({
   busy,
   onDirty,
