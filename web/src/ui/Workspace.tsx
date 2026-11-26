@@ -211,6 +211,8 @@ export function Workspace({
     () => () => retireCreate(),
     [store, sourceOwner, session.accountId, session.deviceId],
   );
+  // design: notes/st-review-source
+  // design: notes/st-jump-source
   const [sourceTarget, setSourceTarget] = useState<EditorSourceTarget | null>(
       null,
     ),
@@ -364,6 +366,7 @@ export function Workspace({
   );
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [historyNote, setHistoryNote] = useState<Note | null>(null);
+  // design: notes/library-trash-more
   const [emptyConfirm, setEmptyConfirm] = useState<LibraryReadResult | null>(
     null,
   );
@@ -492,8 +495,12 @@ export function Workspace({
   }
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  // design: notes/trash
   const [trash, setTrash] = useState(false);
+  // design: notes/library-list
+  // design: notes/library-grid
   const [grid, setGrid] = useState(false);
+  // design: notes/layout-narrow
   const [drawer, setDrawer] = useState(false);
   const desktop = useDesktop();
   const mainRef = useRef<HTMLElement>(null);
@@ -929,6 +936,7 @@ export function Workspace({
     target?.focus();
     setFocusAfterTrash(null);
   });
+  // design: notes/layout-desktop
   const splitNotes = !!desktop && !newDraft && roomForNoteList && !!editing && module === "notes" && !trash;
   const hashtagRows = !trash && (splitNotes || (!!tag && !grid));
   const noteActors = Array.from(
@@ -2727,6 +2735,8 @@ export function Workspace({
                       : "empty library-empty"
                   }
                 >
+                  {/* design: notes/empty-library */}
+                  {/* design: notes/logo-blank-state */}
                   <span className={query || trash || pinnedOnly || linkedOnly ? "empty-state-icon" : "library-empty-icon"}>
                     {query || trash || pinnedOnly || linkedOnly ? <NoteIcon size={20} aria-hidden="true" /> : <NotesMark size={48} />}
                   </span>
