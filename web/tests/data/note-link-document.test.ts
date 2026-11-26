@@ -308,4 +308,11 @@ describe("Editor-loadable document admission", () => {
       ),
     ).toThrow(invalid);
   });
+  it("rejects inherited marks and accepts an own type on a null-prototype mark", () => {
+    const inherited = Object.create({ type: "bold" });
+    expect(() => validateDocument(inline([{ type: "text", text: "x", marks: [inherited] }]))).toThrow(invalid);
+    const plain = Object.assign(Object.create(null), { type: "bold" });
+    const result = validateDocument(inline([{ type: "text", text: "x", marks: [plain] }]));
+    expect(() => validateDocument(result)).not.toThrow();
+  });
 });
