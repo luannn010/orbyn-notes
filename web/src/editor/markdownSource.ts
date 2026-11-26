@@ -126,6 +126,13 @@ export function parseMarkdownSource(
   source?: MarkdownSource,
 ): NoteDocument {
   if (source && text === source.text) return structuredClone(source.original);
+  // A blank draft is an empty note, not a file import: import admission rejects
+  // empty files, so the source editor states its own empty document.
+  if (!text.trim())
+    return validateNoteDocument({
+      type: "doc",
+      content: [{ type: "paragraph", content: [] }],
+    });
   if (text.includes(marker))
     throw Error(
       "Unsupported source marker. Your Markdown draft is still here.",

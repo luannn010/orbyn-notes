@@ -193,6 +193,23 @@ async function build(f: Awaited<ReturnType<typeof fixture>>, raw: string) {
   indexes.add(index);
   return { index, lease };
 }
+it.each([
+  "{{one::InlineAnswer}} then {{two}}",
+  "{{one}} then {{{two}}} and {{ done {{!}}",
+  "x".repeat(4093) + "{{one::InlineAnswer}} then {{two}}",
+  "x".repeat(4090) + "{{one::InlineAnswer}} then {{two}}",
+  "x".repeat(4078) + "{{one::InlineAnswer}} then {{two}}",
+])("searches persisted cloze grammar through the genuine source: %s", async (text) => {
+  const f = await fixture(), current = await f.collections.read();
+  const entry = current.study.entries.find((entry) => entry.type === "cloze")!;
+  await f.collections.update(current, (state) => ({ ...state, study: saveEntry(state.study, {
+    ...entry, type: "cloze", text, revision: entry.revision + 1,
+    blanks: [{ id: "one", answer: "InlineAnswer" }, { id: "two", answer: "Second Answer" }],
+  }, new Date()) }));
+  const { index } = await build(f, "InlineAnswer");
+  const cards = await done(projectSearchPage(index, "card", 0, 50));
+  expect(cards.filter((hit) => hit.locator.kind === "card" && hit.locator.entryId === entry.id)).toHaveLength(2);
+});
 it("matches real Notes/archived Clips/actual Reversed2+ClozeN cards with exact counts and lazy pages", async () => {
   const f = await fixture();
   await source(f);

@@ -20,6 +20,8 @@ import { openNotesStore } from "../../src/data";
 import type { NoteDocument } from "../../src/domain/contracts";
 import { createNoteLinkService } from "../../src/links/store";
 import { noteLinkOwner } from "../../src/library/store";
+import * as scanner from "../../src/links/scanner";
+import { NoteLinkError } from "../../src/links/contracts";
 const identity = {
   accountId: "11111111-1111-4111-8111-111111111111",
   deviceId: "22222222-2222-4222-8222-222222222222",
@@ -161,6 +163,39 @@ it("keeps strict2 editing and refuses new atoms until complete legacy premise", 
     status: "ready",
     items: [{ sourceId: a.id, occurrences: 1, title: "Still editable" }],
   });
+});
+it("keeps persistence ready when a proposed link graph exceeds its aggregate limit", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const target = (await links.reference(b.id)).target;
+  const current = await notes.update(
+    a.id,
+    { document: linked(target) },
+    a.revision,
+  );
+  const before = await readRecord<DeviceRecord>("devices", identity.email);
+  const validate = scanner.validateLinkRows;
+  vi.spyOn(scanner, "validateLinkRows").mockImplementation((rows, noteList) => {
+    const result = validate(rows, noteList);
+    const total = result
+      .flatMap((row) => row.targets)
+      .reduce((sum, entry) => sum + entry.occurrences, 0);
+    if (total > 1) throw new NoteLinkError("note_link_limit");
+    return result;
+  });
+  const document = linked(target);
+  document.content![0]!.content!.push({
+    type: "noteLink",
+    attrs: { version: 1, target },
+  });
+  await expect(
+    notes.update(a.id, { document }, current.revision),
+  ).rejects.toMatchObject({ code: "note_link_limit" });
+  expect(notes.persistence()).toEqual({ status: "ready" });
+  expect(await readRecord<DeviceRecord>("devices", identity.email)).toEqual(
+    before,
+  );
+  expect(await notes.get(a.id)).toEqual(current);
 });
 it("isolates malformed index, blocks writers and repairs once with durable replay", async () => {
   const { notes, links, a } = await setup();
@@ -549,6 +584,81 @@ it("projects current authorized labels without storing them and handles Trash/re
       accountId: "99999999-9999-4999-8999-999999999999",
     }),
   ).toEqual({ status: "unavailable", reason: "scope" });
+});
+
+it("keeps the Linked filter to notes whose links resolve in this library", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const target = (await links.reference(b.id)).target;
+  await notes.update(a.id, { document: linked(target) }, a.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [a.id, b.id],
+  });
+  const trashed = await notes.trash(b.id, b.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+  await notes.restore(b.id, trashed.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [a.id, b.id],
+  });
+  const current = (await notes.get(a.id))!,
+    otherEpoch = { ...target, libraryEpoch: crypto.randomUUID() };
+  await notes.update(a.id, { document: linked(otherEpoch) }, current.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+  const otherAccount = { ...target, accountId: crypto.randomUUID() },
+    latest = (await notes.get(a.id))!;
+  await notes.update(a.id, { document: linked(otherAccount) }, latest.revision);
+  await links.verifyGraph();
+  expect(await links.linkedNoteIds()).toMatchObject({
+    status: "ready",
+    items: [],
+  });
+});
+it("separates backlink snippets at block boundaries", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const target = (await links.reference(b.id)).target;
+  await notes.update(
+    a.id,
+    {
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "Meeting notes " },
+              { type: "noteLink", attrs: { version: 1, target } },
+            ],
+          },
+          { type: "paragraph", content: [{ type: "text", text: "Agenda" }] },
+        ],
+      },
+    },
+    a.revision,
+  );
+  await links.verifyGraph();
+  expect(await links.backlinks(b.id)).toMatchObject({
+    status: "ready",
+    items: [
+      {
+        sourceId: a.id,
+        occurrences: 1,
+        snippet: "Meeting notes Note reference Agenda",
+      },
+    ],
+  });
 });
 
 it("verifies the full 10000-note/100000-reference graph with bounded rounds and linear row admission", async () => {

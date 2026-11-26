@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { exportMarkdown, parseMarkdown } from "../../src/transfer";
-import type { Note, NoteDocument } from "../../src/domain/contracts";
+import {
+  exportMarkdown,
+  parseMarkdown,
+  renderMarkdownSnapshot,
+} from "../../src/transfer";
+import type { Note, NoteDocument, RichNode } from "../../src/domain/contracts";
 
 const note = (document: NoteDocument): Note => ({
   id: "fixture",
@@ -54,18 +58,42 @@ const link: Mark = { type: "link", attrs: { href: "https://example.test/a" } };
  * bytes.
  */
 describe("Code spans keep the marks wrapped around them", () => {
-  it.each([[[]], [[link]]])("combines adjacent code nodes into a single literal span", (outer) => {
-    const document: NoteDocument = { type: "doc", content: [{ type: "paragraph", content: [
-      { type: "text", text: "a", marks: [...outer, code] },
-      { type: "text", text: "b", marks: [...outer, code] },
-    ] }] };
-    const exported = exportMarkdown([note(document)])[0]!;
-    const parsed = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
-    const nodes = parsed.document.content[0]!.content!;
-    expect(nodes.map((node) => node.text).join("")).toBe("ab");
-    expect(nodes.every((node) => node.marks?.some((mark) => mark.type === "code"))).toBe(true);
-    if (outer.length) expect(nodes.every((node) => node.marks?.some((mark) => mark.type === "link" && mark.attrs?.href === "https://example.test/a"))).toBe(true);
-  });
+  it.each([[[]], [[link]]])(
+    "combines adjacent code nodes into a single literal span",
+    (outer) => {
+      const document: NoteDocument = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "a", marks: [...outer, code] },
+              { type: "text", text: "b", marks: [...outer, code] },
+            ],
+          },
+        ],
+      };
+      const exported = exportMarkdown([note(document)])[0]!;
+      const parsed = parseMarkdown([
+        { name: exported.filename, content: exported.content },
+      ])[0]!;
+      const nodes = parsed.document.content[0]!.content!;
+      expect(nodes.map((node) => node.text).join("")).toBe("ab");
+      expect(
+        nodes.every((node) => node.marks?.some((mark) => mark.type === "code")),
+      ).toBe(true);
+      if (outer.length)
+        expect(
+          nodes.every((node) =>
+            node.marks?.some(
+              (mark) =>
+                mark.type === "link" &&
+                mark.attrs?.href === "https://example.test/a",
+            ),
+          ),
+        ).toBe(true);
+    },
+  );
   it("preserves bold across adjacent plain and code text", () => {
     const document: NoteDocument = {
       type: "doc",
@@ -133,4 +161,193 @@ describe("Code spans keep the marks wrapped around them", () => {
     expect(reimportedMarks(paragraph([bold, code]))).toEqual(["bold", "code"]);
     expect(reimportedMarks(paragraph([link, code]))).toEqual(["code", "link"]);
   });
+});
+
+// Compare semantic ranges: Markdown may combine adjacent text nodes on import.
+const ranges = (nodes: RichNode[]) =>
+  nodes.flatMap((node) =>
+    (node.text ?? "").split("").map((text) => ({
+      text,
+      marks: (node.marks ?? [])
+        .map((mark) =>
+          mark.type === "link" ? `link:${mark.attrs?.href}` : mark.type,
+        )
+        .sort(),
+    })),
+  );
+const textNode = (text: string, marks: Mark[] = []): RichNode => ({
+  type: "text",
+  text,
+  marks,
+});
+it.each([
+  ["code then plain", [textNode("a", [bold, code]), textNode("b", [bold])]],
+  [
+    "partial overlap",
+    [
+      textNode("a", [bold]),
+      textNode("b", [bold, italic, code]),
+      textNode("c", [italic]),
+    ],
+  ],
+  [
+    "partial strike overlap",
+    [
+      textNode("a", [strike]),
+      textNode("b", [strike, bold, code]),
+      textNode("c", [bold]),
+    ],
+  ],
+  [
+    "partial overlap then plain",
+    [textNode("a", [bold]), textNode("b", [bold, italic, code]), textNode("c")],
+  ],
+  [
+    "partial code overlap",
+    [
+      textNode("a", [bold, code]),
+      textNode("b", [bold, italic, code]),
+      textNode("c", [italic, code]),
+    ],
+  ],
+  [
+    "backtick fragments",
+    [textNode("a`", [bold, code]), textNode("``b", [code, bold])],
+  ],
+  [
+    "href transition",
+    [
+      textNode("a", [bold, link]),
+      textNode("b", [
+        bold,
+        code,
+        { type: "link", attrs: { href: "https://example.test/b" } },
+      ]),
+      textNode("c", [bold]),
+    ],
+  ],
+  [
+    "mixed whitespace",
+    [
+      textNode(" plain ", [bold]),
+      textNode(" code ", [code, bold]),
+      textNode(" tail ", [bold]),
+    ],
+  ],
+] satisfies [string, RichNode[]][])("round trips %s", (_, children) => {
+  const document: NoteDocument = {
+    type: "doc",
+    content: [{ type: "paragraph", content: children }],
+  };
+  const file = exportMarkdown([note(document)])[0]!;
+  const parsed = parseMarkdown([
+    { name: file.filename, content: file.content },
+  ])[0]!;
+  // Edge whitespace of non-code emphasis is intentionally unstyled (PR172).
+  const actual = ranges(parsed.document.content[0]!.content ?? []);
+  const original = ranges(children);
+  for (const point of [original[0], original.at(-1)])
+    if (point?.text === " " && !point.marks.includes("code"))
+      point.marks = point.marks.filter(
+        (mark) => !["bold", "italic", "strike"].includes(mark),
+      );
+  expect(actual).toEqual(original);
+});
+
+it("retains style ranges across code transitions for every emphasis combination", () => {
+  const styles = [bold, italic, strike];
+  for (let left = 0; left < 8; left++)
+    for (let middle = 0; middle < 8; middle++) {
+      const selected = (mask: number) =>
+        styles.filter((_, bit) => mask & (1 << bit));
+      const children = [
+        textNode("a", selected(left)),
+        textNode("`b`", [...selected(middle), code]),
+        textNode("c", selected(left ^ 7)),
+      ];
+      const file = exportMarkdown([
+        note({
+          type: "doc",
+          content: [{ type: "paragraph", content: children }],
+        }),
+      ])[0]!;
+      const parsed = parseMarkdown([
+        { name: file.filename, content: file.content },
+      ])[0]!;
+      expect(
+        ranges(parsed.document.content[0]!.content ?? []),
+        file.content,
+      ).toEqual(ranges(children));
+    }
+});
+
+it.each([" ", "  ", "`", " ` "])(
+  "retains literal code whitespace and fences: %j",
+  (text) => {
+    const children = [textNode(text, [bold, code])];
+    const file = exportMarkdown([
+      note({
+        type: "doc",
+        content: [{ type: "paragraph", content: children }],
+      }),
+    ])[0]!;
+    const parsed = parseMarkdown([
+      { name: file.filename, content: file.content },
+    ])[0]!;
+    expect(ranges(parsed.document.content[0]!.content ?? [])).toEqual(
+      ranges(children),
+    );
+  },
+);
+it("retains mark order permutations and reference boundaries", () => {
+  const permutations = (marks: Mark[]): Mark[][] =>
+    marks.length
+      ? marks.flatMap((mark, index) =>
+          permutations(marks.filter((_, other) => index !== other)).map(
+            (rest) => [mark, ...rest],
+          ),
+        )
+      : [[]];
+  const expected = exportedBody(paragraph([bold, italic, link, code]));
+  for (const marks of permutations([bold, italic, link, code])) {
+    expect(exportedBody(paragraph(marks))).toBe(expected);
+    expect(reimportedMarks(paragraph(marks))).toEqual([
+      "bold",
+      "code",
+      "italic",
+      "link",
+    ]);
+  }
+  const reference: RichNode = {
+    type: "noteLink",
+    attrs: { version: 1, target: {} },
+  };
+  const left = textNode("a", [bold, code, link]),
+    right = textNode("b", [bold, code]);
+  const seen: RichNode[] = [];
+  const file = renderMarkdownSnapshot(
+    [
+      note({
+        type: "doc",
+        content: [{ type: "paragraph", content: [left, reference, right] }],
+      }),
+    ],
+    (node) => {
+      seen.push(node);
+      return "[Ref](https://example.test/ref)";
+    },
+  )[0]!;
+  const parsed = parseMarkdown([
+    { name: file.filename, content: file.content },
+  ])[0]!;
+  expect(seen).toEqual([reference]);
+  expect(ranges(parsed.document.content[0]!.content ?? [])).toEqual(
+    ranges([
+      left,
+      textNode("Ref", [
+        { type: "link", attrs: { href: "https://example.test/ref" } },
+      ]),
+      right,
+    ]),
+  );
 });

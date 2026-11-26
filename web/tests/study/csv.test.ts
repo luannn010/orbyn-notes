@@ -20,3 +20,19 @@ it.each(['Front,Back\n"unclosed,answer', 'Wrong,Back\nx,y', 'Front,Back\nQ,A\nMi
   expect(() => importStudyCsv(state, state.decks[0]!.id, source, new Date())).toThrow();
   expect(state).toEqual(before);
 });
+
+it.each([
+  ["CR", "\r"],
+  ["LF", "\n"],
+  ["CRLF", "\r\n"],
+])("counts %s inside quoted fields as one physical line", (_name, newline) => {
+  const header = `Front,Back${newline}`;
+  const valid = `"q${newline}continued",a${newline}`;
+  expect(parseStudyCsv(header + valid)).toEqual([
+    { front: `q${newline}continued`, back: "a", tags: [] },
+  ]);
+  expect(() => parseStudyCsv(header + valid + "bad"))
+    .toThrow("Row 4 has 1 columns");
+  expect(() => parseStudyCsv(header + valid + '"unclosed'))
+    .toThrow("Row 4 has a quoted field that is not closed");
+});

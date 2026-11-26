@@ -11,6 +11,7 @@ import { message } from "./model";
 import { LibraryActionFeedback, useLibraryAction } from "./libraryAction";
 import "../styles/library.css";
 import type { EditorNoteLinks } from "./noteLinkViews";
+// design: notes/history
 export function VersionHistory({
   note,
   library,

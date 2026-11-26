@@ -8,6 +8,7 @@ import type {
   StudyState,
 } from "./contracts";
 import { emptyClips, validateClipState } from "../clips/validation";
+import { clozeProblem } from "../study/cloze";
 import { validateAnchoredSource } from "../study/sourceValidation";
 
 export const LEGACY_COLLECTIONS_BYTES = 32 * 1024 * 1024;
@@ -269,24 +270,16 @@ function validateState(
       array(e.blanks, 100);
       if (!e.blanks.length) fail();
       const blanks = new Set<string>();
+      const answers: { id: string; answer: string }[] = [];
       for (const raw of e.blanks) {
         const b = object(raw, ["id", "answer"]);
         if (typeof b.id !== "string" || !blankId.test(b.id) || blanks.has(b.id))
           fail();
         text(b.answer, COLLECTIONS_LIMITS.text, true);
         blanks.add(b.id);
+        answers.push({ id: b.id, answer: b.answer });
       }
-      const matches = [...e.text.matchAll(/\{\{([^{}]+)\}\}/g)].map(
-        (match) => match[1]!,
-      );
-      if (
-        matches.length !== blanks.size ||
-        new Set(matches).size !== matches.length ||
-        matches.some((key) => !blanks.has(key)) ||
-        e.text.replace(/\{\{[^{}]+\}\}/g, "").includes("{{") ||
-        e.text.replace(/\{\{[^{}]+\}\}/g, "").includes("}}")
-      )
-        fail();
+      if (clozeProblem(e.text, answers)) fail();
     } else fail();
     return e;
   });
