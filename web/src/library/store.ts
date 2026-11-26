@@ -52,7 +52,12 @@ import type {
   SourceOwnerSnapshot,
 } from "../study/sourceContracts";
 import { SourceConflictError, SourceError } from "../study/sourceContracts";
-import { applySourceCommand, sourceTokens } from "../study/sourceModel";
+import {
+  applySourceCommand,
+  deleteSourceEntry,
+  pruneOrphanAnchors,
+  sourceTokens,
+} from "../study/sourceModel";
 import {
   canonicalSourceDocument,
   fingerprintSourceDocument,
@@ -1631,6 +1636,40 @@ export async function openNotesStore(
   }
   sourceOwners.set(library, {
     read: () => access({ collections: true, project: sourceSnapshot }),
+    deleteEntries: (entryIds, expectedCollectionsEpoch, fresh) => {
+      const ids = new Set(entryIds);
+      return access({
+        collections: true,
+        beforeStage: fresh,
+        change: (ctx) => {
+          fresh();
+          const current = sourceSnapshot(ctx);
+          if (current.collections.epoch !== expectedCollectionsEpoch)
+            throw new SourceError(
+              "source_revoked",
+              "The workspace was erased.",
+            );
+          const entries = current.collections.study.entries,
+            removed = entries.filter((entry) => ids.has(entry.id)),
+            surviving = new Set(
+              entries
+                .filter((entry) => !ids.has(entry.id))
+                .map((entry) => entry.id),
+            ),
+            orphaned = current.library.anchors.some(
+              (anchor) => !surviving.has(anchor.entryId),
+            );
+          if (!removed.length && !orphaned) {
+            ctx.skipWrite = true;
+            return;
+          }
+          for (const entry of removed) deleteSourceEntry(current, entry.id);
+          pruneOrphanAnchors(current);
+          current.collections.revision++;
+        },
+        project: sourceSnapshot,
+      });
+    },
     commit: async (command, fresh) => {
       let replayed = false;
       const snapshot = await access({
