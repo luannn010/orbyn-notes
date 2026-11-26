@@ -224,3 +224,88 @@ describe("Notes-only reference document admission", () => {
     ).toThrow();
   });
 });
+
+describe("Editor-loadable document admission", () => {
+  const invalid = /^invalid_document:/;
+  const inline = (content: unknown[]) => ({
+    type: "doc",
+    content: [{ type: "paragraph", content }],
+  });
+  it("keeps admitting ordinary inline text with supported marks", () => {
+    const value = inline([
+      { type: "text", text: "Kept", marks: [{ type: "bold" }] },
+    ]);
+    expect(validateDocument(value)).toEqual(value);
+  });
+  it("rejects an empty text node the editor cannot load", () => {
+    expect(() => validateDocument(inline([{ type: "text", text: "" }]))).toThrow(
+      invalid,
+    );
+    expect(() =>
+      validateNoteDocument(inline([{ type: "text", text: "" }])),
+    ).toThrow(invalid);
+  });
+  it("rejects a text node directly under doc", () => {
+    expect(() =>
+      validateDocument({
+        type: "doc",
+        content: [{ type: "text", text: "Leaked" }],
+      }),
+    ).toThrow(invalid);
+  });
+  it.each(["blockquote", "listItem", "taskItem"])(
+    "rejects a text node under non-inline %s content",
+    (parent) => {
+      const text = { type: "text", text: "Leaked" };
+      const value =
+        parent === "blockquote"
+          ? { type: "doc", content: [{ type: "blockquote", content: [text] }] }
+          : parent === "listItem"
+            ? {
+                type: "doc",
+                content: [
+                  {
+                    type: "bulletList",
+                    content: [{ type: "listItem", content: [text] }],
+                  },
+                ],
+              }
+            : {
+                type: "doc",
+                content: [
+                  {
+                    type: "taskList",
+                    content: [
+                      {
+                        type: "taskItem",
+                        attrs: { checked: false },
+                        content: [text],
+                      },
+                    ],
+                  },
+                ],
+              };
+      expect(() => validateDocument(value)).toThrow(invalid);
+    },
+  );
+  it("rejects mark entries that are not plain objects with a string type", () => {
+    for (const marks of [
+      null,
+      ["bold"],
+      [null],
+      [["bold"]],
+      [{}],
+      [{ type: 7 }],
+    ]) {
+      expect(
+        () => validateDocument(inline([{ type: "text", text: "x", marks }])),
+        `marks: ${JSON.stringify(marks)}`,
+      ).toThrow(invalid);
+    }
+    expect(() =>
+      validateDocument(
+        inline([{ type: "text", text: "x", marks: [{ type: "blink" }] }]),
+      ),
+    ).toThrow(invalid);
+  });
+});
