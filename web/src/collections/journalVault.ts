@@ -365,7 +365,9 @@ export async function openJournalVault(
             () => current(token, epoch),
           );
           current(token, epoch);
-          await latest(token, epoch);
+          // Rebase on a fresh revision when the Journal envelope is unchanged;
+          // another window's Journal write still conflicts instead of saving.
+          await refreshForSave(token, epoch);
           current(token, epoch);
           await commitEnvelope(envelope, version, token, epoch);
           current(token, epoch);

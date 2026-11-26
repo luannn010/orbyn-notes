@@ -35,6 +35,7 @@ export function LinkPopover({
   anchorRef.current = anchor;
   cancelRef.current = onCancel;
   const id = useId();
+  const errorId = `${id}-error`;
   useLayoutEffect(
     () =>
       registerCloseGuard(() => {
@@ -175,7 +176,7 @@ export function LinkPopover({
         autoComplete="off"
         spellCheck={false}
         value={url}
-        aria-describedby={`${id}-hint`}
+        aria-describedby={error ? `${id}-hint ${errorId}` : `${id}-hint`}
         aria-invalid={!!error}
         onChange={(event) => {
           try {
@@ -197,7 +198,7 @@ export function LinkPopover({
       <small id={`${id}-hint`}>https://, http:// or mailto:</small>
       {unavailable && <p role="status">{unavailable}</p>}
       {error && (
-        <p className="error" role="alert">
+        <p className="error" id={errorId} role="alert">
           {error}
         </p>
       )}

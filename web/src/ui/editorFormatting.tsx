@@ -42,6 +42,7 @@ function overlayHost(anchor: Element | null): HTMLElement {
   return anchor?.closest<HTMLDialogElement>("dialog[open]") ?? document.body;
 }
 
+// design: notes/format-shortcuts
 export function EditorTooltip({
   label,
   shortcut,
@@ -363,6 +364,7 @@ export function EditorFormatting({
       );
     }
   }
+  // design: notes/markdown-view
   function changeView(next: boolean) {
     if (next === markdown || !current.current.active) return;
     if (next && !current.current.sourceEditing) return;
@@ -511,6 +513,7 @@ export function EditorFormatting({
     else if (command === "undo") chain.undo().run();
     else chain.redo().run();
   }
+  // design: notes/format-menu
   function openMenu(
     kind: "context" | "style" | "more",
     left: number,

@@ -1,4 +1,7 @@
-import type { CollectionsStore } from "../collections/contracts";
+import type {
+  CollectionsState,
+  CollectionsStore,
+} from "../collections/contracts";
 import {
   assertCollectionsAccess,
   onCollectionsEpochChange,
@@ -28,6 +31,27 @@ import {
   validateSavedSelection,
   validateSourceExpected,
 } from "./sourceValidation";
+
+/**
+ * Deletes Study entries and their source anchors through the library snapshot
+ * writer that owns `library.anchors`. The caller passes the Collections epoch
+ * it rendered so a re-created workspace is rejected instead of mutated.
+ */
+export async function deleteStudyEntries(
+  notes: NotesLibraryStore,
+  collections: CollectionsStore,
+  entryIds: readonly string[],
+  expectedCollectionsEpoch: string,
+): Promise<CollectionsState> {
+  const ids = [...new Set(entryIds)];
+  for (const entryId of ids) id(entryId);
+  const snapshot = await studySourceOwner(notes).deleteEntries(
+    ids,
+    expectedCollectionsEpoch,
+    () => assertCollectionsAccess(collections),
+  );
+  return snapshot.collections;
+}
 
 export function createStudySourceService(
   notes: NotesLibraryStore,

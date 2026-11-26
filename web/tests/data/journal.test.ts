@@ -80,4 +80,49 @@ describe("separate Journal encryption boundary", () => {
     expect(() => setHabitCompletion(data, "2026-02-30", habitId, true, new Date())).toThrow("date");
     expect(() => validateJournalData({ ...next, completions: [...next.completions, ...next.completions] })).toThrow("journal_invalid");
   });
+  it("counts a day from the habits tracked on it, not from stored completions", () => {
+    const at = new Date(2026, 1, 10, 12);
+    let data = saveHabit(emptyJournal(), "Read", at);
+    data = saveHabit(data, "Walk", at);
+    data = saveHabit(data, "Stretch", at);
+    const [read, walk] = data.habits;
+    data = archiveHabit(data, read!.id, new Date(2026, 1, 11, 12));
+    data = setHabitCompletion(data, "2026-02-10", read!.id, true, at);
+    data = setHabitCompletion(data, "2026-02-10", walk!.id, true, at);
+    // Restored or older data can hold a completion outside the habit's window.
+    const restored = validateJournalData({
+      ...data,
+      completions: [
+        ...data.completions,
+        { date: "2026-02-12", habitId: read!.id, done: true, updatedAt: new Date(2026, 1, 13, 12).toISOString() },
+        { date: "2026-02-13", habitId: walk!.id, done: true, updatedAt: new Date(2026, 1, 12, 12).toISOString() },
+      ],
+    });
+    const month = journalMonth(restored, 2026, 2);
+    // The archive day keeps the habit and its counts: history is not hidden.
+    expect(month[9]).toMatchObject({ habitsCompleted: 2, habitTotal: 3 });
+    expect(month[10]).toMatchObject({ habitsCompleted: 0, habitTotal: 3 });
+    // After the archive day only tracked habits count, as in the day view.
+    expect(month[11]).toMatchObject({ habitsCompleted: 0, habitTotal: 2 });
+    expect(month[12]).toMatchObject({ habitsCompleted: 1, habitTotal: 2 });
+  });
+  it("rejects duplicate habit names on create and rename while still loading saved duplicates", () => {
+    const at = new Date(2026, 1, 10, 12);
+    let data = saveHabit(emptyJournal(), "Read", at);
+    expect(() => saveHabit(data, "Read", at)).toThrow("invalid_habit: This habit name is already in use.");
+    expect(() => saveHabit(data, "  read  ", at)).toThrow(/already in use/);
+    data = saveHabit(data, "Straße", at);
+    const strasse = data.habits[1]!;
+    // Case folding follows search/text.ts, which also folds ß to ss.
+    expect(() => saveHabit(data, "STRASSE", at)).toThrow(/already in use/);
+    expect(() => saveHabit(data, "READ", at, strasse.id)).toThrow(/already in use/);
+    expect(saveHabit(data, "Straße ", at, strasse.id).habits[1]!.name).toBe("Straße");
+    // Archived habits are not offered for management, so their names are free.
+    const archived = archiveHabit(data, data.habits[0]!.id, new Date(2026, 1, 12, 12));
+    expect(saveHabit(archived, "Read", at).habits).toHaveLength(3);
+    // Loading a journal that already contains duplicate names stays valid.
+    const legacy = structuredClone(archived);
+    legacy.habits.push({ ...structuredClone(legacy.habits[1]!), id: crypto.randomUUID() });
+    expect(validateJournalData(legacy).habits.map(habit => habit.name)).toEqual(["Read", "Straße", "Straße"]);
+  });
 });

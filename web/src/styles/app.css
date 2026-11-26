@@ -118,6 +118,10 @@ button.danger,
 .error {
   color: var(--red);
 }
+.markdown-import-error,
+.first-run-setup [role="alert"] {
+  overflow-wrap: anywhere;
+}
 button[aria-pressed="true"] {
   background: var(--sel);
 }
@@ -1267,6 +1271,18 @@ dialog p {
   body .editor-page .note-title,
   body .new-note-title {
     min-height: 44px;
+  }
+
+  /* More specific component rules otherwise override the phone minimum. */
+  body .study-view .study-table .study-text-button,
+  body .editor-format-quick .editor-format-icon {
+    min-height: 44px;
+  }
+
+  body .study-view .menu-anchor > button,
+  body .study-view .study-review-heading button,
+  body .editor-format-quick .editor-format-icon {
+    min-width: 44px;
   }
 
   /* Icon-only controls keep a square 44x44 footprint. */

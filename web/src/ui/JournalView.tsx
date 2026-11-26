@@ -245,6 +245,7 @@ export function JournalView({
   );
 }
 
+// design: notes/journal-web-lock
 function Credentials({
   vault,
   headingRef,
@@ -410,6 +411,9 @@ function Credentials({
   );
 }
 
+// design: notes/journal-today
+// design: notes/journal-history
+// design: notes/journal-menu
 function JournalWorkspace({
   vault,
   headingRef,
