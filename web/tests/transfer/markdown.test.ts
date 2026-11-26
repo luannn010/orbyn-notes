@@ -116,6 +116,28 @@ describe("Markdown transfer boundary", () => {
     ])[0]!;
     expect(exported.content).toContain("&#32;**bold**&#32;");
   });
+  it.each([
+    { name: "plain", before: { type: "text", text: "hello " }, after: { type: "text", text: " world" } },
+    { name: "marked", before: { type: "text", text: "hello ", marks: [{ type: "bold" }] }, after: { type: "text", text: " world", marks: [{ type: "italic" }] } },
+    { name: "whitespace-only", before: { type: "text", text: " " }, after: { type: "text", text: " " } },
+  ])("preserves $name whitespace beside hard breaks", ({ before, after }) => {
+    const exported = exportMarkdown([note({
+      type: "doc", content: [{ type: "paragraph", content: [
+        { type: "text", text: "start " }, before, { type: "hardBreak" }, after,
+        { type: "text", text: " end" },
+      ] }],
+    })])[0]!;
+    const imported = parseMarkdown([{ name: exported.filename, content: exported.content }])[0]!;
+    const nodes = imported.document.content[0]!.content!;
+    expect(nodes.map((n) => n.type === "hardBreak" ? "\n" : n.text ?? "").join(""))
+      .toBe(`start ${before.text}\n${after.text} end`);
+    if (before.marks) {
+      expect(nodes.find((n) => n.text === "hello")?.marks).toEqual(before.marks);
+      expect(nodes.find((n) => n.text === "world")?.marks).toEqual(after.marks);
+    }
+    expect(exported.content).toContain("start ");
+    expect(exported.content).toContain(" end");
+  });
   it("rejects unsupported tables with a useful error before any import", () => {
     expect(() => parseMarkdown([{ name: "table.md", content: "| Name | Value |\n| --- | --- |\n| secret | retained |" }])).toThrow("unsupported_table");
   });

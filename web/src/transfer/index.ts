@@ -330,8 +330,7 @@ function splitEdgeWhitespace(text: string): {
   const trailing = /[ \t]*$/.exec(rest)![0];
   return { leading, core: rest.slice(0, rest.length - trailing.length), trailing };
 }
-/** A paragraph or heading edge would trim literal whitespace, so keep the
- * existing entity form exactly there and leave interior spacing literal. */
+/** Markdown trims literal whitespace at block and hard-break line edges. */
 function escapeEdgeWhitespace(whitespace: string): string {
   return whitespace.replace(/ /g, "&#32;").replace(/\t/g, "&#9;");
 }
@@ -374,9 +373,11 @@ function renderInline(
       }
       if (!edge) return text;
       const leading =
-        index === 0 ? escapeEdgeWhitespace(edge.leading) : edge.leading;
+        index === 0 || nodes[index - 1]?.type === "hardBreak"
+          ? escapeEdgeWhitespace(edge.leading)
+          : edge.leading;
       const trailing =
-        index === nodes.length - 1
+        index === nodes.length - 1 || nodes[index + 1]?.type === "hardBreak"
           ? escapeEdgeWhitespace(edge.trailing)
           : edge.trailing;
       return leading + text + trailing;
