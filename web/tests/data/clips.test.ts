@@ -433,6 +433,52 @@ it.each([
 ])("rejects unsafe URL %s", (url) => {
   expect(() => validateClipAction({ ...create, url })).toThrow("clip_invalid");
 });
+it("accepts backslashes outside the URL authority and stores them", async () => {
+  const { clips } = await open(),
+    urls: [string, string][] = [
+      [
+        "https://example.test/search?q=C:\\temp",
+        "https://example.test/search?q=C:\\temp",
+      ],
+      ["https://Example.test/a\\b", "https://example.test/a/b"],
+    ];
+  for (const [url, canonicalUrl] of urls) {
+    expect(validateClipAction({ ...create, url })).toMatchObject({ url });
+    const saved = await act(clips, { ...create, url }),
+      item = saved.snapshot.clips.items.find((row) => row.originalUrl === url)!;
+    expect(item.canonicalUrl).toBe(canonicalUrl);
+    expect(
+      validateClipState(saved.snapshot.clips).items.find(
+        (row) => row.id === item.id,
+      ),
+    ).toEqual(item);
+    expect(
+      validateClipAction({ ...create, url: item.originalUrl }),
+    ).toMatchObject({ url });
+  }
+  for (const url of [
+    "https://example.test\\path",
+    "https://example.test\\@evil.test/x",
+    "https://user@example.test/x",
+  ])
+    expect(() => validateClipAction({ ...create, url })).toThrow(
+      "clip_invalid",
+    );
+  const saved = await act(clips, create),
+    item = saved.snapshot.clips.items[0]!;
+  expect(() =>
+    validateClipState({
+      items: [
+        {
+          ...item,
+          originalUrl: "https://example.test\\@evil.test/x",
+          canonicalUrl: "https://example.test/@evil.test/x",
+        },
+      ],
+      receipts: [],
+    }),
+  ).toThrow("clip_invalid");
+});
 it("validates exact shapes, canonical URLs, text/title bounds and null text normalization", () => {
   expect(
     validateClipAction({ ...create, title: "  ", text: " \n" }),
