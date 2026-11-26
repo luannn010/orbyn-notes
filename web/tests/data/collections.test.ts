@@ -353,6 +353,15 @@ describe("real WASM encrypted collections", () => {
     const initial = await store.read();
     const states: string[] = [];
     store.subscribe(() => states.push(store.persistence().status));
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    let releaseSecond!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    const signing = vi.spyOn(crypto.subtle, "sign")
+      .mockImplementationOnce((...args) => sign(...args))
+      .mockImplementationOnce(async (...args) => {
+        await gate;
+        return sign(...args);
+      });
     const first = store.update(initial, deck);
     const second = store.update(
       { epoch: initial.epoch, revision: initial.revision + 1 },
@@ -362,9 +371,12 @@ describe("real WASM encrypted collections", () => {
       await first;
       expect(store.persistence().status).toBe("saving");
       expect(states).toEqual(["saving", "saving"]);
+      releaseSecond();
       await second;
     } finally {
+      releaseSecond();
       await second.catch(() => {});
+      signing.mockRestore();
     }
     expect(store.persistence().status).toBe("ready");
     expect(states).toEqual(["saving", "saving", "ready"]);
