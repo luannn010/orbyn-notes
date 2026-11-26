@@ -399,13 +399,15 @@ function blockExtent(
       };
       for (let i = 0; i < children.length; i++) {
         const child = blockExtent(children[i]!.content ?? [], reference);
-        const prefix =
+        /** Mirrors the renderer: marker on line one, content column after. */
+        const marker =
           node.type === "orderedList"
             ? `${(Number(node.attrs?.start) || 1) + i}. `.length
             : node.type === "taskList"
               ? 6
               : 2;
-        value.bytes += child.bytes + prefix * (child.newlines + 1);
+        const indent = node.type === "orderedList" ? marker : 2;
+        value.bytes += child.bytes + marker + indent * child.newlines;
         value.newlines += child.newlines;
       }
     } else {
@@ -520,12 +522,15 @@ function renderBlocks(
         case "taskList":
           return children
             .map((item, index) => {
-              const prefix =
+              /** First-line marker; `[x] ` is content, not item indentation. */
+              const marker =
                 n.type === "orderedList"
                   ? `${(Number(n.attrs?.start) || 1) + index}. `
                   : n.type === "taskList"
                     ? `- [${item.attrs?.checked ? "x" : " "}] `
                     : "- ";
+              /** The column a nested block must reach to stay in this item. */
+              const indent = n.type === "orderedList" ? marker.length : 2;
               return renderBlocks(
                 item.content,
                 reference,
@@ -534,7 +539,7 @@ function renderBlocks(
               )
                 .split("\n")
                 .map((line, i) =>
-                  i === 0 ? prefix + line : " ".repeat(prefix.length) + line,
+                  i === 0 ? marker + line : " ".repeat(indent) + line,
                 )
                 .join("\n");
             })

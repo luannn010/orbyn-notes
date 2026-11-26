@@ -98,6 +98,7 @@ import { VersionHistory } from "./VersionHistory";
 import { LibraryActionFeedback, useLibraryAction } from "./libraryAction";
 import "../styles/library.css";
 import "../styles/desktop-note-split.css";
+import { NoteTagPills } from "./CompactNoteTags";
 import { SearchView, type SearchTab } from "./SearchView";
 import { SearchSurface } from "./SearchSurface";
 import { useLocalSearchOwner } from "./localSearchOwner";
@@ -491,6 +492,11 @@ export function Workspace({
   const [drawer, setDrawer] = useState(false);
   const desktop = useDesktop();
   const mainRef = useRef<HTMLElement>(null);
+  const [tagResultFocus, requestTagResultFocus] = useState(0);
+  useLayoutEffect(() => {
+    if (tagResultFocus)
+      mainRef.current?.querySelector<HTMLHeadingElement>(".notes-library-heading h1")?.focus();
+  }, [tagResultFocus]);
   const [roomForNoteList, setRoomForNoteList] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(() => readPreference("notes.sidebar.pinned") === "false");
   const [railPointer, setRailPointer] = useState(false);
@@ -546,6 +552,12 @@ export function Workspace({
   const prefs = usePreferences();
   const menuRef = useRef<HTMLButtonElement>(null);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  // The control that started an import: the hidden file picker leaves focus on
+  // body by the time the dialog opens, so the Dialog cannot capture it itself.
+  const importReturnFocus = useRef<HTMLElement | null>(null);
+  const importFocusWatch = useRef(false);
+  const notesPaneRef = useRef<HTMLElement>(null);
+  const [focusAfterTrash, setFocusAfterTrash] = useState<{ id: string; index: number } | null>(null);
   const settingsJournalFocus = useRef<{
     store: NotesStore;
     sourceOwner: NotesLibraryStore | undefined;
@@ -885,7 +897,36 @@ export function Workspace({
       : tag ? sidebarTagKeys[tags.indexOf(tag)] ?? null
         : pinnedOnly ? "pinned" : linkedOnly ? "linked" : "notes";
   const editing = !!newDraft || selected !== null && current;
+  useEffect(() => {
+    // An import started from a control that unmounts (the empty-state button)
+    // lands focus on the list heading once the imported notes render.
+    const importTrigger = importReturnFocus.current;
+    if (imports) importFocusWatch.current = true;
+    else if (importFocusWatch.current && importTrigger) {
+      const active = document.activeElement;
+      if (!importTrigger.isConnected) {
+        importFocusWatch.current = false;
+        importReturnFocus.current = null;
+        if (!active || active === document.body) notesPaneRef.current?.querySelector<HTMLElement>("h1")?.focus();
+      } else if (active && active !== importTrigger && active !== document.body) {
+        importFocusWatch.current = false;
+        importReturnFocus.current = null;
+      }
+    }
+    if (!focusAfterTrash || editing) return;
+    // Trashed outside the Notes list (a note opened from another module): no row
+    // to land on, so drop the request rather than replay it on a later visit.
+    if (module !== "notes") { setFocusAfterTrash(null); return; }
+    if (visible.some((n) => n.id === focusAfterTrash.id)) return;
+    const rows = notesPaneRef.current?.querySelectorAll<HTMLElement>(".note-open");
+    const target = rows?.length
+      ? rows[Math.max(0, Math.min(focusAfterTrash.index, rows.length - 1))]
+      : notesPaneRef.current?.querySelector<HTMLElement>("h1");
+    target?.focus();
+    setFocusAfterTrash(null);
+  });
   const splitNotes = !!desktop && !newDraft && roomForNoteList && !!editing && module === "notes" && !trash;
+  const hashtagRows = !trash && (splitNotes || (!!tag && !grid));
   const noteActors = Array.from(
     new Set(
       [searchOrigin?.selected, selected].filter((id): id is string => !!id),
@@ -1363,6 +1404,9 @@ export function Workspace({
       return;
     importOrigin.current = origin;
     importHeld.current = true;
+    const trigger = document.activeElement;
+    importReturnFocus.current =
+      trigger instanceof HTMLElement && trigger !== document.body ? trigger : null;
     setImportError("");
     if (origin === "setup") setSetupImportState("picking");
     fileRef.current?.click();
@@ -1565,7 +1609,7 @@ export function Workspace({
       if (ticket === sourceRequest.current) sourceWorking.current = false;
     }
   }
-  function navigate(isTrash = false, nextTag = "") {
+  function navigate(isTrash = false, nextTag = "", focusTagResults = false) {
     if (!canNavigate()) return;
     requestHeading("notes", isTrash ? "trash" : nextTag ? sidebarTagKeys[tags.indexOf(nextTag)] ?? null : "notes");
     clearSourceRoute();
@@ -1575,6 +1619,8 @@ export function Workspace({
     setPinnedOnly(false);
     setLinkedOnly(false);
     setTag(nextTag);
+    if (nextTag) setQuery("");
+    if (focusTagResults) requestTagResultFocus((request) => request + 1);
     setDrawer(false);
   }
   async function create() {
@@ -1641,6 +1687,7 @@ export function Workspace({
           acceptLibrary(result);
           setUndo(result.undo);
           setNotice("Note moved to Trash");
+          setFocusAfterTrash({ id: note.id, index: visible.findIndex((n) => n.id === note.id) });
           setSelected(null);
           selectedSnapshot.current = undefined;
         },
@@ -1651,9 +1698,11 @@ export function Workspace({
       const moved = await store.trash(note.id, note.revision);
       setUndo(moved);
       setNotice("Note moved to Trash");
+      setFocusAfterTrash({ id: note.id, index: visible.findIndex((n) => n.id === note.id) });
       setSelected(null);
       await refresh();
     } catch (e) {
+      setFocusAfterTrash(null);
       setError(message(e));
     }
   }
@@ -2515,15 +2564,15 @@ export function Workspace({
               snapshot={snapshot}
               onResult={acceptLibrary}
               reload={reloadLibrary}
-              onOpenTag={(name) => navigate(false, name)}
+              onOpenTag={(name) => navigate(false, name, true)}
             />
           )}
           <div className="notes-workspace" data-split={splitNotes} hidden={module !== "notes" && !editing}>
           {module === "notes" && (!editing || !!desktop) && (
-            <section className="notes-library-pane" aria-label="Notes list" hidden={!!editing && !splitNotes}>
+            <section className="notes-library-pane" aria-label="Notes list" ref={notesPaneRef} hidden={!!editing && !splitNotes}>
               <header className="page-heading notes-library-heading">
                 <div>
-                  <h1 ref={notesHeadingRef}>
+                  <h1 ref={notesHeadingRef} tabIndex={-1}>
                     {linkedOnly
                       ? "Linked"
                       : trash
@@ -2737,11 +2786,12 @@ export function Workspace({
               ) : (
                 <div
                   className={
-                    grid && !trash && !splitNotes ? "note-collection grid" : "note-collection"
+                    hashtagRows ? "note-collection hashtag-note-list" :
+                      grid && !trash && !splitNotes ? "note-collection grid" : "note-collection"
                   }
                 >
                   {visible.map((n) => (
-                    <article className={trash ? "note-row" : "note-row note-list-row"} key={n.id}>
+                    <article className={hashtagRows ? "hashtag-note-row" : trash ? "note-row" : "note-row note-list-row"} key={n.id}>
                       {trash ? (
                         <>
                           <div>
@@ -2772,24 +2822,38 @@ export function Workspace({
                             setSelected(n.id);
                           }}
                         >
-                          <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <NoteIcon size={14} />}</span>
-                          <h2>{n.title || "Untitled note"}</h2>
-                          <p>{plainText(n.document).slice(0, 180)}</p>
-                          <div className="metadata">
-                            {metadata.get(n.id)?.pinned && (
-                              <Pin className="note-list-pinned" size={13} aria-label="Pinned" />
-                            )}
-                            {n.tags.map((t) => (
-                              <span className="tag" key={t}>
-                                <span className="note-list-tag-dot" aria-hidden="true" style={{ background: snapshot?.tags.find((tag) => tag.name === t)?.color ?? undefined }} />
-                                <span className="note-list-tag-label">{t}</span>
-                              </span>
-                            ))}
-                            <time dateTime={n.updatedAt}>
-                              {new Date(n.updatedAt).toLocaleDateString()}
-                            </time>
-                          </div>
+                          {hashtagRows ? (
+                            <>
+                              <span className="hashtag-note-title" title={n.title || "Untitled note"}>{n.title || "Untitled note"}</span>
+                              <time dateTime={n.updatedAt}>{new Date(n.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</time>
+                              <span className="hashtag-note-excerpt">{plainText(n.document).slice(0, 180)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="note-list-lead" aria-hidden="true">{metadata.get(n.id)?.pinned ? <Pin size={14} /> : <NoteIcon size={14} />}</span>
+                              <h2>{n.title || "Untitled note"}</h2>
+                              <p>{plainText(n.document).slice(0, 180)}</p>
+                              <div className="metadata">
+                                {metadata.get(n.id)?.pinned && (
+                                  <Pin className="note-list-pinned" size={13} aria-label="Pinned" />
+                                )}
+                                {n.tags.map((t) => (
+                                  <span className="tag" key={t}>
+                                    <span className="note-list-tag-dot" aria-hidden="true" style={{ background: snapshot?.tags.find((tag) => tag.name === t)?.color ?? undefined }} />
+                                    <span className="note-list-tag-label">{t}</span>
+                                  </span>
+                                ))}
+                                <time dateTime={n.updatedAt}>
+                                  {new Date(n.updatedAt).toLocaleDateString()}
+                                </time>
+                              </div>
+                            </>
+                          )}
                         </button>
+                      )}
+                      {hashtagRows && (
+                        <NoteTagPills tags={n.tags} label={`Tags for ${n.title || "Untitled note"}`}
+                          activeTag={tag} onOpenTag={(name) => navigate(false, name, true)} />
                       )}
                       {!trash && library && snapshot && (
                         <div className="library-row-actions">
@@ -2824,7 +2888,7 @@ export function Workspace({
           )}
           {newDraft && <NewNote key={newDraft.key} store={store} initialTags={newDraft.tags}
             onSaved={note => { setNotes(values => [note, ...values.filter(value => value.id !== note.id)]); setNewDraft(value => value && ({ ...value, savedId: note.id })); }}
-            onBack={() => setNewDraft(null)} />}
+            onBack={() => setNewDraft(null)} onOpenTag={(name) => navigate(false, name, true)} />}
           <div className="note-actor-pool" hidden={!editing || !!newDraft}>
             {noteActors.map((actor) => (
               <div
@@ -2903,6 +2967,8 @@ export function Workspace({
                   onSaved={(n) =>
                     setNotes((v) => [n, ...v.filter((x) => x.id !== n.id)])
                   }
+                  activeTag={tag}
+                  onOpenTag={(name) => navigate(false, name, true)}
                   onBack={() => {
                     setSelected(null);
                     setModule("notes");
@@ -3129,6 +3195,7 @@ export function Workspace({
       {imports && (
         <Dialog
           title="Import Markdown"
+          returnFocusTo={importReturnFocus.current}
           onClose={() => {
             if (!importPending.current) cancelMarkdown();
           }}
