@@ -233,6 +233,9 @@ export function SettingsView(props: SettingsProps) {
   );
 }
 
+// design: notes/settings-general
+// design: notes/settings-editor
+// design: notes/settings-data
 function SettingsPaneContent({
   sampleWorkspace = false,
   desktopSurface,

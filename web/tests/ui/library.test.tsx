@@ -642,7 +642,7 @@ it("keeps a pending tag list guarded until cancelled without rewriting saved tag
   fireEvent.keyDown(screen.getByLabelText("Tags, separated by commas"),{key:"Escape"});
   expect(checkClose()).toBe("allowed");
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
+    screen.getByRole("group", { name: "Current note tags" }),
   ).toBeInTheDocument();
 });
 it("ignores old reload completion after replacement or cleared action", async () => {

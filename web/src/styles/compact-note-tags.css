@@ -1,43 +1,68 @@
-/* Owner-approved compact hashtag mock: one # action and comma-separated inline tags. */
+/* Orbyn Design 8644e10d: library-tag-pills and library-tag-pills-narrow. */
+:root {
+  --note-tag-accent: color-mix(in srgb, #3b82f6 60%, var(--t1));
+}
+:root[data-theme="dark"],
+:root[data-theme="dim"] {
+  --note-tag-accent: color-mix(in srgb, #60a5fa 60%, var(--t1));
+}
 .compact-note-tags {
   min-width: 0;
 }
 .compact-note-metadata {
-  gap: 6px;
+  gap: 5px;
   min-height: 28px;
 }
-.compact-tags-hash {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--t3);
-  font-size: 17px;
+.note-tag-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
 }
-.compact-tags-hash:hover,
-.compact-tags-hash[aria-expanded="true"] {
-  color: var(--t1);
+button.note-tag-pill,
+span.note-tag-pill {
+  display: inline-block;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 5px;
   background: var(--raise);
-}
-.compact-tags-text {
-  padding: 0;
-  min-height: 26px;
-  border-radius: 0;
-  background: transparent;
-  color: var(--t2);
+  color: var(--note-tag-accent);
   font-size: 12px;
-  line-height: 26px;
   text-align: left;
   overflow-wrap: anywhere;
-  min-width: 0;
 }
-.compact-tags-text:disabled,
-.compact-tags-hash:disabled {
-  opacity: 1;
-  cursor: default;
+button.note-tag-pill:hover,
+button.note-tag-pill[aria-current] {
+  background: var(--sel);
+}
+button.note-tag-pill:hover {
+  text-decoration: underline;
+}
+button.note-tag-pill[aria-current] {
+  box-shadow: inset 0 0 0 1px var(--note-tag-accent);
+}
+button.note-tag-pill:focus-visible {
+  outline: 2px solid var(--note-tag-accent);
+  outline-offset: 2px;
+}
+button.compact-tags-edit {
+  flex: none;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--t3);
+  font-size: 12px;
+}
+button.compact-tags-edit:not(:disabled):hover,
+button.compact-tags-edit[aria-expanded="true"] {
+  color: var(--t1);
+  background: var(--raise);
 }
 .compact-tags-input {
   width: min(285px, 100%);
@@ -69,14 +94,7 @@
   margin: 0;
 }
 
-.compact-tags-confirmed {
-  color: var(--t2);
-  font-size: 12px;
-  line-height: 26px;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.compact-tags-confirmed + .compact-tags-input {
+.note-tag-pills + .compact-tags-input {
   flex-basis: 140px;
   width: 140px;
   min-width: 72px;

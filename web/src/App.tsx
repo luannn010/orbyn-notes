@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createAccountService, subscribeLock } from "./account";
 import type { AccountServiceHandle } from "./account";
 import type { AccountService, AccountSession } from "./domain/contracts";
+import { AccountError } from "./domain/contracts";
 import type { NotesLibraryStore } from "./library/contracts";
 import { AccountView, PendingDevice } from "./ui/AccountView";
 import { usePreferences } from "./ui/primitives";
@@ -73,11 +74,19 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
             setSession(s);
           }
         })
-        .catch(() => {
-          if (active)
-            setError(
-              "The account or encryption service isn’t available. Your saved notes were not changed.",
-            );
+        .catch((failure) => {
+          if (!active) return;
+          if (
+            !local &&
+            failure instanceof AccountError &&
+            failure.code === "local_access_invalid"
+          ) {
+            setSession(null);
+            return;
+          }
+          setError(
+            "The account or encryption service isn’t available. Your saved notes were not changed.",
+          );
         })
         .finally(() => {
           if (active) setLoading(false);

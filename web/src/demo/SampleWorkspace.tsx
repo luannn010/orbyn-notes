@@ -179,9 +179,9 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
               }
               aria-label={
                 id === "notes"
-                  ? `${label}, ${notes.length} notes`
+                  ? `${label}, ${notes.length} ${notes.length === 1 ? "note" : "notes"}`
                   : id === "clips"
-                    ? `${label}, ${clips.length} clips`
+                    ? `${label}, ${clips.length} ${clips.length === 1 ? "clip" : "clips"}`
                     : label
               }
               aria-current={module === id && !tag ? "page" : undefined}
@@ -196,25 +196,28 @@ export default function SampleWorkspace({ onExit }: { onExit: () => void }) {
         </nav>
         <p className="sample-group">Tags</p>
         <nav aria-label="Note tags">
-          {tags.map((value) => (
-            <button
-              key={value}
-              className={
-                tag === value && module === "notes"
-                  ? "sample-nav active"
-                  : "sample-nav"
-              }
-              aria-label={`${value}, ${notes.filter((item) => item.tags.includes(value)).length} notes`}
-              aria-pressed={tag === value && module === "notes"}
-              onClick={() => navigate("notes", value)}
-            >
-              <span className={`sample-tag-dot sample-tag-${value}`} />
-              <span>{value}</span>
-              <small>
-                {notes.filter((item) => item.tags.includes(value)).length}
-              </small>
-            </button>
-          ))}
+          {tags.map((value) => {
+            const tagged = notes.filter((item) =>
+              item.tags.includes(value),
+            ).length;
+            return (
+              <button
+                key={value}
+                className={
+                  tag === value && module === "notes"
+                    ? "sample-nav active"
+                    : "sample-nav"
+                }
+                aria-label={`${value}, ${tagged} ${tagged === 1 ? "note" : "notes"}`}
+                aria-pressed={tag === value && module === "notes"}
+                onClick={() => navigate("notes", value)}
+              >
+                <span className={`sample-tag-dot sample-tag-${value}`} />
+                <span>{value}</span>
+                <small>{tagged}</small>
+              </button>
+            );
+          })}
         </nav>
         <footer>
           <p>Changes last until you leave or reload.</p>
