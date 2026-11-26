@@ -56,11 +56,14 @@ import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
 import { CompactNoteTags } from "./CompactNoteTags";
+// design: notes/note-menu
 export function NoteEditor({
   note,
   store,
   onSaved,
   onBack,
+  onOpenTag,
+  activeTag,
   onTrash,
   onExport,
   readOnly = false,
@@ -93,6 +96,8 @@ export function NoteEditor({
   store: NotesStore;
   onSaved: (n: Note) => void;
   onBack: () => void;
+  onOpenTag?: (tag: string) => void;
+  activeTag?: string;
   onTrash: (n: Note) => void;
   onExport: (n: Note) => void;
 }) {
@@ -257,6 +262,16 @@ export function NoteEditor({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const duplicating = useRef(false);
+  const leavePending = useRef(false);
+  const navigationOwner = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    const owner = active ? {} : null;
+    navigationOwner.current = owner;
+    return () => {
+      if (navigationOwner.current === owner) navigationOwner.current = null;
+    };
+  }, [active, note.id]);
+  const lastSaveFailed = useRef(false);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [formattingTarget, setFormattingTarget] =
     useState<HTMLDivElement | null>(null);
@@ -324,6 +339,7 @@ export function NoteEditor({
     latest.current = next;
     generation.current++;
     dirtyRef.current = true;
+    lastSaveFailed.current = false;
     setDraft(next);
     setDirty(true);
     if (!conflict) setError("");
@@ -348,6 +364,7 @@ export function NoteEditor({
     if (readOnly) return;
     if (saving.current) return;
     saving.current = true;
+    lastSaveFailed.current = false;
     const version = generation.current;
     const snapshot = structuredClone(latest.current),
       savedBase = structuredClone(base.current);
@@ -411,6 +428,7 @@ export function NoteEditor({
           "code" in e &&
           (e.code === "source_codec_limit" || e.code === "source_limit"),
       );
+      lastSaveFailed.current = true;
       setError(message(e));
     } finally {
       clearTimeout(delayed);
@@ -477,23 +495,50 @@ export function NoteEditor({
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty, tagPending, sourceCapture, formatDraftPending]);
-  function leave(action: () => void) {
-    if (
-      formatDraftRef.current ||
-      dirty ||
-      sourceIntent.current ||
-      tagPendingRef.current ||
-      saving.current ||
-      duplicating.current ||
-      copyInFlight.current
-    ) {
-      setNavigationNotice(
-        tagPendingRef.current
-          ? "Apply or cancel your tag edit before leaving."
-          : "Your latest changes are only in this window. Save or copy your text before leaving.",
-      );
-      return;
+  async function settleDraft(): Promise<boolean> {
+    if (conflict || lastSaveFailed.current) return false;
+    if (activeSave.current) await activeSave.current;
+    if (dirtyRef.current && !lastSaveFailed.current) await save();
+    return !dirtyRef.current && !saving.current;
+  }
+  async function leave(action: () => void) {
+    if (leavePending.current) return;
+    const owner = navigationOwner.current;
+    if (!owner) return;
+    function blocked() {
+      if (
+        formatDraftRef.current ||
+        sourceIntent.current ||
+        tagPendingRef.current ||
+        duplicating.current ||
+        copyInFlight.current
+      ) {
+        setNavigationNotice(
+          tagPendingRef.current
+            ? "Apply or cancel your tag edit before leaving."
+            : "Your latest changes are only in this window. Save or copy your text before leaving.",
+        );
+        return true;
+      }
+      return false;
     }
+    if (blocked()) return;
+    if (dirtyRef.current || saving.current) {
+      leavePending.current = true;
+      try {
+        const settled = await settleDraft();
+        if (navigationOwner.current !== owner) return;
+        if (!settled) {
+          setNavigationNotice(
+            "Your latest changes are only in this window. Save or copy your text before leaving.",
+          );
+          return;
+        }
+      } finally {
+        leavePending.current = false;
+      }
+    }
+    if (navigationOwner.current !== owner || blocked()) return;
     action();
   }
   async function copy() {
@@ -506,10 +551,10 @@ export function NoteEditor({
       setCopyError("Couldn’t copy text. Select your text and copy it.");
     }
   }
-  function duplicate() {
+  async function duplicate() {
     if (
       readOnly ||
-      dirtyRef.current ||
+      leavePending.current ||
       tagPendingRef.current ||
       formatDraftRef.current ||
       duplicating.current
@@ -517,19 +562,35 @@ export function NoteEditor({
       return;
     duplicating.current = true;
     setDuplicateBusy(true);
-    void store
-      .create({
-        ...latest.current,
-        title: `${latest.current.title || "Untitled note"} (copy)`,
-      })
-      .then(onSaved)
-      .catch((failure) => setError(message(failure)))
-      .finally(() => {
-        duplicating.current = false;
-        setDuplicateBusy(false);
-      });
+    try {
+      if ((dirtyRef.current || saving.current) && !(await settleDraft())) return;
+      onSaved(
+        await store.create({
+          ...latest.current,
+          title: `${latest.current.title || "Untitled note"} (copy)`,
+        }),
+      );
+    } catch (failure) {
+      setError(message(failure));
+    } finally {
+      duplicating.current = false;
+      setDuplicateBusy(false);
+    }
+  }
+  async function exportNote() {
+    if (
+      leavePending.current ||
+      tagPendingRef.current ||
+      formatDraftRef.current ||
+      duplicating.current ||
+      copyInFlight.current
+    )
+      return;
+    if ((dirtyRef.current || saving.current) && !(await settleDraft())) return;
+    onExport(base.current);
   }
   const actionBlocked = dirty || tagPending || formatDraftPending;
+  // design: notes/save-states
   const chrome = (
     <header
       className={`${desktop ? "desktop-editor-actions" : "editor-chrome"} note-editor-header`}
@@ -623,7 +684,8 @@ export function NoteEditor({
             label: "Duplicate",
             icon: <Copy size={14} aria-hidden="true" />,
             shortcut: `${modifier}D`,
-            disabled: readOnly || actionBlocked || duplicateBusy,
+            disabled:
+              readOnly || tagPending || formatDraftPending || duplicateBusy,
             onSelect: duplicate,
           },
           ...(noteLinks
@@ -675,9 +737,9 @@ export function NoteEditor({
           {
             label: "Export Markdown",
             icon: <Download size={14} aria-hidden="true" />,
-            disabled: actionBlocked,
+            disabled: tagPending || formatDraftPending,
             separatorBefore: true,
-            onSelect: () => onExport(base.current),
+            onSelect: () => void exportNote(),
           },
           { label: "Export PDF · Planned", disabled: true, onSelect: () => {} },
           {
@@ -866,6 +928,9 @@ export function NoteEditor({
         />
         <CompactNoteTags
           tags={draft.tags}
+          activeTag={activeTag}
+          savedTags={base.current.tags}
+          onOpenTag={onOpenTag ? (tag) => leave(() => onOpenTag(tag)) : undefined}
           readOnly={readOnly}
           onChange={(tags) => change({ tags })}
           onPendingChange={tagPendingChanged}

@@ -28,6 +28,10 @@ export type AccountIdentity = {
 export type AccountSession = AccountIdentity & {
   deviceState: "trusted" | "pending";
 };
+export type NoteCreation = {
+  creationId: string;
+  input: Pick<Note, "title" | "document" | "tags">;
+};
 export interface NotesStore {
   list(): Promise<Note[]>;
   get(id: string): Promise<Note | null>;
@@ -36,6 +40,11 @@ export interface NotesStore {
     document: NoteDocument;
     tags: string[];
   }, creationId?: string): Promise<Note>;
+  /** Atomic bounded creation; keep IDs and epoch unchanged when retrying. */
+  createBatch?(
+    entries: readonly NoteCreation[],
+    options: { expectedEpoch: string; signal?: AbortSignal },
+  ): Promise<Note[]>;
   update(
     id: string,
     patch: Partial<Pick<Note, "title" | "document" | "tags">>,

@@ -25,7 +25,7 @@ export function parseStudyCsv(source: string): { front: string; back: string; ta
       } else {
         field += char;
         // A newline inside a quoted field still moves the physical line number.
-        if (char === "\n") line++;
+        if (char === "\r" || (char === "\n" && source[i - 1] !== "\r")) line++;
       }
     } else if (char === '"' && !field && !closed) quoted = true;
     else if (char === ",") finishField();

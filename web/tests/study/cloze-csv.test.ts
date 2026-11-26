@@ -64,6 +64,22 @@ function read(reader: CardContentReader, side: "front" | "back"): string {
 }
 
 describe("cloze answers with braces", () => {
+  it.each([
+    "{{c1}} then {{{c2}}} and {{ done",
+    "{{!}} {{c1}} then {{c2}}",
+    "{{c1::a}b}} then {{c2}}",
+  ])("keeps the bounded reader aligned with stored cloze prose: %s", (text) => {
+    const { state, deckId } = seed();
+    const entry = cloze(deckId, text, [
+      { id: "c1", answer: "a}b" }, { id: "c2", answer: "second" },
+    ]);
+    saveEntry(state, entry, at);
+    const reader = settle(buildCardContent({ ...entry, key: "cloze:c1" }));
+    try {
+      expect(read(reader, "front")).toBe(cardText(entry, "cloze:c1").front);
+      expect(read(reader, "back")).toBe(cardText(entry, "cloze:c1").back);
+    } finally { disposeCardContent(reader); }
+  });
   it("round-trips an answer containing braces as the exact answer", () => {
     const { state, deckId } = seed();
     const entry = cloze(deckId, "{{first}} and {{second}}", [

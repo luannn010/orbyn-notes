@@ -43,6 +43,7 @@ export function useSidebarWidth() {
   return [width, changeWidth] as const;
 }
 
+// design: notes/sidebar-dragging
 export function SidebarResize({
   value,
   onChange,
