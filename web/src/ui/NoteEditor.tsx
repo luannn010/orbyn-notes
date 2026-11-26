@@ -62,6 +62,8 @@ export function NoteEditor({
   store,
   onSaved,
   onBack,
+  onOpenTag,
+  activeTag,
   onTrash,
   onExport,
   readOnly = false,
@@ -94,6 +96,8 @@ export function NoteEditor({
   store: NotesStore;
   onSaved: (n: Note) => void;
   onBack: () => void;
+  onOpenTag?: (tag: string) => void;
+  activeTag?: string;
   onTrash: (n: Note) => void;
   onExport: (n: Note) => void;
 }) {
@@ -868,6 +872,9 @@ export function NoteEditor({
         />
         <CompactNoteTags
           tags={draft.tags}
+          activeTag={activeTag}
+          savedTags={base.current.tags}
+          onOpenTag={onOpenTag ? (tag) => leave(() => onOpenTag(tag)) : undefined}
           readOnly={readOnly}
           onChange={(tags) => change({ tags })}
           onPendingChange={tagPendingChanged}

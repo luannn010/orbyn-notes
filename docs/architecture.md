@@ -71,6 +71,12 @@ membership atomically; restoring a version restores its title/document while
 retaining current tags and pin state. Trash has explicit restore and empty actions;
 the current implementation does not automatically purge notes after 30 days.
 
+The reader retains the known optional tag-management fields `pinned` (boolean)
+and `order` (nonnegative safe integer), plus `tag-pin` and `tag-reorder` receipts.
+Only reorder receipts receive the bounded allowance for all catalog tag IDs;
+other unknown fields, actions and invalid values still fail closed. Opening an
+existing library does not rewrite its encrypted snapshot.
+
 The account-scoped `CollectionsStore` owns `notes-collections-v1/workspace`. Study,
 the sealed Journal envelope and Clips share its epoch/revision CAS and one writer.
 Collection schema3 supports anchored Study sources alongside legacy sources;
@@ -389,8 +395,15 @@ and data export are unavailable in the sample.
 
 ## Compact tag editing
 
-The owner-approved compact design uses one hashtag action and a comma-separated
-inline field in saved notes and normal New Note creation. A newly typed comma
+The `library-tag-pills`, `library-tag-pills-filtered` and
+`library-tag-pills-narrow` frames (Orbyn Design revision `8644e10d`) show
+individual hashtags in the desktop note picker and below the note title.
+Activating a saved pill uses the guarded workspace tag filter and focuses the
+library heading. The picker row has separate controls for opening, pinning,
+and filtering. An unsaved new note displays its tags without navigation.
+
+Add tags and Edit tags open the existing comma-separated inline field in saved
+notes and normal New Note creation. A newly typed comma
 followed by a space confirms complete tags and keeps focus ready for the next.
 Tab applies the unfinished tag and focuses the writing area; Enter and blur also
 apply through the existing revision-checked save. Escape discards unfinished text

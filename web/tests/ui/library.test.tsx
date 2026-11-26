@@ -201,6 +201,108 @@ describe("library mutation recovery", () => {
     expect(checkClose()).toBe("allowed");
   });
 });
+describe("Tags design", () => {
+  function renderTags(value = snapshot) {
+    return render(
+      <TagsView
+        library={library()}
+        snapshot={value}
+        onResult={vi.fn()}
+        reload={async () => value}
+        onOpenTag={vi.fn()}
+      />,
+    );
+  }
+  it("shows the designed column headings, count and persistent deletion note", () => {
+    const view = renderTags();
+    expect(screen.getByRole("heading", { name: "Tags" })).toBeInTheDocument();
+    expect(screen.getByText("1 tags")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("columnheader").map((cell) => cell.textContent),
+    ).toEqual(["Name", "Notes", "Last used", ""]);
+    expect(screen.getByText("1 note")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Deleting a tag removes it from its notes. The notes stay.",
+      ),
+    ).toBeInTheDocument();
+    view.rerender(
+      <TagsView
+        library={library()}
+        snapshot={{ ...snapshot, tags: [] }}
+        onResult={vi.fn()}
+        reload={async () => snapshot}
+        onOpenTag={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Deleting a tag removes it from its notes. The notes stay.",
+      ),
+    ).toBeInTheDocument();
+  });
+  it.each([
+    [new Date(2026, 10, 7, 9), "Edited today"],
+    [new Date(2026, 10, 6, 23), "Edited yesterday"],
+    [new Date(2026, 10, 2, 9), "Edited Mon"],
+    [new Date(2026, 9, 30, 9), "Edited 30 Oct"],
+    [new Date(1970, 0, 1, 12), "Edited 1 Jan"],
+  ])("derives %s from the newest live tagged note as %s", (date, expected) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 7, 12));
+    try {
+      const notes = [
+        { ...note, id: "older", updatedAt: new Date(1969, 0, 1).toISOString() },
+        { ...note, id: "latest", updatedAt: date.toISOString() },
+        {
+          ...note,
+          id: "trash",
+          updatedAt: new Date(2026, 10, 7, 11).toISOString(),
+          trashedAt: note.updatedAt,
+        },
+        {
+          ...note,
+          id: "unrelated",
+          updatedAt: new Date(2026, 10, 7, 11).toISOString(),
+        },
+      ];
+      renderTags({
+        ...snapshot,
+        notes,
+        metadata: notes.map((item) => ({
+          noteId: item.id,
+          pinned: false,
+          revision: 1,
+          tagIds: item.id === "unrelated" ? [] : ["tag-1"],
+        })),
+      });
+      expect(screen.getByText("2 notes")).toBeInTheDocument();
+      expect(screen.getByText(expected)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("keeps unused tags honest and matches the action menu copy and structure", () => {
+    renderTags({ ...snapshot, notes: [], metadata: [] });
+    expect(screen.getByText("Not used yet")).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: "New tag" })
+        .querySelector('[data-icon="plus"]'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tag menu for Trip" }));
+    const items = screen.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Rename",
+      "Change colour",
+      "Merge into…",
+      "Delete tag",
+    ]);
+    expect(items.every((item) => item.querySelector("svg"))).toBe(true);
+    expect(items[3]).toHaveClass("menu-separated", "danger");
+    expect(items[2]).toBeDisabled();
+  });
+});
 it("keeps a failed New tag form guarded and retries the same creation", async () => {
   const createTag = vi
     .fn()
@@ -540,7 +642,7 @@ it("keeps a pending tag list guarded until cancelled without rewriting saved tag
   fireEvent.keyDown(screen.getByLabelText("Tags, separated by commas"),{key:"Escape"});
   expect(checkClose()).toBe("allowed");
   expect(
-    screen.getByRole("button", { name: "Current note tags" }),
+    screen.getByRole("group", { name: "Current note tags" }),
   ).toBeInTheDocument();
 });
 it("ignores old reload completion after replacement or cleared action", async () => {

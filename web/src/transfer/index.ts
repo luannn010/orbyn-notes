@@ -15,13 +15,13 @@ function inline(tokens: Token[]): RichNode[] {
   const nodes: RichNode[] = [];
   let marks: NonNullable<RichNode["marks"]> = [];
   for (const token of tokens) {
-    if (token.type === "text")
+    if (token.type === "text" && token.content)
       nodes.push({
         type: "text",
         text: token.content,
         ...(marks.length ? { marks: structuredClone(marks) } : {}),
       });
-    else if (token.type === "code_inline")
+    else if (token.type === "code_inline" && token.content)
       nodes.push({
         type: "text",
         text: token.content,
@@ -30,7 +30,7 @@ function inline(tokens: Token[]): RichNode[] {
     else if (token.type === "softbreak")
       nodes.push({ type: "text", text: "\n" });
     else if (token.type === "hardbreak") nodes.push({ type: "hardBreak" });
-    else if (token.type === "image")
+    else if (token.type === "image" && token.content)
       nodes.push({ type: "text", text: token.content });
     else if (token.type.endsWith("_open")) {
       const kind: Record<string, string> = {
@@ -54,10 +54,10 @@ function inline(tokens: Token[]): RichNode[] {
   }
   return nodes;
 }
-function document(tokens: Token[]): NoteDocument {
+function document(tokens: Token[], filename: string): NoteDocument {
   if (tokens.some((token) => token.type === "table_open"))
     throw new Error(
-      "unsupported_table: Markdown tables are not supported yet. Convert the table to text before importing. Nothing was imported.",
+      `unsupported_table: ${JSON.stringify(filename)} contains a Markdown table, which is not supported yet. Convert the table to text before importing. Nothing was imported.`,
     );
   const root: NoteDocument = { type: "doc", content: [] };
   const stack: RichNode[] = [root];
@@ -82,15 +82,16 @@ function document(tokens: Token[]): NoteDocument {
     } else if (token.type.endsWith("_close")) stack.pop();
     else if (token.type === "inline")
       parent.content!.push(...inline(token.children ?? []));
-    else if (["fence", "code_block"].includes(token.type))
+    else if (["fence", "code_block"].includes(token.type)) {
+      // A fence holding only a blank line yields "\n" and would leave an empty
+      // text node, which the editor schema cannot load.
+      const text = token.content.replace(/\n$/, "");
       parent.content!.push({
         type: "codeBlock",
         attrs: { language: token.info.trim().split(/\s/)[0] || null },
-        content: token.content
-          ? [{ type: "text", text: token.content.replace(/\n$/, "") }]
-          : [],
+        content: text ? [{ type: "text", text }] : [],
       });
-    else if (token.type === "hr")
+    } else if (token.type === "hr")
       parent.content!.push({ type: "horizontalRule" });
   }
   function tasks(nodes: RichNode[]): RichNode[] {
@@ -106,6 +107,7 @@ function document(tokens: Token[]): NoteDocument {
           item.type = "taskItem";
           item.attrs = { checked: match[1] !== " " };
           text!.text = text!.text!.slice(match[0].length);
+          if (!text!.text) item.content![0]!.content!.shift();
         }
         let group = groups[groups.length - 1];
         if (group?.type !== type) {
@@ -179,6 +181,10 @@ export function parseMarkdown(
       !/\.(?:md|markdown|mdown)$/i.test(file.name)
     )
       throw new Error("invalid_file: Choose Markdown files.");
+    if (!file.content.trim())
+      throw new Error(
+        `invalid_file: ${JSON.stringify(file.name)} is empty. Nothing was imported.`,
+      );
     const size = new TextEncoder().encode(file.content).length;
     total += size;
     if (size > MAX_MARKDOWN_FILE_BYTES || total > MAX_MARKDOWN_BATCH_BYTES)
@@ -190,7 +196,7 @@ export function parseMarkdown(
     const front = frontmatter(
       file.content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"),
     );
-    const doc = document(parser.parse(front.body, {}));
+    const doc = document(parser.parse(front.body, {}), file.name);
     const heading = doc.content.find((n) => n.type === "heading");
     return validateInput({
       title:
@@ -298,13 +304,15 @@ function blockExtent(
       };
       for (let i = 0; i < children.length; i++) {
         const child = blockExtent(children[i]!.content ?? [], reference);
-        const prefix =
+        /** Mirrors the renderer: marker on line one, content column after. */
+        const marker =
           node.type === "orderedList"
             ? `${(Number(node.attrs?.start) || 1) + i}. `.length
             : node.type === "taskList"
               ? 6
               : 2;
-        value.bytes += child.bytes + prefix * (child.newlines + 1);
+        const indent = node.type === "orderedList" ? marker : 2;
+        value.bytes += child.bytes + marker + indent * child.newlines;
         value.newlines += child.newlines;
       }
     } else {
@@ -385,16 +393,19 @@ function renderBlocks(
         case "taskList":
           return children
             .map((item, index) => {
-              const prefix =
+              /** First-line marker; `[x] ` is content, not item indentation. */
+              const marker =
                 n.type === "orderedList"
                   ? `${(Number(n.attrs?.start) || 1) + index}. `
                   : n.type === "taskList"
                     ? `- [${item.attrs?.checked ? "x" : " "}] `
                     : "- ";
+              /** The column a nested block must reach to stay in this item. */
+              const indent = n.type === "orderedList" ? marker.length : 2;
               return renderBlocks(item.content, reference)
                 .split("\n")
                 .map((line, i) =>
-                  i === 0 ? prefix + line : " ".repeat(prefix.length) + line,
+                  i === 0 ? marker + line : " ".repeat(indent) + line,
                 )
                 .join("\n");
             })

@@ -191,7 +191,16 @@ function validateLibraryState(
       "updatedAt",
       "state",
       "mergedInto",
+      ...(item && typeof item === "object" && Object.hasOwn(item, "pinned")
+        ? ["pinned"]
+        : []),
+      ...(item && typeof item === "object" && Object.hasOwn(item, "order")
+        ? ["order"]
+        : []),
     ]);
+    if (Object.hasOwn(row, "pinned") && typeof row.pinned !== "boolean")
+      invalid();
+    if (Object.hasOwn(row, "order")) integer(row.order);
     uuid(row.id);
     if (tags.has(row.id)) invalid();
     text(row.name, 100);
@@ -313,7 +322,11 @@ function validateLibraryState(
     uuid(row.epoch);
     integer(row.libraryRevision, 1);
     timestamp(row.committedAt);
-    text(row.arguments, 2048);
+    // A reorder contains every tag ID; other mutation receipts keep their limit.
+    text(
+      row.arguments,
+      row.kind === "tag-reorder" ? LIBRARY_LIMITS.tags * 40 + 2048 : 2048,
+    );
     if (
       row.epoch !== state.epoch ||
       row.libraryRevision > state.revision ||
@@ -324,6 +337,8 @@ function validateLibraryState(
         "tag-create",
         "tag-rename",
         "tag-color",
+        "tag-pin",
+        "tag-reorder",
         "tag-merge",
         "tag-delete",
         "history-restore",

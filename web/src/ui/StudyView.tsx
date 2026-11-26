@@ -220,6 +220,8 @@ export function StudyView({
   const mounted = useRef(false);
   const surface = useRef<HTMLElement>(null);
   const motionFocus = useRef<Element | null>(null);
+  const reviewCard = useRef<HTMLElement>(null);
+  const reviewExitHeight = useRef<number | undefined>(undefined);
   function locator(
     value: CollectionsState,
     cardId: string,
@@ -387,6 +389,9 @@ export function StudyView({
     const outgoing = locator(value, intent.cardId, intent.sessionId, "answer");
     if (outgoing) {
       motionFocus.current = document.activeElement;
+      // The inert exit omits grade controls; keep its card box until the fade ends.
+      reviewExitHeight.current =
+        reviewCard.current?.getBoundingClientRect().height;
       motion.begin("confirmed-exit", outgoing, event.id);
     }
     setSession((previous) =>
@@ -1180,10 +1185,19 @@ export function StudyView({
                 </small>
               </div>
             ) : shownCard && shownEntry && shownText ? (
-              <div className="study-review-stack">
+              <div
+                className="study-review-stack"
+                data-side={shownAnswer ? "back" : "front"}
+              >
                 <article
                   key={`${shownCard.id}-${shownAnswer}-${motion.nonce}`}
                   className="study-flash"
+                  ref={reviewCard}
+                  style={
+                    motion.phase === "confirmed-exit"
+                      ? { minHeight: reviewExitHeight.current }
+                      : undefined
+                  }
                   data-study-motion={motion.phase}
                   onAnimationEnd={(event) => {
                     if (!motion.locator || validLocator(motion.locator))
@@ -1195,6 +1209,7 @@ export function StudyView({
                   tabIndex={-1}
                   aria-label={shownAnswer ? "Card answer" : "Card question"}
                 >
+                  <div className="study-flash-content">
                   <span className="study-caption">
                     {
                       state.decks.find((item) => item.id === shownEntry.deckId)
@@ -1223,65 +1238,67 @@ export function StudyView({
                           </button>
                         )}
                     </>
-                  ) : (
+                  ) : null}
+                  </div>
+                  {!shownAnswer && (
                     <>
                       <button className="primary" onClick={reveal}>
                         Show answer
                       </button>
-                      <small>Space</small>
+                      <span className="study-caption">Space</span>
+                    </>
+                  )}
+                  {answer && !outgoing && (
+                    <>
+                      <div className="study-grades">
+                        {grades.map(({ grade: value, label }, index) => (
+                          <button
+                            key={value}
+                            disabled={
+                              busy ||
+                              motion.phase !== "stable" ||
+                              conflict ||
+                              (!!pendingReview.current &&
+                                (!pendingReview.current.checked ||
+                                  pendingReview.current.grade !== value))
+                            }
+                            onClick={() => void grade(value)}
+                          >
+                            <span>{label}</span>
+                            {state.preferences.showNextReview && (
+                              <small>
+                                <time
+                                  dateTime={
+                                    nextSchedule(
+                                      shownCard.schedule,
+                                      value,
+                                      answerAt,
+                                    ).due
+                                  }
+                                >
+                                  {intervalText(
+                                    nextSchedule(
+                                      shownCard.schedule,
+                                      value,
+                                      answerAt,
+                                    ).due,
+                                    answerAt,
+                                  )}
+                                </time>
+                              </small>
+                            )}
+                            <kbd>{index + 1}</kbd>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="study-caption">
+                        {state.preferences.showNextReview
+                          ? "Press 1, 2, 3 or 4. The interval under each button is until the next review."
+                          : "Press 1, 2, 3 or 4."}
+                      </p>
                     </>
                   )}
                 </article>
-                {answer && !outgoing && (
-                  <>
-                    <div className="study-grades">
-                      {grades.map(({ grade: value, label }, index) => (
-                        <button
-                          key={value}
-                          disabled={
-                            busy ||
-                            motion.phase !== "stable" ||
-                            conflict ||
-                            (!!pendingReview.current &&
-                              (!pendingReview.current.checked ||
-                                pendingReview.current.grade !== value))
-                          }
-                          onClick={() => void grade(value)}
-                        >
-                          <span>{label}</span>
-                          {state.preferences.showNextReview && (
-                            <small>
-                              <time
-                                dateTime={
-                                  nextSchedule(
-                                    shownCard.schedule,
-                                    value,
-                                    answerAt,
-                                  ).due
-                                }
-                              >
-                                {intervalText(
-                                  nextSchedule(
-                                    shownCard.schedule,
-                                    value,
-                                    answerAt,
-                                  ).due,
-                                  answerAt,
-                                )}
-                              </time>
-                            </small>
-                          )}
-                          <kbd>{index + 1}</kbd>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="study-caption">
-                      {state.preferences.showNextReview
-                        ? "Press 1, 2, 3 or 4. The interval under each button is until the next review."
-                        : "Press 1, 2, 3 or 4."}
-                    </p>
-                  </>
-                )}
               </div>
             ) : (
               <div className="study-empty">

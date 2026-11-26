@@ -366,6 +366,29 @@ it("cancels the actual file-selection operation without completing setup or leav
   expect(f.store.create).not.toHaveBeenCalled();
   expect(f.preference.isDismissed()).toBe(false);
 });
+it("identifies a table file in a mixed batch without creating any notes", async () => {
+  const f = fixture();
+  fireEvent.click(
+    within(await setup()).getByRole("button", { name: "Import notes" }),
+  );
+  fireEvent.change(f.view.container.querySelector("input[type=file]")!, {
+    target: {
+      files: [
+        file("plain.md", "plain"),
+        file("table.md", "| A | B |\n|---|---|\n| X | Y |"),
+      ],
+    },
+  });
+  const dialog = await setup();
+  await waitFor(() => expect(dialog).toHaveTextContent(/table\.md/));
+  expect(dialog).toHaveTextContent(/Convert the table to text/);
+  expect(dialog).toHaveTextContent(/Nothing was imported/);
+  expect(
+    screen.queryByRole("dialog", { name: "Import Markdown" }),
+  ).not.toBeInTheDocument();
+  expect(f.store.create).not.toHaveBeenCalled();
+  expect(f.notes).toHaveLength(0);
+});
 it("preserves partial imports and retries only remaining Markdown while reporting real completion", async () => {
   const f = fixture();
   fireEvent.click(

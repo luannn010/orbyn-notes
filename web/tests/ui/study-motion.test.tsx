@@ -188,6 +188,8 @@ it("rejects grade clicks and numeric keys until actual answer entrance completes
   animation(screen.getByRole("article", { hidden: true }), "study-reveal-out");
   const answer = await screen.findByRole("article", { name: "Card answer" });
   const good = screen.getByRole("button", { name: /^Good/ });
+  expect(answer.querySelector(".study-grades")).toContainElement(good);
+  expect(answer.querySelector("p.study-caption")).toHaveTextContent("Press 1, 2, 3 or 4");
   const preview = good.querySelector("time")!.getAttribute("datetime");
   expect(good).toBeDisabled();
   fireEvent.click(good);

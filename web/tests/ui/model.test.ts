@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { projectNotes, safeLink } from "../../src/ui/model";
-import type { Note } from "../../src/domain/contracts";
+import { plainText, projectNotes, safeLink } from "../../src/ui/model";
+import type { Note, NoteDocument, RichNode } from "../../src/domain/contracts";
 const note = (
   id: string,
   title: string,
@@ -61,5 +61,80 @@ describe("collection projections", () => {
       expect(safeLink(url)).toBe(false);
     expect(safeLink("https://example.org")).toBe(true);
     expect(safeLink("mailto:hello@example.org")).toBe(true);
+  });
+});
+const text = (value: string, ...marks: string[]): RichNode => ({
+  type: "text",
+  text: value,
+  marks: marks.map((type) => ({ type })),
+});
+const paragraph = (...content: RichNode[]): RichNode => ({
+  type: "paragraph",
+  content,
+});
+const document = (...content: RichNode[]): NoteDocument => ({
+  type: "doc",
+  content,
+});
+describe("plain text projection", () => {
+  it("keeps a word split by formatting whole", () => {
+    expect(
+      plainText(
+        document(paragraph(text("Stra", "bold"), text("sse", "italic"))),
+      ),
+    ).toBe("Strasse");
+  });
+  it("keeps a marked word inside its sentence", () => {
+    expect(
+      plainText(document(paragraph(text("hello", "bold"), text(" world")))),
+    ).toBe("hello world");
+  });
+  it("keeps one space at a hard break", () => {
+    expect(
+      plainText(
+        document(
+          paragraph(text("line one"), { type: "hardBreak" }, text("line two")),
+        ),
+      ),
+    ).toBe("line one line two");
+  });
+  it("keeps one space between paragraphs", () => {
+    expect(
+      plainText(document(paragraph(text("first")), paragraph(text("second")))),
+    ).toBe("first second");
+  });
+  it("keeps one space between list items", () => {
+    expect(
+      plainText(
+        document({
+          type: "bulletList",
+          content: [
+            { type: "listItem", content: [paragraph(text("one"))] },
+            { type: "listItem", content: [paragraph(text("two"))] },
+          ],
+        }),
+      ),
+    ).toBe("one two");
+  });
+  it("ignores empty text nodes and empty paragraphs", () => {
+    expect(
+      plainText(
+        document(
+          paragraph(text("a"), text(""), text("b")),
+          paragraph(),
+          paragraph(text("c")),
+        ),
+      ),
+    ).toBe("ab c");
+  });
+  it("finds words split by formatting in search", () => {
+    const split: Note = {
+      ...note("1", "Note"),
+      document: document(paragraph(text("Stra", "bold"), text("sse"))),
+    };
+    expect(projectNotes([split], "strasse", "", false).map((n) => n.id)).toEqual(
+      ["1"],
+    );
+    expect(projectNotes([split], "stra sse", "", false)).toEqual([]);
   });
 });
