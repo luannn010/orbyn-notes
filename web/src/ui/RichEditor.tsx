@@ -860,7 +860,7 @@ export function RichEditor({
       viewport?.removeEventListener("resize", update);
       viewport?.removeEventListener("scroll", update);
     };
-  }, [editor, slash]);
+  }, [editor, slash, position.width]);
   useEffect(() => {
     if (!editor) return;
     const dom = editor.view.dom;
@@ -900,7 +900,7 @@ export function RichEditor({
       )
         menu.scrollTop = row.offsetTop + row.offsetHeight - menu.clientHeight;
     }
-  }, [slash, active, matches.join("|"), position.maxHeight]);
+  }, [slash, active, matches.join("|"), position.maxHeight, position.width]);
   function requestFromDraft(draft: EditorLinkDraft): LinkRequest {
     return {
       from: draft.from,
