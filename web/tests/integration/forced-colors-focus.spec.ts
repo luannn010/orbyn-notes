@@ -11,5 +11,8 @@ test("selected navigation keeps a visible keyboard focus outline in forced color
     const button = page.getByRole("button", { name });
     await expect(button).toBeFocused();
     expect(await button.evaluate((node) => getComputedStyle(node).outlineColor)).toBe(canvasText);
+    const outline = await button.evaluate((node) => ({ style: getComputedStyle(node).outlineStyle, width: parseFloat(getComputedStyle(node).outlineWidth) }));
+    expect(outline.style).not.toBe("none");
+    expect(outline.width).toBeGreaterThan(0);
   }
 });
