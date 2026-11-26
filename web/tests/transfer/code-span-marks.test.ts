@@ -351,3 +351,62 @@ it("retains mark order permutations and reference boundaries", () => {
     ]),
   );
 });
+
+const edgeWhitespaceCases = [
+  ["bold", [bold]],
+  ["italic", [italic]],
+  ["strike", [strike]],
+  ["link", [link]],
+  ["linked bold", [link, bold]],
+] satisfies [string, Mark[]][];
+describe.each(edgeWhitespaceCases)(
+  "code beside whitespace in a shared %s run",
+  (_, outer) => {
+    it.each(["  ", "\t\t"])(
+      "keeps %j at paragraph and hard-break edges",
+      (whitespace) => {
+        for (const beforeCode of [false, true])
+          for (const hardBreak of [false, true]) {
+            const literal = textNode("x", [...outer, code]);
+            const edge = textNode(whitespace, outer);
+            const children = beforeCode ? [edge, literal] : [literal, edge];
+            const whitespaceMarks = outer.filter(
+              (mark) => mark.type === "link",
+            );
+            const expected = beforeCode
+              ? [textNode(whitespace, whitespaceMarks), literal]
+              : [literal, textNode(whitespace, whitespaceMarks)];
+            if (hardBreak) {
+              if (beforeCode) {
+                children.unshift(textNode("before"), { type: "hardBreak" });
+                expected.unshift(textNode("before"), { type: "hardBreak" });
+              } else {
+                children.push({ type: "hardBreak" }, textNode("after"));
+                expected.push({ type: "hardBreak" }, textNode("after"));
+              }
+            }
+            const file = exportMarkdown([
+              note({
+                type: "doc",
+                content: [{ type: "paragraph", content: children }],
+              }),
+            ])[0]!;
+            const parsed = parseMarkdown([
+              { name: file.filename, content: file.content },
+            ])[0]!;
+            const actual = parsed.document.content[0]!.content ?? [];
+            const withBreaks = (nodes: RichNode[]) =>
+              ranges(
+                nodes.map((node) =>
+                  node.type === "hardBreak" ? textNode("\n") : node,
+                ),
+              );
+            expect(parsed.document.content).toHaveLength(1);
+            expect(withBreaks(actual), file.content).toEqual(
+              withBreaks(expected),
+            );
+          }
+      },
+    );
+  },
+);

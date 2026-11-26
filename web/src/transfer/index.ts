@@ -427,23 +427,6 @@ function blockExtent(
   }
   return { bytes, newlines };
 }
-/** Whitespace at the edge of a marked run belongs outside its delimiters: a
- * closing `**` after an encoded space is not right-flanking, so re-import would
- * show the asterisks. */
-function splitEdgeWhitespace(text: string): {
-  leading: string;
-  core: string;
-  trailing: string;
-} {
-  const leading = /^[ \t]*/.exec(text)![0];
-  const rest = text.slice(leading.length);
-  const trailing = /[ \t]*$/.exec(rest)![0];
-  return {
-    leading,
-    core: rest.slice(0, rest.length - trailing.length),
-    trailing,
-  };
-}
 /** Markdown trims literal whitespace at block and hard-break line edges. */
 function escapeEdgeWhitespace(whitespace: string): string {
   return whitespace.replace(/ /g, "&#32;").replace(/\t/g, "&#9;");
@@ -561,12 +544,17 @@ function renderInline(
     const first = parts[0]!,
       last = parts.at(-1)!;
     if (!first.code) {
-      leading = splitEdgeWhitespace(first.raw).leading;
-      first.raw = first.raw.slice(leading.length);
+      let end = 0;
+      while (first.raw[end] === " " || first.raw[end] === "\t") end++;
+      leading = first.raw.slice(0, end);
+      first.raw = first.raw.slice(end);
     }
     if (!last.code) {
-      trailing = splitEdgeWhitespace(last.raw).trailing;
-      last.raw = last.raw.slice(0, last.raw.length - trailing.length);
+      let start = last.raw.length;
+      while (last.raw[start - 1] === " " || last.raw[start - 1] === "\t")
+        start--;
+      trailing = last.raw.slice(start);
+      last.raw = last.raw.slice(0, start);
     }
     const whitespaceOnly = parts.every((part) => !part.code && part.raw === "");
     let text = parts
