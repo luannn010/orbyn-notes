@@ -277,6 +277,10 @@ note under a caller-generated UUID. Retrying an identical revision1 create retur
 the existing note; different content or a later revision fails instead of being
 adopted. Subsequent writes use normal revision checks. Initial empty/tag-only
 drafts never enter the library or Trash. Starter hints are presentation only.
+An admitted workspace module change retires the temporary new-note editor.
+Untouched drafts require no write; committed notes remain in the library.
+Pending writes and unsaved changes still block navigation through the existing
+close guard before the editor can be retired.
 Undo on an already committed starter clears the same note using CAS; it does not
 silently delete its record. Reference: artifact b66f1d8, frames new-note,
 new-note-states, new-note-starter and new-note-phone.

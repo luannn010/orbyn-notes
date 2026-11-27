@@ -60,31 +60,31 @@ async function setup(create?: NotesStore["create"]) {
   return { store, unexpected };
 }
 
-function start(method: "button" | "shortcut") {
+function start(method: "button" | "toolbar" | "empty" | "shortcut") {
   if (method === "shortcut")
     fireEvent.keyDown(window, { key: "n", ctrlKey: true });
   else
     fireEvent.click(
-      screen.getAllByRole("button", { name: "New note", exact: true })[0]!,
+      screen.getAllByRole("button", { name: "New note" })[
+        method === "toolbar" ? 1 : method === "empty" ? 2 : 0
+      ]!,
     );
   expect(screen.getByRole("textbox", { name: "Note title" })).toBeVisible();
 }
 
-it.each(["button", "shortcut"] as const)(
+it.each(["button", "toolbar", "empty", "shortcut"] as const)(
   "leaves a blank new note opened by %s for Journal and Study",
   async (method) => {
     const { unexpected } = await setup();
     start(method);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Journal", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Journal" }));
     expect(
       await screen.findByRole("region", { name: "journal workspace" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("textbox", { name: "Note title" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Study", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Study" }));
     expect(
       await screen.findByRole("region", { name: "study workspace" }),
     ).toBeVisible();
@@ -104,7 +104,6 @@ it.each(["Study", "Clips", "All notes"])(
     fireEvent.click(
       screen.getByRole("button", {
         name: destination === "All notes" ? /^All notes/ : destination,
-        exact: true,
       }),
     );
     expect(
@@ -139,7 +138,7 @@ it("keeps an in-flight note visible when navigation is blocked, then allows navi
     target: { value: "Keep this draft" },
   });
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
-  fireEvent.click(screen.getByRole("button", { name: "Journal", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Journal" }));
   expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue(
     "Keep this draft",
   );
@@ -163,8 +162,28 @@ it("keeps an in-flight note visible when navigation is blocked, then allows navi
         .some((status) => /Saved/.test(status.textContent ?? "")),
     ).toBe(true),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Journal", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Journal" }));
   expect(
     await screen.findByRole("region", { name: "journal workspace" }),
   ).toBeVisible();
+});
+
+it("retains a failed draft instead of switching modules", async () => {
+  const create = vi.fn<NotesStore["create"]>(async () => {
+    throw new Error("Synthetic storage failure");
+  });
+  await setup(create);
+  start("shortcut");
+  fireEvent.change(screen.getByRole("textbox", { name: "Note title" }), {
+    target: { value: "Unsaved text" },
+  });
+  await screen.findByText(/Synthetic storage failure/);
+  fireEvent.click(screen.getByRole("button", { name: "Journal" }));
+  expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue(
+    "Unsaved text",
+  );
+  expect(
+    screen.queryByRole("region", { name: "journal workspace" }),
+  ).not.toBeInTheDocument();
+  expect(create).toHaveBeenCalledOnce();
 });

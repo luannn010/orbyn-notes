@@ -498,6 +498,8 @@ export function Workspace({
     searchOwner.service?.cancel();
   }
   function setModule(next: WorkspaceModule) {
+    // Callers admit navigation through canNavigate before retiring the editor.
+    retireCreate();
     searchTicket.current++;
     searchAbort.current?.abort();
     searchRequest.current = null;
